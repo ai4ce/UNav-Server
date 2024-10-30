@@ -7,7 +7,7 @@ from logger_utils import setup_logger
 @app.cls(
     image=unav_image,
     volumes={"/root/UNav-IO": volume},
-    gpu=gpu.Any(),
+    gpu=gpu.A100(),
     enable_memory_snapshot=True,
     concurrency_limit=3,
     allow_concurrent_inputs=3,
