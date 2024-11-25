@@ -2,6 +2,8 @@ from UNav_core.src.feature.local_extractor import Local_extractor
 from UNav_core.src.third_party.local_feature.LightGlue.lightglue.utils import load_image, match_pair
 import torch
 import numpy as np
+import cv2
+import os
 
 class Local_matcher():
     device='cuda' if torch.cuda.is_available() else "cpu"
@@ -29,8 +31,64 @@ class Local_matcher():
         
         return np.array(pts0), np.array(pts1), np.array(lms)
 
+    def draw_matches(self, query_image, db_image_path, pts0_array, pts1_array, save_folder, save_filename):
+        # Read the database image
+        db_image = cv2.imread(db_image_path)
+        if db_image is None:
+            print(f"Failed to read image {db_image_path}")
+            return
 
-    def lightglue_batch(self, parent, topk, feats0):
+        # Convert query image to BGR if it's in RGB format
+        if query_image.shape[2] == 3:
+            query_image_bgr = cv2.cvtColor(query_image, cv2.COLOR_RGB2BGR)
+        else:
+            query_image_bgr = query_image.copy()
+
+        # Get original dimensions
+        h_query_orig, w_query_orig = query_image_bgr.shape[:2]
+        h_db_orig, w_db_orig = db_image.shape[:2]
+
+        # Resize images to have the same height
+        h_common = max(h_query_orig, h_db_orig)
+        scale_query = h_common / h_query_orig
+        scale_db = h_common / h_db_orig
+
+        # Resize images
+        w_query_resized = int(w_query_orig * scale_query)
+        w_db_resized = int(w_db_orig * scale_db)
+        query_image_resized = cv2.resize(query_image_bgr, (w_query_resized, h_common))
+        db_image_resized = cv2.resize(db_image, (w_db_resized, h_common))
+
+        # Adjust keypoints according to the scaling
+        pts0_rescaled = pts0_array.copy() * scale_query
+        pts1_rescaled = pts1_array.copy() * scale_db
+
+        # Concatenate images side by side (database image on the left, query image on the right)
+        vis_image = np.hstack((db_image_resized, query_image_resized))
+
+        # Shift pts0 x-coordinates by the width of the database image
+        offset = w_db_resized
+        pts0_shifted = pts0_rescaled.copy()
+        pts0_shifted[:, 0] += offset
+
+        # Draw keypoints and matches
+        for pt1, pt0 in zip(pts1_rescaled, pts0_shifted):
+            pt1_int = tuple(map(int, pt1))
+            pt0_int = tuple(map(int, pt0))
+            # Draw keypoints as red circles
+            cv2.circle(vis_image, pt1_int, radius=4, color=(0, 0, 255), thickness=-1)
+            cv2.circle(vis_image, pt0_int, radius=4, color=(0, 0, 255), thickness=-1)
+            # Draw green lines to connect matched keypoints
+            cv2.line(vis_image, pt1_int, pt0_int, color=(0, 255, 0), thickness=1)
+
+        # Save the visualization to a folder
+        os.makedirs(save_folder, exist_ok=True)
+        save_path = os.path.join(save_folder, save_filename)
+        cv2.imwrite(save_path, vis_image)
+
+
+
+    def lightglue_batch(self, parent, topk, feats0, image_np):
         batch_size = len(topk)
         mini_batch_size = 15
         batch_list = [min(mini_batch_size, batch_size - i) for i in range(0, batch_size, mini_batch_size)]
@@ -114,13 +172,31 @@ class Local_matcher():
                 
                 inlier_num = len(pts0)
                 if inlier_num > self.threshold:
-                    valid_db_frame_name.append(parent.db_name[ind + index])
+                    valid_db_frame_name.append(self.frame_name[batch_topk[ind]])
                     if max_matched_num < inlier_num:
                         max_matched_num = inlier_num
                     pts0_list.append(np.array(pts0))
                     pts1_list.append(np.array(pts1))
                     lms_list.append(np.array(lms))
+                    
+                # # Visualization code: Call the draw_matches function
+                # db_frame_name = self.frame_name[batch_topk[ind]]
+                # db_image_path = os.path.join("/mnt/data/UNav-IO/images/New_York_City/LightHouse/6_floor/perspective_images", db_frame_name.replace('LightHouse_6_floor_',''))  # Adjust the path if necessary
 
+                # # Prepare save parameters
+                # save_folder = '/mnt/data/UNav-IO/test'  # Specify your folder path
+                # os.makedirs(save_folder, exist_ok=True)
+                # save_filename = f"match_{os.path.basename(db_frame_name)}.png"
+
+                # # Call the draw_matches function
+                # self.draw_matches(
+                #     query_image=image_np,
+                #     db_image_path=db_image_path,
+                #     pts0_array=np.array(pts0),
+                #     pts1_array=np.array(pts1),
+                #     save_folder=save_folder,
+                #     save_filename=save_filename
+                # )
             index += batch
 
         return valid_db_frame_name, pts0_list, pts1_list, lms_list, max_matched_num

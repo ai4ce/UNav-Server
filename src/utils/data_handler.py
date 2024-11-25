@@ -35,9 +35,10 @@ def load_boundaires(path):
     return anchor_name,anchor_location,lines
 
 class DataHandler:
-    def __init__(self, new_root_dir, place):
+    def __init__(self, new_root_dir, place, feature):
         self.new_root_dir = new_root_dir
         self.place = place
+        self.feature = feature
         self._setup_logging()
         self.all_buildings_data, self.all_interwaypoint_connections = self._load_global_graph()
 
@@ -186,7 +187,7 @@ class DataHandler:
         building, floor, segment_number = self._get_building_floor(segment_id)
 
         # Construct the map directory based on the place, building, and floor from the configuration
-        map_directory = join(self.new_root_dir, 'data', self.place, building, floor, 'maps')
+        map_directory = join(self.new_root_dir, 'data', self.place, building, floor, f'maps_{self.feature}')
 
         # Define the segment file path
         segment_file = join(map_directory, f"{segment_number}.h5")

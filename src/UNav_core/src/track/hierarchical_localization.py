@@ -1,9 +1,11 @@
-from UNav_core.src.feature.global_extractor import Global_Extractors
+# from UNav_core.src.feature.global_extractor import Global_Extractors
+from UNav_core.src.feature.Global_Extractors import GlobalExtractors
 from UNav_core.src.feature.local_extractor import Local_extractor
 from UNav_core.src.feature.local_matcher import Local_matcher
 from UNav_core.src.third_party.torchSIFT.src.torchsift.ransac.ransac import ransac
 from UNav_core.src.track.implicit_distortion_model import coarse_pose,pose_multi_refine
 import torch
+import torchvision.transforms as transforms
 import numpy as np
 from os.path import join
 from time import time
@@ -24,14 +26,27 @@ def read_pickle_file(file_path):
         return None
     
 class Coarse_Locator:
-    def __init__(self, config):
+    def __init__(self, feature, config):
         """
         Initializes the VPR class.
         :param root: Path to the directory containing the combined global_features.h5 file.
         :param config: Configuration dictionary containing parameters for VPR.
         """
         self.device = config['devices']
-        self.global_extractor = Global_Extractors(config).get()
+        self.feature = feature
+        self.global_extractor = GlobalExtractors(config['IO_root'], config['feature']['global'])
+        self.global_extractor.set_float32()
+        self.global_extractor.set_train(False)
+        self.model_name = list(self.global_extractor.models)[0]
+
+        self.transform = transforms.Compose([
+            # transforms.Resize((224, 224)),  # Adjust based on model's expected input size
+            transforms.ToTensor(),
+            # Add normalization if required by your model
+            # transforms.Normalize(mean=[...], std=[...]),
+        ])
+        
+        # self.global_extractor = Global_Extractors(config).get()
         self.config = config['hloc']
 
         # Load global descriptors and segment IDs
@@ -48,7 +63,7 @@ class Coarse_Locator:
         :param root: Path to the directory containing the global_features.h5 file.
         :return: Numpy arrays of global descriptors and their corresponding segment IDs.
         """
-        global_features_path = join(root, 'global_features.h5')
+        global_features_path = join(root, f'global_features_{self.feature}.h5')
         with h5py.File(global_features_path, 'r') as f:
             descriptors = f['descriptors'][:]
             segment_ids = f['segments'][:].astype(str)
@@ -62,7 +77,13 @@ class Coarse_Locator:
         :return: Top-k matches and a boolean indicating if the corresponding segment is found.
         """
         # Extract global descriptor from the query image
-        query_desc = self.global_extractor(image).to(self.device)
+        image_tensor = self.transform(image).unsqueeze(0).to(self.device)
+        with torch.no_grad():
+            with torch.autocast("cuda", torch.float32):
+                outputs = self.global_extractor(self.model_name, image_tensor)
+        _, query_desc = outputs
+        
+        # query_desc = self.global_extractor(image).to(self.device)
 
         # Compute similarity between the query descriptor and database descriptors
         sim = torch.einsum('id,jd->ij', query_desc, self.global_descriptors)
@@ -125,7 +146,6 @@ class Coarse_Locator:
         
         return most_likely_segment, success
 
-    
     def get_segment_id(self, index):
         """
         This method should map a database index to its corresponding segment ID.
@@ -151,8 +171,15 @@ class Hloc():
         self.match_type=self.config['match_type']
         self.feature_configs=config['feature']
 
-
+        self.transform = transforms.Compose([
+            # transforms.Resize((224, 224)),  # Adjust based on model's expected input size
+            transforms.ToTensor(),
+            # Add normalization if required by your model
+            # transforms.Normalize(mean=[...], std=[...]),
+        ])
+        
         self.global_extractor = coarse_locator.get_global_extractor()
+        self.model_name = list(self.global_extractor.models)[0]
 
         local_feature = Local_extractor(self.feature_configs['local'])
         self.local_feature_extractor = local_feature.extractor()
@@ -178,7 +205,7 @@ class Hloc():
             global_descriptors.append(torch.tensor(global_descriptor, dtype=torch.float32))
 
         # Stack all global descriptors into a single tensor
-        global_descriptor_tensor = torch.stack(global_descriptors, dim=0)
+        global_descriptor_tensor = torch.stack([descriptor.squeeze(0) for descriptor in global_descriptors], dim=0)
 
         return global_descriptor_tensor
 
@@ -197,9 +224,16 @@ class Hloc():
         self.last_time=time()
         
     def global_retrieval(self, image):
-        # Extract the global descriptor from the query image
-        self.query_desc = self.global_extractor(image)
-
+        # # Extract the global descriptor from the query image
+        # self.query_desc = self.global_extractor(image)
+        
+        # Extract global descriptor from the query image
+        image_tensor = self.transform(image).unsqueeze(0).to(self.device)
+        with torch.no_grad():
+            with torch.autocast("cuda", torch.float32):
+                outputs = self.global_extractor(self.model_name, image_tensor)
+        _, self.query_desc = outputs
+        
         sim = torch.einsum('id,jd->ij', self.query_desc, self.db_global_descriptors.to(self.device))
         topk = torch.topk(sim, self.config['retrieval_num'], dim=1).indices.cpu().numpy()
 
@@ -213,7 +247,7 @@ class Hloc():
         with torch.inference_mode():  # Use torch.no_grad during inference
             image_np = np.array(image)
             feats0 = self.local_feature_extractor(image_np)
-            valid_db_frame_name, pts0_list,pts1_list,lms_list,max_len=self.local_feature_matcher.lightglue_batch(self, topk[0], feats0)
+            valid_db_frame_name, pts0_list,pts1_list,lms_list,max_len=self.local_feature_matcher.lightglue_batch(self, topk[0], feats0, image_np)
 
         return valid_db_frame_name, pts0_list,pts1_list,lms_list,max_len
 

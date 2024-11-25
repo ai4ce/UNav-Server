@@ -20,8 +20,8 @@ COARSE_LOCALIZE_THRESHOLD = 5  # Example threshold for coarse localization failu
 TIMEOUT_SECONDS = 600  # Example timeout for coarse localization in seconds
 
 class Server(DataHandler):
-    def __init__(self, config, logger):
-        super().__init__(config["IO_root"],config['location']['place'])
+    def __init__(self, config, logger, feature):
+        super().__init__(config["IO_root"], config['location']['place'], feature)
         self.config = config
         self.logger = logger
         self.root = config["IO_root"]
@@ -31,7 +31,7 @@ class Server(DataHandler):
 
         self.load_all_maps = config['hloc']['load_all_maps']
             
-        self.coarse_locator = Coarse_Locator(config=self.config)
+        self.coarse_locator = Coarse_Locator(feature, config=self.config)
         self.refine_locator = localization(self.coarse_locator, config=self.config, logger=self.logger)
         
         self.trajectory_maker = Trajectory(self.all_buildings_data, self.all_interwaypoint_connections)
@@ -39,7 +39,7 @@ class Server(DataHandler):
         self.cache_manager = CacheManager()
         self.localization_states = {}
         self.destination_states = {}
-            
+
         with open(os.path.join(self.root, 'data', 'scale.json'), 'r') as f:
             self.scale_data = json.load(f)
 
@@ -60,7 +60,7 @@ class Server(DataHandler):
         
         # self.image_np = np.array(image_rgb)
         ############################################# test data #################################################
-        
+
     def update_config(self, new_config):
         # Merge the new configuration with the existing one
         
