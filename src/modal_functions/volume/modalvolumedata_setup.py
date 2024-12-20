@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # Reference the requirements-modal.txt for installing dependencies
 image = modal.Image.debian_slim().pip_install_from_requirements("modal_functions/volumesetup_requirements.txt")
 
-volume = modal.Volume.from_name("Visiondata", create_if_missing=True)
+volume = modal.Volume.from_name("NewVisiondata", create_if_missing=True)
 
 app = modal.App("DataSetup", image=image, mounts=[modal.Mount.from_local_file(".env")])
 logging.info('created s3_client')
@@ -71,14 +71,26 @@ def checkAndDownload_file_from_remoteStorage():   ## download the data to the re
     modal_directory = "/files/data"
      # List objects in the S3 bucket
     logging.info(f"Listing objects in the S3 bucket: {bucket_name}")
+    all_objects = []
     response = s3_client.list_objects_v2(Bucket=bucket_name)
+
+    while True:
+        if 'Contents' in response:
+            all_objects.extend(response['Contents'])
+
+        if response.get('IsTruncated'):  # Pagination handling
+            continuation_token = response.get('NextContinuationToken')
+            logging.info("next token added to response")
+            response = s3_client.list_objects_v2(Bucket=bucket_name, ContinuationToken=continuation_token)
+        else:
+            break
 
     if 'Contents' not in response:
         logging.info(f"No objects found in S3 bucket {bucket_name}.")
         return
     
     # Download each object from S3
-    for obj in response['Contents']:
+    for obj in all_objects:
         s3_key = obj['Key']
         file_path = os.path.join(modal_directory, s3_key)
 
@@ -100,9 +112,41 @@ def checkAndDownload_file_from_remoteStorage():   ## download the data to the re
 
     logging.info("All files downloaded successfully from google drive and s3 bucket.")
 
+@app.function(volumes={"/files": volume})
+def rearrange_files_and_folders():
+    items_to_rearrange = [
+    ("/files/data/6_floor", "/files/data/New_York_City/6_floor"),  # File
+    ("/files/data/global_features.h5", "/files/data/New_York_City/global_features.h5"),  # File
+    ("/files/data/NYISE_VC", "/files/data/New_York_City/NYISE_VC"),    # Folder
+    ("/files/data/save.pkl", "/files/data/New_York_City/save.pkl"),
+    ("/files/data/MapConnnection_Graph.pkl", "/files/data/New_York_City/MapConnnection_Graph.pkl"),
+]
+    for source_path, destination_path in items_to_rearrange:
+        try:
+            if os.path.isfile(source_path):
+        
+                logging.info(f"Moving file from {source_path} to {destination_path}")
+                os.makedirs(os.path.dirname(destination_path), exist_ok=True)
+                shutil.move(source_path, destination_path)
+                logging.info(f"Successfully moved file from {source_path} to {destination_path}")
+                
+            elif os.path.isdir(source_path):
+                
+                logging.info(f"Moving folder from {source_path} to {destination_path}")
+                os.makedirs(os.path.dirname(destination_path), exist_ok=True)
+                shutil.move(source_path, destination_path)
+                logging.info(f"Successfully moved folder from {source_path} to {destination_path}")
+                
+            else:
+                logging.warning(f"Source path not found: {source_path}")
+        except Exception as e:
+            logging.error(f"Failed to move {source_path} to {destination_path}. Error: {e}")
+
+    logging.info("All files and folders have been rearranged successfully.")
 
 
 if __name__ == "__main__":
-    with app.run():
+    with app.run(detach=True):
         create_directories.remote()
         checkAndDownload_file_from_remoteStorage.remote()
+        rearrange_files_and_folders.remote()

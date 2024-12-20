@@ -246,3 +246,12 @@ Send a **'GET'** request to **`/planner`** to get the navigation path.
 ### Step 7: Terminate Server
 
 Send a **'POST'** request to **`/terminate`** to shut down the server.
+
+## Modal Volume set up 
+- make the following changes in the file src/modal_functions/volume/modalvolumedata_setup.py 
+- update the items_to_rearrange = [] in the fucntion : rearrange_files_and_folders(), if rearrangment is needed else please pass the empty list ,
+- add s3 bucket credentials to your .env file refer .env.example file 
+- execute the file 
+```
+python src/modal_functions/volume/modalvolumedata_setup.py
+```
