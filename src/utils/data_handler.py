@@ -64,7 +64,7 @@ class DataHandler:
         Returns:
             dict: A dictionary containing waypoints, destinations, access graph, and interwaypoints.
         """
-        boundaries_file = join(floor_dir, 'boundaries_interwaypoint.json')
+        boundaries_file = join(floor_dir, 'boundaries.json')
         access_graph_file = join(floor_dir, 'access_graph.npy')
         
         floor_data = {
@@ -95,7 +95,6 @@ class DataHandler:
                     destination_num += 1
                     
                 floor_data['destinations'] = transformed_destinations  # Assign the transformed data
-
                 # Extract interwaypoints (waypoints with type 'interwaypoint')
                 for ind, (waypoint_id, details) in enumerate(floor_data['waypoints'].items()):
                     if details.get('type') == 'interwaypoint':
@@ -112,7 +111,6 @@ class DataHandler:
         
         if exists(access_graph_file):
             floor_data['access_graph'] = np.load(access_graph_file)
-        
         return floor_data
 
     def _load_all_floors_in_building(self, building_dir, building):

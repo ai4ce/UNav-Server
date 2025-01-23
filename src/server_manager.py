@@ -126,7 +126,7 @@ class Server(DataHandler):
         ]
         
         destinations_data = sorted(destinations_data, key=lambda x: x['name'])
-            
+
         return {
             'destinations': destinations_data,
         }
@@ -163,6 +163,7 @@ class Server(DataHandler):
         """
         Handles the localization process for a given session and frame.
         Returns the pose and segment_id if localization is successful.
+        localization is done here
         """
         state = self.localization_states.get(session_id, {'failures': 0, 'last_success_time': time.time(), 'building': None, 'floor': None, 'segment_id': None, 'pose': None})
         pose_update_info = {

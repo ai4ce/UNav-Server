@@ -3,6 +3,73 @@ from scipy.sparse.csgraph import shortest_path
 from collections import defaultdict, deque
 import math
 
+class Navigator:
+    def __init__(self):
+        pass
+    
+    def compute_distance(self, p1, p2, scale):
+        """Compute real-world distance between two points on the floorplan."""
+        pixel_distance = math.sqrt((p2[0] - p1[0]) ** 2 + (p1[1] - p2[1]) ** 2)  # Adjusted y-axis
+        return pixel_distance * scale
+
+    def compute_angle(self, p1, p2):
+        """Compute the adjusted angle (in degrees) required to move from p1 to p2."""
+        return (math.degrees(math.atan2(p1[1] - p2[1], p2[0] - p1[0])) + 270) % 360  # Adjusted y-axis
+    
+    def compute_relative_angle(self, current_angle, target_angle):
+        """Compute the relative turn angle needed from the current orientation."""
+        relative_angle = (target_angle - current_angle) % 360
+        if relative_angle > 180:
+            relative_angle -= 360
+        return relative_angle
+    
+    def angle_to_clock(self, relative_angle):
+        """Convert relative angle to a 12-hour clock format with correct mapping (counterclockwise is positive)."""
+        clock_positions = [
+            (0, 15, "12 o'clock"), (15, 45, "11 o'clock"), (45, 75, "10 o'clock"),
+            (75, 105, "9 o'clock"), (105, 135, "8 o'clock"), (135, 165, "7 o'clock"),
+            (165, 195, "6 o'clock"), (-180, -165, "6 o'clock"), (-165, -135, "5 o'clock"),
+            (-135, -105, "4 o'clock"), (-105, -75, "3 o'clock"), (-75, -45, "2 o'clock"),
+            (-45, -15, "1 o'clock"), (-15, 0, "12 o'clock")
+        ]
+        for low, high, clock in clock_positions:
+            if low <= relative_angle < high:
+                return clock
+        return "12 o'clock"
+    
+    def commander(self, current_pose, following_poses, scale, are_instructions_generated=True):
+        """Generate navigation instructions based on the current pose and the following path."""
+        instructions = []
+        x, y, ang = current_pose
+        
+        for idx, (next_x, next_y) in enumerate(following_poses):
+            target_angle = self.compute_angle((x, y), (next_x, next_y))
+            relative_turn = self.compute_relative_angle(ang, target_angle)
+            clock_direction = self.angle_to_clock(relative_turn)
+            distance = self.compute_distance((x, y), (next_x, next_y), scale)
+            
+            # Generate instruction ensuring forward motion after turn
+            if abs(relative_turn) > 10:  # Only mention turns if they are significant
+                instruction = f"Turn to {clock_direction}."
+                instructions.append(instruction)
+                ang = target_angle  # Update current angle after turn
+            
+            instruction = f"Walk {distance:.1f} meters forward."
+            instructions.append(instruction)
+            
+            # Update current position for next iteration
+            x, y = next_x, next_y
+        
+        if are_instructions_generated:
+            return {
+                "instructions": instructions,
+                "are_instructions_generated": True
+            }
+        else:
+            return {
+                "are_instructions_generated": False
+            }
+            
 class Trajectory():
     def __init__(self, all_buildings_data, all_interwaypoint_connections):
         self.all_buildings_data = all_buildings_data
@@ -10,6 +77,7 @@ class Trajectory():
         self.sessions = defaultdict(dict)
         self.precalculated_inter_paths = self._precalculated_inter_paths()
         self.precalculated_global_paths = self._precalculate_global_paths()
+        self.navigator = Navigator()
 
     def _find_all_paths(self, current_building, current_floor, dest_building, dest_floor):
         paths = []
@@ -128,7 +196,7 @@ class Trajectory():
 
         # Iterate through waypoints and extract the location
         for waypoint_id, waypoint_info in waypoints.items():
-            location = waypoint_info.get('location')
+            location = [waypoint_info.get('x'), waypoint_info.get('y')]
             if location:
                 anchor_points.append(location)
 
@@ -216,7 +284,7 @@ class Trajectory():
 
         for interwaypoint in destination_interwaypoints:
             session_data['dest_from_inter'][interwaypoint['index']] = self._trace_back_path(Pr, destination_anchor_location, interwaypoint['index'], session_data['destination_index'])
-
+    
     def calculate_path(self, manager, session_id, localization_states):
         """Calculate the path for a specific session."""
         self._initialize_session(session_id)
@@ -235,18 +303,60 @@ class Trajectory():
         for i, loc in enumerate(current_anchor_location):
             current_M[i, -1] = self._distance(current_pose[:2], loc, current_boundaries)
 
+        import cv2
+        import numpy as np
+        import matplotlib.pyplot as plt
+
+        # File paths
+        image_path = "/mnt/data/UNav-IO/data/New_York_University/Langone/16_floor@dog/floorplan.png"
+        output_path = "/mnt/data/UNav-IO/data/New_York_University/Langone/16_floor@dog/debug.png"
+
+        # Load the floorplan image
+        image = cv2.imread(image_path)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # Convert BGR to RGB
+
+        # Plot the image
+        plt.figure(figsize=(10, 10))
+        plt.imshow(image)
+        plt.scatter(int(current_pose[0]), int(current_pose[1]), color='red', label='Current Pose', s=300)  # Red for current pose
+        
+        anchor_points = []
+
+        # Iterate through destinations and extract the location
+        for dest_id, dest_info in floor_data.get('waypoints').items():
+            location = [dest_info.get('x'), dest_info.get('y')]
+            if location:
+                anchor_points.append(location)
+                
+        for loc in anchor_points:
+            plt.scatter(loc[0], loc[1], color='blue', label='Anchor' if 'Anchor' not in plt.gca().get_legend_handles_labels()[1] else "", s=100)  # Blue for anchors
+        
+        destinationpoints = current_anchor_location[session_data['destination_index']]
+        
+        plt.scatter(int(destinationpoints[0]), int(destinationpoints[1]), color='orange', label='Current Pose', s=300)  # Red for current pose
+
+        plt.legend()
+        plt.axis('off')
+
+        # Save the debug image
+        plt.savefig(output_path, bbox_inches='tight', pad_inches=0, dpi=300)
+
         _, Pr = shortest_path(current_M, directed=True, method='FW', return_predecessors=True)
         
         trajectory = defaultdict(dict)
 
         # Check if current building and floor match the destination
         if (current_building, current_floor) == (session_data['destination_building'], session_data['destination_floor']) and session_data['destination_index']:
+            scale = manager.scale_data.get(manager.config['location']['place'], {}).get(current_building, {}).get(current_floor, None)
+            following_paths = self._trace_back_path(Pr, current_anchor_location, -1, session_data['destination_index'])
+            command_instruction = self.navigator.commander(current_pose, following_paths, scale)
             trajectory[0] = {
                 'name': 'destination',
                 'building': current_building,
                 'floor': current_floor,
-                'paths': [[current_pose[0], current_pose[1]]] + self._trace_back_path(Pr, current_anchor_location, -1, session_data['destination_index']),
-                'scale': manager.scale_data.get(manager.config['location']['place'], {}).get(current_building, {}).get(current_floor, None)
+                'paths': [[current_pose[0], current_pose[1]]] + following_paths,
+                'command': command_instruction,
+                'scale': scale
             }
         else:
             possible_paths = self.precalculated_global_paths.get((current_building, current_floor), {}).get((session_data['destination_building'], session_data['destination_floor']), {})
@@ -260,6 +370,7 @@ class Trajectory():
                     inter_name = step_info.get('name')
                     building = step_info.get('building')
                     floor = step_info.get('floor')
+                    scale = manager.scale_data.get(manager.config['location']['place'], {}).get(building, {}).get(floor, None)
                     if step == 0:
                         current_paths = [[current_pose[0], current_pose[1]]] + self._trace_back_path(Pr, current_anchor_location, -1, step_info.get('index'))
                         distance += self._calculate_trajectory_length(current_paths)
@@ -276,11 +387,13 @@ class Trajectory():
                             distance += self._calculate_trajectory_length(current_paths)
                         else:
                             continue
+                    command_instruction = self.navigator.commander(current_pose, current_paths[1:], scale)
                     local_trajectory[step] = {
                         'name': inter_name if step < len(path_candidate) - 1 else session_data['destination_name'],
                         'building': building,
                         'floor': floor,
                         'paths': current_paths,
+                        'command': command_instruction,
                         'scale': manager.scale_data.get(manager.config['location']['place'], {}).get(building, {}).get(floor, None)
                     }
                 if distance < min_distance:

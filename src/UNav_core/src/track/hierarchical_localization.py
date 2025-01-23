@@ -63,12 +63,13 @@ class Coarse_Locator:
         :param root: Path to the directory containing the global_features.h5 file.
         :return: Numpy arrays of global descriptors and their corresponding segment IDs.
         """
-        global_features_path = join(root, f'global_features_{self.feature}.h5')
-        with h5py.File(global_features_path, 'r') as f:
-            descriptors = f['descriptors'][:]
-            segment_ids = f['segments'][:].astype(str)
+        # global_features_path = join(root, f'global_features_{self.feature}.h5')
+        # with h5py.File(global_features_path, 'r') as f:
+        #     descriptors = f['descriptors'][:]
+        #     segment_ids = f['segments'][:].astype(str)
         
-        return torch.tensor(descriptors, dtype=torch.float32).to(self.device), segment_ids
+        # return torch.tensor(descriptors, dtype=torch.float32).to(self.device), segment_ids
+        return None, None
 
     def coarse_vpr(self, image):
         """

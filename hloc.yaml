@@ -3,10 +3,10 @@ server:
   port: 5000
 
 location:
-  place: New_York_City
-  building: LightHouse
-  floor: "6_floor"
-  scale: 0.01098358101
+  place: New_York_University
+  building: Langone
+  floor: "15_floor@dog"
+  scale: 0.02157699999
 
 IO_root: "/mnt/data/UNav-IO"
 
