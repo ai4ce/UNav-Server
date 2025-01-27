@@ -1,4 +1,4 @@
-from UNav_core.src.feature.local_extractor import Local_extractor
+from UNav_core.src.ransac.local_extractor import Local_extractor
 from UNav_core.src.third_party.local_feature.LightGlue.lightglue.utils import load_image, match_pair
 import torch
 import numpy as np
