@@ -3,3 +3,4 @@
 c
 src/UNav_core/src/third_party/global_feature/parameters/DinoV2Salad/ckpts/dino_salad.ckpt
 src/UNav_core/src/third_party/global_feature/parameters/CricaVPR/ckpts/CricaVPR.pth
+src/UNav_core/src/third_party/*
