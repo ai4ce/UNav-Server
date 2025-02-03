@@ -18,11 +18,15 @@ class UnavServer:
     @enter()
     def load_server(self):
         from server_manager import Server
+        from src.server import find_use_true_feature
         from modules.config.settings import load_config
 
         config = load_config("config.yaml")
 
-        self.server = Server(logger=setup_logger(), config=config)
+        feature_global = config.get("feature", {}).get("global", {})
+        feature = find_use_true_feature(feature_global)
+
+        self.server = Server(logger=setup_logger(), config=config, feature=feature)
 
     @method()
     def get_destinations_list(self):
@@ -104,9 +108,15 @@ class UnavServer:
 
         scale = self.server.config["location"]["scale"]
 
-        if(get_floor_plan):
+        if get_floor_plan:
             floorplan_base64 = pose["floorplan_base64"]
-            return json.dumps({"trajectory": trajectory, "scale": scale, "floorplan_base64" : floorplan_base64}) #return floor plan if requested 
+            return json.dumps(
+                {
+                    "trajectory": trajectory,
+                    "scale": scale,
+                    "floorplan_base64": floorplan_base64,
+                }
+            )  # return floor plan if requested
 
         return json.dumps({"trajectory": trajectory, "scale": scale})
 
