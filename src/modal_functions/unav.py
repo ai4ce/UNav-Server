@@ -14,17 +14,22 @@ from logger_utils import setup_logger
 )
 class UnavServer:
 
+    def find_use_true_feature(self, feature_dict):
+        for key, value in feature_dict.items():
+            if isinstance(value, dict) and value.get("use") is True:
+                return key
+        return None
+
     @build()
     @enter()
     def load_server(self):
         from server_manager import Server
-        from src.server import find_use_true_feature
         from modules.config.settings import load_config
 
         config = load_config("config.yaml")
 
         feature_global = config.get("feature", {}).get("global", {})
-        feature = find_use_true_feature(feature_global)
+        feature = self.find_use_true_feature(feature_global)
 
         self.server = Server(logger=setup_logger(), config=config, feature=feature)
 
