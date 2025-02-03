@@ -15,11 +15,12 @@ local_dir = current_dir / ".."
 
 def download_torch_hub_weights():
     import torch
+
     model_weights = torch.hub.load_state_dict_from_url(MODEL_URL, progress=True)
     torch.save(model_weights, "vgg16_weights.pth")
 
     lightglue_weights = torch.hub.load_state_dict_from_url(LIGHTGLUE_URL, progress=True)
-    torch.save(lightglue_weights,"superpoint_lightglue_v0-1_arxiv-pth")
+    torch.save(lightglue_weights, "superpoint_lightglue_v0-1_arxiv-pth")
 
 
 app = App(
@@ -63,6 +64,7 @@ unav_image = (
         "pip freeze",
     )
     .pip_install_from_requirements("modal_functions/modal_requirements.txt")
+    .pip_install("fast_pytorch_kmeans")
     .workdir("/root")
     .run_function(download_torch_hub_weights)
 )
