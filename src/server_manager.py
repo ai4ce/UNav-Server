@@ -20,8 +20,8 @@ COARSE_LOCALIZE_THRESHOLD = 5  # Example threshold for coarse localization failu
 TIMEOUT_SECONDS = 600  # Example timeout for coarse localization in seconds
 
 class Server(DataHandler):
-    def __init__(self, config, logger):
-        super().__init__(config["IO_root"],config['location']['place'])
+    def __init__(self, config, logger, feature):
+        super().__init__(config["IO_root"], config['location']['place'], feature)
         self.config = config
         self.logger = logger
         self.root = config["IO_root"]
@@ -31,9 +31,7 @@ class Server(DataHandler):
 
         self.load_all_maps = config['hloc']['load_all_maps']
             
-        self.load_all_maps = config['hloc']['load_all_maps']
-            
-        self.coarse_locator = Coarse_Locator(config=self.config)
+        self.coarse_locator = Coarse_Locator(feature, config=self.config)
         self.refine_locator = localization(self.coarse_locator, config=self.config, logger=self.logger)
         
         self.trajectory_maker = Trajectory(self.all_buildings_data, self.all_interwaypoint_connections)
@@ -41,8 +39,7 @@ class Server(DataHandler):
         self.cache_manager = CacheManager()
         self.localization_states = {}
         self.destination_states = {}
-            
-            
+
         with open(os.path.join(self.root, 'data', 'scale.json'), 'r') as f:
             self.scale_data = json.load(f)
 
@@ -62,20 +59,8 @@ class Server(DataHandler):
         # image_rgb = resized_image.convert("RGB")
         
         # self.image_np = np.array(image_rgb)
-        # original_width, original_height = image.size
-
-        # new_width = 640
-        # new_height = int((new_width / original_width) * original_height)
-
-        # # Resize the image
-        # resized_image = image.resize((new_width, new_height))
-
-        # image_rgb = resized_image.convert("RGB")
-        
-        # self.image_np = np.array(image_rgb)
         ############################################# test data #################################################
-        
-        
+
     def update_config(self, new_config):
         # Merge the new configuration with the existing one
         
@@ -131,7 +116,6 @@ class Server(DataHandler):
             'floorplan': floorplan_base64,
         }
 
-
     def get_destinations_list(self, building, floor):
         # Load destination data
         destinations = self.all_buildings_data.get(building,{}).get(floor,{}).get('destinations',{})
@@ -142,7 +126,7 @@ class Server(DataHandler):
         ]
         
         destinations_data = sorted(destinations_data, key=lambda x: x['name'])
-            
+
         return {
             'destinations': destinations_data,
         }
@@ -165,7 +149,6 @@ class Server(DataHandler):
         images = {id: os.listdir(os.path.join(base_path, id, 'images')) for id in ids if os.path.isdir(os.path.join(base_path, id, 'images'))}
         return images
 
-
     def _split_id(self, segment_id):
         # Load the current segment and its neighbors
         parts = segment_id.split('_')
@@ -173,15 +156,14 @@ class Server(DataHandler):
         floor = parts[1] + '_' + parts[2]  # Extract floor name (e.g., '6_floor')
         return building, floor
 
-
     def _update_next_step(self):
         pass
-
 
     def handle_localization(self, session_id, frame):
         """
         Handles the localization process for a given session and frame.
         Returns the pose and segment_id if localization is successful.
+        localization is done here
         """
         state = self.localization_states.get(session_id, {'failures': 0, 'last_success_time': time.time(), 'building': None, 'floor': None, 'segment_id': None, 'pose': None})
         pose_update_info = {
@@ -331,7 +313,6 @@ class Server(DataHandler):
         pose_update_info['floor'] = state['floor']
         
         return pose_update_info
-
 
     def handle_navigation(self, session_id):
         if session_id not in self.destination_states:

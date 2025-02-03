@@ -35,9 +35,10 @@ def load_boundaires(path):
     return anchor_name,anchor_location,lines
 
 class DataHandler:
-    def __init__(self, new_root_dir, place):
+    def __init__(self, new_root_dir, place, feature):
         self.new_root_dir = new_root_dir
         self.place = place
+        self.feature = feature
         self._setup_logging()
         self.all_buildings_data, self.all_interwaypoint_connections = self._load_global_graph()
 
@@ -63,7 +64,7 @@ class DataHandler:
         Returns:
             dict: A dictionary containing waypoints, destinations, access graph, and interwaypoints.
         """
-        boundaries_file = join(floor_dir, 'boundaries_interwaypoint.json')
+        boundaries_file = join(floor_dir, 'boundaries.json')
         access_graph_file = join(floor_dir, 'access_graph.npy')
         
         floor_data = {
@@ -94,7 +95,6 @@ class DataHandler:
                     destination_num += 1
                     
                 floor_data['destinations'] = transformed_destinations  # Assign the transformed data
-
                 # Extract interwaypoints (waypoints with type 'interwaypoint')
                 for ind, (waypoint_id, details) in enumerate(floor_data['waypoints'].items()):
                     if details.get('type') == 'interwaypoint':
@@ -111,7 +111,6 @@ class DataHandler:
         
         if exists(access_graph_file):
             floor_data['access_graph'] = np.load(access_graph_file)
-        
         return floor_data
 
     def _load_all_floors_in_building(self, building_dir, building):
@@ -186,7 +185,7 @@ class DataHandler:
         building, floor, segment_number = self._get_building_floor(segment_id)
 
         # Construct the map directory based on the place, building, and floor from the configuration
-        map_directory = join(self.new_root_dir, 'data', self.place, building, floor, 'maps')
+        map_directory = join(self.new_root_dir, 'data', self.place, building, floor, f'maps_{self.feature}')
 
         # Define the segment file path
         segment_file = join(map_directory, f"{segment_number}.h5")
