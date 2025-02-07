@@ -5,7 +5,9 @@ volume = Volume.from_name("NewVisiondata")
 
 MODEL_URL = "https://download.pytorch.org/models/vgg16-397923af.pth"
 LIGHTGLUE_URL = "https://github.com/cvg/LightGlue/releases/download/v0.1_arxiv/superpoint_lightglue.pth"
-
+DINOSALAD_URL = (
+    "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitb14/dinov2_vitb14_pretrain.pth"
+)
 # Get the current file's directory
 current_dir = Path(__file__).resolve().parent
 
@@ -21,6 +23,9 @@ def download_torch_hub_weights():
 
     lightglue_weights = torch.hub.load_state_dict_from_url(LIGHTGLUE_URL, progress=True)
     torch.save(lightglue_weights, "superpoint_lightglue_v0-1_arxiv-pth")
+
+    dinosalad_weights = torch.hub.load_state_dict_from_url(DINOSALAD_URL, progress=True)
+    torch.save(dinosalad_weights, "dinov2_vitb14_weights.pth")
 
 
 app = App(
