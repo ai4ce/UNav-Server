@@ -3,9 +3,9 @@ server:
   port: 5000
 
 location:
-  place: New_York_City
-  building: LightHouse
-  floor: "6_floor"
+  place: 'nyc'
+  building: 'lighthouse'
+  floor: "6th_floor"
   scale: 0.01098358101
 
 IO_root: "/root/UNav-IO"
