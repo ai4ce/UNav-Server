@@ -180,6 +180,9 @@ class Server(DataHandler):
             
             if not state['building'] and not state['floor']:
                 current_cluster = [key for key in self.coarse_locator.connection_graph if key.startswith(building + '_' + floor)]
+                
+                print(f"Current cluster: {current_cluster}")
+                
                 map_data = self.cache_manager.load_segments(self, session_id, current_cluster)
                 self.refine_locator.update_maps(map_data)
             
