@@ -58,6 +58,7 @@ class UnavServer:
         import base64
         import io
         from PIL import Image
+        import numpy as np
 
         """
             Handle localization request by processing the provided image and returning the pose.
@@ -88,7 +89,8 @@ class UnavServer:
 
         # Measure time for handle_localization
         start_localization_time = time.time()
-        pose = self.server.handle_localization(frame=query_image, session_id=session_id)
+        image_np = np.array(query_image)
+        pose = self.server.handle_localization(frame=image_np, session_id=session_id)
         end_localization_time = time.time()
         localization_time = end_localization_time - start_localization_time
         print(f"Localization Time: {localization_time:.2f} seconds")
