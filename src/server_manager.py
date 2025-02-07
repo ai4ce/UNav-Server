@@ -101,8 +101,9 @@ class Server(DataHandler):
         else:
             return None
 
-    def get_floorplan(self, building, floor):
+    def get_floorplan(self, session_id): #, building, floor):
         # Load floorplan data
+        building, floor = self.localization_states.get(session_id).get('building'), self.localization_states.get(session_id).get('floor')
         location_config=self.config['location']
         floorplan_url = os.path.join(self.new_root_dir, 'data', location_config['place'], building, floor, 'floorplan.png')
         floorplan = Image.open(floorplan_url).convert("RGB")
@@ -170,7 +171,7 @@ class Server(DataHandler):
             'building': None,
             'floor': None,
             'pose': None,
-            'floorplan_base64': None
+            # 'floorplan_base64': None
         }
 
         if self.load_all_maps:
@@ -197,7 +198,7 @@ class Server(DataHandler):
                 if building != state['building'] or floor != state['floor']:
                     state['building'] = building
                     state['floor'] = floor
-                    pose_update_info['floorplan_base64'] = self.get_floorplan(building, floor).get('floorplan', None)
+                    # pose_update_info['floorplan_base64'] = self.get_floorplan(building, floor).get('floorplan', None)
 
         else:
             time_since_last_success = time.time() - state['last_success_time']
@@ -227,8 +228,8 @@ class Server(DataHandler):
                         state['failures'] = 0
                         state['last_success_time'] = time.time()
                         
-                        if building != state['building'] or floor != state['floor']:
-                            pose_update_info['floorplan_base64'] = self.get_floorplan(building, floor).get('floorplan', None)
+                        # if building != state['building'] or floor != state['floor']:
+                        # pose_update_info['floorplan_base64'] = self.get_floorplan(building, floor).get('floorplan', None)
                             
                         state['floor'] = floor
                         state['building'] = building
@@ -241,7 +242,7 @@ class Server(DataHandler):
                                 state['segment_id'] = next_segment_id
                                 
                                 # if next_building != state['building'] or next_floor != state['floor']:
-                                pose_update_info['floorplan_base64'] = self.get_floorplan(next_building, next_floor).get('floorplan', None)
+                                # pose_update_info['floorplan_base64'] = self.get_floorplan(next_building, next_floor).get('floorplan', None)
                                     
                                 # delete old segments in cache
                                 next_segment_neighbors = list(self.coarse_locator.connection_graph.get(next_segment_id, {}).get('adjacent_segment', set()))
@@ -288,7 +289,7 @@ class Server(DataHandler):
                     if next_segment_id != state['segment_id']:
                         state['segment_id'] = next_segment_id
                         # if next_building != state['building'] or next_floor != state['floor']:
-                        pose_update_info['floorplan_base64'] = self.get_floorplan(next_building, next_floor).get('floorplan', None)
+                        # pose_update_info['floorplan_base64'] = self.get_floorplan(next_building, next_floor).get('floorplan', None)
 
                         # delete old segments in cache
                         next_segment_neighbors = list(self.coarse_locator.connection_graph.get(next_segment_id, {}).get('adjacent_segment', set()))
@@ -297,7 +298,7 @@ class Server(DataHandler):
 
                     pose_update_info['pose'] = pose
                     
-                    pose_update_info['floorplan_base64'] = self.get_floorplan(next_building, next_floor).get('floorplan', None)
+                    # pose_update_info['floorplan_base64'] = self.get_floorplan(next_building, next_floor).get('floorplan', None)
                     state['pose'] = pose
                     state['failures'] = 0
                     state['last_success_time'] = time.time()

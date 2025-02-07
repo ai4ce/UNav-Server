@@ -97,7 +97,7 @@ class DataHandler:
                 floor_data['destinations'] = transformed_destinations  # Assign the transformed data
                 # Extract interwaypoints (waypoints with type 'interwaypoint')
                 for ind, (waypoint_id, details) in enumerate(floor_data['waypoints'].items()):
-                    if details.get('type') == 'interwaypoint':
+                    if details.get('is_interwaypoint'):
                         interwaypoint_data = {
                             'waypoint': waypoint_id,
                             'location': details.get('location'),
