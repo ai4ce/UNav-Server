@@ -3,11 +3,11 @@ from pathlib import Path
 
 volume = modal.Volume.from_name("NewVisiondata")
 
-file_path = Path("MapConnnection_Graph.pkl")
+file_path = Path("global_features_DinoV2Salad.h5")
 
 
 with volume.batch_upload() as batch:
-    batch.put_file(str(file_path), "data/nyc/MapConnnection_Graph.pkl")
+    batch.put_file(str(file_path), "data/nyc/global_features_DinoV2Salad.h5")
 
 
 # import modal
@@ -34,6 +34,6 @@ with volume.batch_upload() as batch:
 
 # @app.local_entrypoint()
 # def main():
-#     file_to_delete = "/root/UNav-IO/data/nyc/MapConnnection_Graph.pkl"  # Replace with the actual path
+#     file_to_delete = "/root/UNav-IO/data/nyc/global_features_DinoV2Salad.h5"  # Replace with the actual path
 
 #     delete_file_from_volume.remote(file_to_delete)

@@ -11,12 +11,12 @@ def main():
     full_image_path = os.path.join(
         current_directory, "modal_functions/misc/sample3.png"
     )
-    destination_id = "07993"
+    destination_id = "02957"
     with open(full_image_path, "rb") as image_file:
         image_data = image_file.read()
         base64_encoded = base64.b64encode(image_data).decode("utf-8")
 
-    # print(unav_server.get_destinations_list.remote())
+    print(unav_server.get_destinations_list.remote())
 
     print(
         unav_server.planner.remote(
