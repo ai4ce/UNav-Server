@@ -303,50 +303,12 @@ class Trajectory():
         for i, loc in enumerate(current_anchor_location):
             current_M[i, -1] = self._distance(current_pose[:2], loc, current_boundaries)
 
-        import cv2
-        import numpy as np
-        import matplotlib.pyplot as plt
-
-        # File paths
-        image_path = "/mnt/data/UNav-IO/data/New_York_University/Langone/16_floor@dog/floorplan.png"
-        output_path = "/mnt/data/UNav-IO/data/New_York_University/Langone/16_floor@dog/debug.png"
-
-        # Load the floorplan image
-        image = cv2.imread(image_path)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # Convert BGR to RGB
-
-        # Plot the image
-        plt.figure(figsize=(10, 10))
-        plt.imshow(image)
-        plt.scatter(int(current_pose[0]), int(current_pose[1]), color='red', label='Current Pose', s=300)  # Red for current pose
-        
-        anchor_points = []
-
-        # Iterate through destinations and extract the location
-        for dest_id, dest_info in floor_data.get('waypoints').items():
-            location = [dest_info.get('x'), dest_info.get('y')]
-            if location:
-                anchor_points.append(location)
-                
-        for loc in anchor_points:
-            plt.scatter(loc[0], loc[1], color='blue', label='Anchor' if 'Anchor' not in plt.gca().get_legend_handles_labels()[1] else "", s=100)  # Blue for anchors
-        
-        destinationpoints = current_anchor_location[session_data['destination_index']]
-        
-        plt.scatter(int(destinationpoints[0]), int(destinationpoints[1]), color='orange', label='Current Pose', s=300)  # Red for current pose
-
-        plt.legend()
-        plt.axis('off')
-
-        # Save the debug image
-        plt.savefig(output_path, bbox_inches='tight', pad_inches=0, dpi=300)
-
         _, Pr = shortest_path(current_M, directed=True, method='FW', return_predecessors=True)
         
         trajectory = defaultdict(dict)
 
         # Check if current building and floor match the destination
-        if (current_building, current_floor) == (session_data['destination_building'], session_data['destination_floor']) and session_data['destination_index']:
+        if (current_building, current_floor) == (session_data['destination_building'], session_data['destination_floor']) and session_data['destination_index'] is not None:
             scale = manager.scale_data.get(manager.config['location']['place'], {}).get(current_building, {}).get(current_floor, None)
             following_paths = self._trace_back_path(Pr, current_anchor_location, -1, session_data['destination_index'])
             command_instruction = self.navigator.commander(current_pose, following_paths, scale)

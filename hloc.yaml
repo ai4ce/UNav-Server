@@ -5,8 +5,8 @@ server:
 location:
   place: New_York_University
   building: Langone
-  floor: "15_floor@dog"
-  scale: 0.02157699999
+  floor: "16_floor@dog"
+  scale: 0.02285770402
 
 IO_root: "/mnt/data/UNav-IO"
 
