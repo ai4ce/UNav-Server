@@ -1,7 +1,7 @@
 from modal import App, Image, Mount, NetworkFileSystem, Volume
 from pathlib import Path
 
-volume = Volume.from_name("Visiondata")
+volume = Volume.from_name("NewVisiondata")
 
 MODEL_URL = "https://download.pytorch.org/models/vgg16-397923af.pth"
 LIGHTGLUE_URL = "https://github.com/cvg/LightGlue/releases/download/v0.1_arxiv/superpoint_lightglue.pth"

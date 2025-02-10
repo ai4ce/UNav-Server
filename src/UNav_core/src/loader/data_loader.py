@@ -138,10 +138,19 @@ def load_data(config):
     paths['Boundaries_interwaypoint'] = join(path,'boundaries_interwaypoint.json')
     paths['Access graph path']=join(path, 'access_graph.npy')
 
-    for key,path in paths.items():
-        if not exists(path):
+    print("\n=== 📁 Checking Required Files ===")
+    for key, file_path in paths.items():
+        if exists(file_path):
+            print(f"✅ Found {key}:")
+            print(f"   📍 Path: {file_path}")
+        else:
+            print(f"❌ ERROR: {key} not found!")
+            print(f"   🔍 Searched at: {file_path}")
             logger.error(f"{key} file does not exist!")
-            exit()  
+            exit()
+    
+    print("\n✅ All required files found successfully!")
+    
     
     map_data={}
 

@@ -22,6 +22,24 @@ TIMEOUT_SECONDS = 600  # Example timeout for coarse localization in seconds
 class Server(DataHandler):
     def __init__(self, config, logger):
         super().__init__(config["IO_root"],config['location']['place'])
+        
+        
+        print("\n=== Server Configuration ===")
+        print(f"🔧 IO Root: {config['IO_root']}")
+        print(f"📍 Place: {config['location']['place']}")
+        print(f"🏢 Building: {config['location'].get('building', 'Not set')}")
+        print(f"🏗️ Floor: {config['location'].get('floor', 'Not set')}")
+        
+        # 🌐 Network Settings
+        print("\n=== Network Settings ===")
+        print(f"🖥️ Host: {config['server']['host']}")
+        print(f"🔌 Port: {config['server']['port']}")
+        
+        # 🗺️ Map Settings
+        print("\n=== Map Settings ===")
+        print(f"🗺️ Load All Maps: {config['hloc']['load_all_maps']}")
+        
+        
         self.config = config
         self.logger = logger
         self.root = config["IO_root"]

@@ -4,9 +4,9 @@ server:
 
 location:
   place: New_York_City
-  building: LightHouse
-  floor: "6_floor"
-  scale: 0.01098358101
+  building: New_York_University_hospital
+  floor: "17th_floor"
+  scale: 0.0215769999
 
 IO_root: "/root/UNav-IO"
 

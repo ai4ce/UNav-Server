@@ -20,15 +20,15 @@ class UnavServer:
         from server_manager import Server
         from modules.config.settings import load_config
 
-        config = load_config("config.yaml")
+        self.config = load_config("config.yaml")
 
-        self.server = Server(logger=setup_logger(), config=config)
+        self.server = Server(logger=setup_logger(), config=self.config)
 
     @method()
     def get_destinations_list(self):
 
         response = self.server.get_destinations_list(
-            building="LightHouse", floor="6_floor"
+            building=self.config['building'], floor=self.config['floor'], place=self.config['place']
         )
         return response
 
