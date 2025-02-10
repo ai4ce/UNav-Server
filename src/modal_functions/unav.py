@@ -138,7 +138,7 @@ class UnavServer:
         By starting the server in advance, it ensures that the server is ready to handle incoming requests immediately, 
         thus avoiding the latency associated with a cold start.
         """
-        print("Server Started...")
+        print("UNAV Container started...")
 
         response = {"status": "success", "message": "Server started."}
         return json.dumps(response)

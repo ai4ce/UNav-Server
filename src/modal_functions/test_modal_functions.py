@@ -9,7 +9,7 @@ def main():
     unav_server = UnavServer()
     current_directory = os.getcwd()
     full_image_path = os.path.join(
-        current_directory, "modal_functions/misc/sample3.png"
+        current_directory, "modal_functions/misc/sample_image_5.jpg"
     )
     destination_id = "03038"
     with open(full_image_path, "rb") as image_file:
