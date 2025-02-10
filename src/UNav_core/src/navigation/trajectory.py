@@ -42,22 +42,37 @@ class Navigator:
         instructions = []
         x, y, ang = current_pose
         
-        for idx, (next_x, next_y) in enumerate(following_poses):
+        for next_x, next_y in following_poses:
+            # Compute the target angle from current (x, y) to the next waypoint.
             target_angle = self.compute_angle((x, y), (next_x, next_y))
+            # Compute the relative angle you must turn.
             relative_turn = self.compute_relative_angle(ang, target_angle)
-            clock_direction = self.angle_to_clock(relative_turn)
+            # Convert the relative turn into a clock position.
+            clock = self.angle_to_clock(relative_turn)
+
+            # Map the clock value to the professor's instruction.
+            if clock in ["11 o'clock", "12 o'clock", "1 o'clock"]:
+                turn_instruction = f"Go ahead at {clock}"
+            elif clock in ["10 o'clock", "9 o'clock", "8 o'clock"]:
+                turn_instruction = f"Turn left at {clock}"
+            elif clock in ["5 o'clock", "6 o'clock", "7 o'clock"]:
+                turn_instruction = f"Turn around at {clock}"
+            elif clock in ["2 o'clock", "3 o'clock", "4 o'clock"]:
+                turn_instruction = f"Turn right at {clock}"
+            else:
+                turn_instruction = f"Go ahead at {clock}"  # default fallback
+
+            # Only add a turn instruction if the turn is significant (e.g., > 10°).
+            if abs(relative_turn) > 10:
+                instructions.append(turn_instruction + ".")
+                # Update the current orientation to reflect that the turn has been made.
+                ang = target_angle
+
+            # Compute the distance to the next waypoint.
             distance = self.compute_distance((x, y), (next_x, next_y), scale)
-            
-            # Generate instruction ensuring forward motion after turn
-            if abs(relative_turn) > 10:  # Only mention turns if they are significant
-                instruction = f"Turn to {clock_direction}."
-                instructions.append(instruction)
-                ang = target_angle  # Update current angle after turn
-            
-            instruction = f"Walk {distance:.1f} meters forward."
-            instructions.append(instruction)
-            
-            # Update current position for next iteration
+            instructions.append(f"Walk {distance:.1f} meters forward.")
+
+            # Update the current position.
             x, y = next_x, next_y
         
         if are_instructions_generated:

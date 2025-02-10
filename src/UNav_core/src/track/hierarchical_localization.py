@@ -423,6 +423,7 @@ class Hloc():
             if len(pts0_list)>0:
                 final_candidates, feature2D,landmark3D=self.geometric_verification(valid_db_frame_name, pts0_list, pts1_list, lms_list, max_matched_num)
                 if len(final_candidates)>0:
+                    print("matched images:", final_candidates)
                     next_segment_id = self._determine_next_segment(final_candidates)
                 else:
                     return None, None
