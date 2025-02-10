@@ -25,7 +25,7 @@ def main():
             session_id="test_session_id_2",
             building="LightHouse",
             floor="6_floor",
-            place="nyc",
+            place="New_York_City",
         )
     )
 
