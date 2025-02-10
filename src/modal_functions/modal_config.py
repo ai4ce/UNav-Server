@@ -1,11 +1,13 @@
 from modal import App, Image, Mount, NetworkFileSystem, Volume
 from pathlib import Path
 
-volume = Volume.from_name("Visiondata")
+volume = Volume.from_name("NewVisiondata")
 
 MODEL_URL = "https://download.pytorch.org/models/vgg16-397923af.pth"
 LIGHTGLUE_URL = "https://github.com/cvg/LightGlue/releases/download/v0.1_arxiv/superpoint_lightglue.pth"
-
+DINOSALAD_URL = (
+    "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitb14/dinov2_vitb14_pretrain.pth"
+)
 # Get the current file's directory
 current_dir = Path(__file__).resolve().parent
 
@@ -15,11 +17,15 @@ local_dir = current_dir / ".."
 
 def download_torch_hub_weights():
     import torch
+
     model_weights = torch.hub.load_state_dict_from_url(MODEL_URL, progress=True)
     torch.save(model_weights, "vgg16_weights.pth")
 
     lightglue_weights = torch.hub.load_state_dict_from_url(LIGHTGLUE_URL, progress=True)
-    torch.save(lightglue_weights,"superpoint_lightglue_v0-1_arxiv-pth")
+    torch.save(lightglue_weights, "superpoint_lightglue_v0-1_arxiv-pth")
+
+    dinosalad_weights = torch.hub.load_state_dict_from_url(DINOSALAD_URL, progress=True)
+    torch.save(dinosalad_weights, "dinov2_vitb14_weights.pth")
 
 
 app = App(
@@ -63,6 +69,7 @@ unav_image = (
         "pip freeze",
     )
     .pip_install_from_requirements("modal_functions/modal_requirements.txt")
+    .pip_install("fast_pytorch_kmeans")
     .workdir("/root")
     .run_function(download_torch_hub_weights)
 )

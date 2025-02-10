@@ -143,3 +143,8 @@ install_manifest.txt
 
 #test files
 test1.py
+
+#misc
+
+.vscode
+logs

@@ -14,6 +14,12 @@ from logger_utils import setup_logger
 )
 class UnavServer:
 
+    def find_use_true_feature(self, feature_dict):
+        for key, value in feature_dict.items():
+            if isinstance(value, dict) and value.get("use") is True:
+                return key
+        return None
+
     @build()
     @enter()
     def load_server(self):
@@ -22,7 +28,10 @@ class UnavServer:
 
         config = load_config("config.yaml")
 
-        self.server = Server(logger=setup_logger(), config=config)
+        feature_global = config.get("feature", {}).get("global", {})
+        feature = self.find_use_true_feature(feature_global)
+
+        self.server = Server(logger=setup_logger(), config=config, feature=feature)
 
     @method()
     def get_destinations_list(self):
@@ -49,6 +58,7 @@ class UnavServer:
         import base64
         import io
         from PIL import Image
+        import numpy as np
 
         """
             Handle localization request by processing the provided image and returning the pose.
@@ -79,7 +89,8 @@ class UnavServer:
 
         # Measure time for handle_localization
         start_localization_time = time.time()
-        pose = self.server.handle_localization(frame=query_image, session_id=session_id)
+        image_np = np.array(query_image)
+        pose = self.server.handle_localization(frame=image_np, session_id=session_id)
         end_localization_time = time.time()
         localization_time = end_localization_time - start_localization_time
         print(f"Localization Time: {localization_time:.2f} seconds")
@@ -104,9 +115,15 @@ class UnavServer:
 
         scale = self.server.config["location"]["scale"]
 
-        if(get_floor_plan):
+        if get_floor_plan:
             floorplan_base64 = pose["floorplan_base64"]
-            return json.dumps({"trajectory": trajectory, "scale": scale, "floorplan_base64" : floorplan_base64}) #return floor plan if requested 
+            return json.dumps(
+                {
+                    "trajectory": trajectory,
+                    "scale": scale,
+                    "floorplan_base64": floorplan_base64,
+                }
+            )  # return floor plan if requested
 
         return json.dumps({"trajectory": trajectory, "scale": scale})
 
@@ -121,7 +138,7 @@ class UnavServer:
         By starting the server in advance, it ensures that the server is ready to handle incoming requests immediately, 
         thus avoiding the latency associated with a cold start.
         """
-        print("Server Started...")
+        print("UNAV Container started...")
 
         response = {"status": "success", "message": "Server started."}
         return json.dumps(response)

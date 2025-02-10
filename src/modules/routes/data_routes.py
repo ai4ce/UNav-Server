@@ -123,7 +123,7 @@ def register_data_routes(app, server, socketio):
     @app.route('/get_destinations', methods=['POST'])
     def get_destinations_list():
         """
-        Retrieve the floorplan and available destinations for the current location.
+        Retrieve available destinations for the current location.
         """
         data = request.json
         
@@ -134,6 +134,17 @@ def register_data_routes(app, server, socketio):
         destination_data = server.get_destinations_list(building, floor)
         return jsonify(destination_data)
 
+    @app.route('/get_floorplan', methods=['POST'])
+    def get_floorplan():
+        """
+        Retrieve the floorplan for the current location.
+        """
+        data = request.json
+        session_id = data.get('session_id')
+        
+        floorplan_base64 = server.get_floorplan(session_id)
+        return jsonify(floorplan_base64)
+    
     @app.route('/select_destination', methods=['POST'])
     def select_destination():
         """

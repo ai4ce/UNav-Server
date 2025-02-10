@@ -47,19 +47,8 @@ def register_frame_routes(app, server, socketio):
             resized_image = frame.resize((new_width, new_height))
 
             image_np = np.array(resized_image)
-
-            original_width, original_height = frame.size
-
-            new_width = 640
-            new_height = int((new_width / original_width) * original_height)
-
-            # Resize the image
-            resized_image = frame.resize((new_width, new_height))
-
-            image_np = np.array(resized_image)
             
             if frame is not None:
-                client_frames[session_id] = image_np
                 client_frames[session_id] = image_np
                 response_data = {'status': 'frame received'}
 
@@ -75,7 +64,6 @@ def register_frame_routes(app, server, socketio):
                     response_data['pose'] = pose_update_info.get('pose')
 
                 buffered = io.BytesIO()
-                resized_image.save(buffered, format="JPEG")
                 resized_image.save(buffered, format="JPEG")
                 new_frame_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
                 response_data['floorplan_base64'] = pose_update_info.get('floorplan_base64')
@@ -109,15 +97,9 @@ def register_frame_routes(app, server, socketio):
 
     @app.route('/get_image/<id>/<imageName>', methods=['POST'])
     def get_image(id, imageName):
-    @app.route('/get_image/<id>/<imageName>', methods=['POST'])
-    def get_image(id, imageName):
         """
         Retrieve a specific image associated with a session and image name.
         """
-        data = request.json
-        session_id = data.get('username')
-    
-        image_path = os.path.join(server.root, 'logs', server.config['location']['place'], server.config['location']['building'], server.config['location']['floor'], id, 'images', imageName)
         data = request.json
         session_id = data.get('username')
     

@@ -3,8 +3,8 @@ server:
   port: 5000
 
 location:
-  place: New_York_City
-  building: LightHouse
+  place: 'New_York_City'
+  building: 'LightHouse'
   floor: "6_floor"
   scale: 0.01098358101
 
@@ -19,18 +19,44 @@ hloc:
   # match_type: 'nvs'
   match_type: "lightglue"
   batch_mode: true
-  load_all_maps: False
+  load_all_maps: true
   map_loading_keyframes_reload: 0
 
 feature:
   global:
-    netvlad:
-      ckpt_path: "parameters/paper"
+    MixVPR:
+      use: false
+      ckpt_path: "parameters/MixVPR/ckpts/resnet50_MixVPR_4096_channels(1024)_rows(4).ckpt"
+      pt_img_size: [320, 320] # The input image resolution for MixVPR's pretrained weights
+      cuda: true
+    AnyLoc:
+      use: false
+      model_type: "dinov2_vitg14" # One of the following: "dinov2_vit<s|b|l|g>14"; should be same between training and testing
+      ckpt_path: "None" # If set to 'None', loads model_type from PyTorch Hub
+      max_image_size: 1024 # To prevent out of memory
+      desc_layer: 31
+      desc_facet: "value" # one of "query", "key", "value", "token"
+      num_clusters: 32
+      domain: "indoor" # one of "aerial", "indoor", "urban"
+      cache_dir: "parameters/AnyLoc/demo/cache"
+      cuda: true
+    DinoV2Salad:
+      use: true
+      ckpt_path: "parameters/DinoV2Salad/ckpts/dino_salad.ckpt"
+      max_image_size: 1024 # To prevent out of memory
+      cuda: true
+    CricaVPR:
+      use: false
+      ckpt_path: "parameters/CricaVPR/ckpts/CricaVPR.pth"
+      cuda: true
+    NetVlad:
+      use: false
+      ckpt_path: "parameters/netvlad/paper/checkpoints"
       arch: "vgg16"
-      vladv2: true
-      nocuda: false
       num_clusters: 64
       pooling: "netvlad"
+      vladv2: false
+      nocuda: false
 
   local:
     superpoint+lightglue:
@@ -41,3 +67,16 @@ feature:
       match_conf:
         width_confidence: -1
         depth_confidence: -1
+
+vpr:
+  topk:
+    - 1
+    - 2
+    - 5
+    - 10
+    - 15
+    - 20
+    - 25
+  threshold:
+    - 25
+  global_extractor:
