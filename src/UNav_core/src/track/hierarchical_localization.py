@@ -1,10 +1,13 @@
 # from UNav_core.src.feature.global_extractor import Global_Extractors
 from UNav_core.src.feature.Global_Extractors import GlobalExtractors
+# from UNav_core.src.feature.global_extractor import Global_Extractors
+from UNav_core.src.feature.Global_Extractors import GlobalExtractors
 from UNav_core.src.feature.local_extractor import Local_extractor
 from UNav_core.src.feature.local_matcher import Local_matcher
 from UNav_core.src.third_party.torchSIFT.src.torchsift.ransac.ransac import ransac
 from UNav_core.src.track.implicit_distortion_model import coarse_pose, pose_multi_refine
 import torch
+import torchvision.transforms as transforms
 import torchvision.transforms as transforms
 import numpy as np
 from os.path import join
@@ -29,31 +32,28 @@ def read_pickle_file(file_path):
 
 class Coarse_Locator:
     def __init__(self, feature, config):
+    def __init__(self, feature, config):
         """
         Initializes the VPR class.
         :param root: Path to the directory containing the combined global_features.h5 file.
         :param config: Configuration dictionary containing parameters for VPR.
         """
-        self.device = config["devices"]
+        self.device = config['devices']
         self.feature = feature
-        self.global_extractor = GlobalExtractors(
-            config["IO_root"], config["feature"]["global"]
-        )
+        self.global_extractor = GlobalExtractors(config['IO_root'], config['feature']['global'])
         self.global_extractor.set_float32()
         self.global_extractor.set_train(False)
         self.model_name = list(self.global_extractor.models)[0]
 
-        self.transform = transforms.Compose(
-            [
-                # transforms.Resize((224, 224)),  # Adjust based on model's expected input size
-                transforms.ToTensor(),
-                # Add normalization if required by your model
-                # transforms.Normalize(mean=[...], std=[...]),
-            ]
-        )
-
+        self.transform = transforms.Compose([
+            # transforms.Resize((224, 224)),  # Adjust based on model's expected input size
+            transforms.ToTensor(),
+            # Add normalization if required by your model
+            # transforms.Normalize(mean=[...], std=[...]),
+        ])
+        
         # self.global_extractor = Global_Extractors(config).get()
-        self.config = config["hloc"]
+        self.config = config['hloc']
 
         # Load global descriptors and segment IDs
         self.global_descriptors, self.segment_ids = self.load_global_features(
@@ -96,7 +96,7 @@ class Coarse_Locator:
         # with h5py.File(global_features_path, 'r') as f:
         #     descriptors = f['descriptors'][:]
         #     segment_ids = f['segments'][:].astype(str)
-
+        
         # return torch.tensor(descriptors, dtype=torch.float32).to(self.device), segment_ids
         return None, None
 
@@ -112,23 +112,21 @@ class Coarse_Locator:
             with torch.autocast("cuda", torch.float32):
                 outputs = self.global_extractor(self.model_name, image_tensor)
         _, query_desc = outputs
-
+        
         # query_desc = self.global_extractor(image).to(self.device)
 
         # Compute similarity between the query descriptor and database descriptors
-        sim = torch.einsum("id,jd->ij", query_desc, self.global_descriptors)
-        topk_indices = (
-            torch.topk(sim, self.config["retrieval_num"], dim=1).indices.cpu().numpy()
-        )
+        sim = torch.einsum('id,jd->ij', query_desc, self.global_descriptors)
+        topk_indices = torch.topk(sim, self.config['retrieval_num'], dim=1).indices.cpu().numpy()
 
         # Retrieve the corresponding segment IDs for the top-k matches
         topk_segments = self.segment_ids[topk_indices[0]]
-
+        
         # Analyze top-k results
         segment, success = self.analyze_topk_results(topk_segments)
-
+        
         return topk_segments, segment, success
-
+    
     def get_topk_segments(self, topk_indices):
         """
         Retrieve the corresponding segments for the top-k indices.
@@ -154,9 +152,10 @@ class Coarse_Locator:
                 segment_counts[segment] += 1
             else:
                 segment_counts[segment] = 1
-
+        
         # Initialize a dictionary to accumulate counts for segments and their neighbors
         segment_wt_neighbor_counts = {}
+
 
         # Accumulate counts including neighbor segments
         for segment, count in segment_counts.items():
@@ -171,16 +170,13 @@ class Coarse_Locator:
 
             # Record the accumulated count for the segment
             segment_wt_neighbor_counts[segment] = total_count
-
+        
         # Determine the segment with the highest total count
-        most_likely_segment = max(
-            segment_wt_neighbor_counts, key=segment_wt_neighbor_counts.get
-        )
-        success = (
-            segment_wt_neighbor_counts[most_likely_segment] / len(topk_segments)
-        ) >= 0.1
-
+        most_likely_segment = max(segment_wt_neighbor_counts, key=segment_wt_neighbor_counts.get)
+        success = (segment_wt_neighbor_counts[most_likely_segment] / len(topk_segments)) >= 0.1
+        
         return most_likely_segment, success
+
 
     def get_segment_id(self, index):
         """
@@ -203,22 +199,21 @@ class Hloc:
 
     def __init__(self, coarse_locator, config, logger):
         # loading config setting
-        self.config = config["hloc"]
-        self.batch_mode = self.config["batch_mode"]
-        self.thre = self.config["ransac_thre"]
-        self.match_type = self.config["match_type"]
-        self.feature_configs = config["feature"]
+        self.config=config['hloc']
+        self.batch_mode=self.config['batch_mode']
+        self.thre=self.config['ransac_thre']
+        self.match_type=self.config['match_type']
+        self.feature_configs=config['feature']
 
-        self.transform = transforms.Compose(
-            [
-                # transforms.Resize((224, 224)),  # Adjust based on model's expected input size
-                transforms.ToTensor(),
-                # Add normalization if required by your model
-                # transforms.Normalize(mean=[...], std=[...]),
-            ]
-        )
-
+        self.transform = transforms.Compose([
+            # transforms.Resize((224, 224)),  # Adjust based on model's expected input size
+            transforms.ToTensor(),
+            # Add normalization if required by your model
+            # transforms.Normalize(mean=[...], std=[...]),
+        ])
+        
         self.global_extractor = coarse_locator.get_global_extractor()
+        self.model_name = list(self.global_extractor.models)[0]
         self.model_name = list(self.global_extractor.models)[0]
 
         local_feature = Local_extractor(self.feature_configs["local"])
@@ -247,9 +242,7 @@ class Hloc:
             )
 
         # Stack all global descriptors into a single tensor
-        global_descriptor_tensor = torch.stack(
-            [descriptor.squeeze(0) for descriptor in global_descriptors], dim=0
-        )
+        global_descriptor_tensor = torch.stack([descriptor.squeeze(0) for descriptor in global_descriptors], dim=0)
 
         return global_descriptor_tensor
 
@@ -275,20 +268,16 @@ class Hloc:
     def global_retrieval(self, image):
         # # Extract the global descriptor from the query image
         # self.query_desc = self.global_extractor(image)
-
+        
         # Extract global descriptor from the query image
         image_tensor = self.transform(image).unsqueeze(0).to(self.device)
         with torch.no_grad():
             with torch.autocast("cuda", torch.float32):
                 outputs = self.global_extractor(self.model_name, image_tensor)
         _, self.query_desc = outputs
-
-        sim = torch.einsum(
-            "id,jd->ij", self.query_desc, self.db_global_descriptors.to(self.device)
-        )
-        topk = (
-            torch.topk(sim, self.config["retrieval_num"], dim=1).indices.cpu().numpy()
-        )
+        
+        sim = torch.einsum('id,jd->ij', self.query_desc, self.db_global_descriptors.to(self.device))
+        topk = torch.topk(sim, self.config['retrieval_num'], dim=1).indices.cpu().numpy()
 
         return topk
 
@@ -300,11 +289,7 @@ class Hloc:
         with torch.inference_mode():  # Use torch.no_grad during inference
             image_np = np.array(image)
             feats0 = self.local_feature_extractor(image_np)
-            valid_db_frame_name, pts0_list, pts1_list, lms_list, max_len = (
-                self.local_feature_matcher.lightglue_batch(
-                    self, topk[0], feats0, image_np
-                )
-            )
+            valid_db_frame_name, pts0_list,pts1_list,lms_list,max_len=self.local_feature_matcher.lightglue_batch(self, topk[0], feats0, image_np)
 
         return valid_db_frame_name, pts0_list, pts1_list, lms_list, max_len
 
@@ -316,15 +301,15 @@ class Hloc:
         with torch.inference_mode():  # Use torch.no_grad during inference
             image_np = np.array(image)
             feats0 = self.local_feature_extractor(image_np)
-        pts0_list, pts1_list, lms_list = [], [], []
-        max_len = 0
-
+        pts0_list,pts1_list,lms_list=[],[],[]
+        max_len=0
+        
         valid_db_frame_name = []
         for i in topk[0]:
-            pts0, pts1, lms = self.local_feature_matcher.lightglue(i, feats0)
-
-            feat_inliner_size = pts0.shape[0]
-            if feat_inliner_size > self.thre:
+            pts0,pts1,lms=self.local_feature_matcher.lightglue(i, feats0)
+            
+            feat_inliner_size=pts0.shape[0]
+            if feat_inliner_size>self.thre:
                 valid_db_frame_name.append(self.db_name[i])
                 pts0_list.append(pts0)
                 pts1_list.append(pts1)
@@ -334,9 +319,9 @@ class Hloc:
             del pts0, pts1, lms
         del self.query_desc, feats0
         torch.cuda.empty_cache()
-        return valid_db_frame_name, pts0_list, pts1_list, lms_list, max_len
-
-    def feature_matching_superglue(self, image, topk):
+        return valid_db_frame_name, pts0_list,pts1_list,lms_list,max_len
+    
+    def feature_matching_superglue(self,image,topk):
         """
         Local Feature Matching:
             Match the local features between query image and retrieved database images
@@ -423,43 +408,34 @@ class Hloc:
         #     torch.cuda.empty_cache()
         #     return None, torch.tensor([]), None
 
-    def pnp(self, image, feature2D, landmark3D):
+
+    def pnp(self,image,feature2D,landmark3D):
         """
         Start Perspective-n-points:
             Estimate the current location using implicit distortion model
         """
-        if feature2D.size()[0] > 0:
+        if feature2D.size()[0]>0:
             height, width, _ = image.shape
-            feature2D, landmark3D = feature2D.cpu().numpy(), landmark3D.cpu().numpy()
-            out, p2d_inlier, p3d_inlier = coarse_pose(
-                feature2D, landmark3D, np.array([width / 2, height / 2])
-            )
+            feature2D, landmark3D=feature2D.cpu().numpy(),landmark3D.cpu().numpy()
+            out, p2d_inlier, p3d_inlier = coarse_pose(feature2D, landmark3D, np.array([width / 2, height / 2]))
             self.list_2d.append(p2d_inlier)
             self.list_3d.append(p3d_inlier)
-            self.initial_poses.append(out["pose"])
-            self.pps.append(out["pp"])
-            if len(self.list_2d) > self.config["implicit_num"]:
+            self.initial_poses.append(out['pose'])
+            self.pps.append(out['pp'])
+            if len(self.list_2d) > self.config['implicit_num']:
                 self.list_2d.pop(0)
                 self.list_3d.pop(0)
                 self.initial_poses.pop(0)
                 self.pps.pop(0)
-            pose = pose_multi_refine(
-                self.list_2d,
-                self.list_3d,
-                self.initial_poses,
-                self.pps,
-                self.rot_base,
-                self.T,
-            )
+            pose = pose_multi_refine(self.list_2d, self.list_3d, self.initial_poses, self.pps,self.rot_base,self.T)
 
-            # reset reload num
+            #reset reload num
             self.current_reload_num = 0
         else:
-            pose = None
-            self.logger.warning(
-                "!!!Cannot localize at this point, please take some steps or turn around!!!"
-            )
+            pose =None
+            self.logger.warning("!!!Cannot localize at this point, please take some steps or turn around!!!")
         return pose
+
 
     def _determine_next_segment(self, candidates):
         candidate_histogram = {}
@@ -509,11 +485,10 @@ class Hloc:
                 )
 
             self.logger.debug("Start geometric verification")
-            if len(pts0_list) > 0:
-                final_candidates, feature2D, landmark3D = self.geometric_verification(
-                    valid_db_frame_name, pts0_list, pts1_list, lms_list, max_matched_num
-                )
-                if len(final_candidates) > 0:
+            if len(pts0_list)>0:
+                final_candidates, feature2D,landmark3D=self.geometric_verification(valid_db_frame_name, pts0_list, pts1_list, lms_list, max_matched_num)
+                if len(final_candidates)>0:
+                    print("matched images:", final_candidates)
                     next_segment_id = self._determine_next_segment(final_candidates)
                 else:
                     return None, None
