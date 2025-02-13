@@ -93,6 +93,7 @@ class Trajectory():
         self.precalculated_inter_paths = self._precalculated_inter_paths()
         self.precalculated_global_paths = self._precalculate_global_paths()
         self.navigator = Navigator()
+        self.navigator = Navigator()
 
     def _find_all_paths(self, current_building, current_floor, dest_building, dest_floor):
         paths = []
@@ -212,6 +213,7 @@ class Trajectory():
         # Iterate through waypoints and extract the location
         for waypoint_id, waypoint_info in waypoints.items():
             location = [waypoint_info.get('x'), waypoint_info.get('y')]
+            location = [waypoint_info.get('x'), waypoint_info.get('y')]
             if location:
                 anchor_points.append(location)
 
@@ -300,6 +302,7 @@ class Trajectory():
         for interwaypoint in destination_interwaypoints:
             session_data['dest_from_inter'][interwaypoint['index']] = self._trace_back_path(Pr, destination_anchor_location, interwaypoint['index'], session_data['destination_index'])
     
+    
     def calculate_path(self, manager, session_id, localization_states):
         """Calculate the path for a specific session."""
         self._initialize_session(session_id)
@@ -327,10 +330,17 @@ class Trajectory():
             scale = manager.scale_data.get(manager.config['location']['place'], {}).get(current_building, {}).get(current_floor, None)
             following_paths = self._trace_back_path(Pr, current_anchor_location, -1, session_data['destination_index'])
             command_instruction = self.navigator.commander(current_pose, following_paths, scale)
+        if (current_building, current_floor) == (session_data['destination_building'], session_data['destination_floor']) and session_data['destination_index'] is not None:
+            scale = manager.scale_data.get(manager.config['location']['place'], {}).get(current_building, {}).get(current_floor, None)
+            following_paths = self._trace_back_path(Pr, current_anchor_location, -1, session_data['destination_index'])
+            command_instruction = self.navigator.commander(current_pose, following_paths, scale)
             trajectory[0] = {
                 'name': 'destination',
                 'building': current_building,
                 'floor': current_floor,
+                'paths': [[current_pose[0], current_pose[1]]] + following_paths,
+                'command': command_instruction,
+                'scale': scale
                 'paths': [[current_pose[0], current_pose[1]]] + following_paths,
                 'command': command_instruction,
                 'scale': scale
@@ -347,6 +357,7 @@ class Trajectory():
                     inter_name = step_info.get('name')
                     building = step_info.get('building')
                     floor = step_info.get('floor')
+                    scale = manager.scale_data.get(manager.config['location']['place'], {}).get(building, {}).get(floor, None)
                     scale = manager.scale_data.get(manager.config['location']['place'], {}).get(building, {}).get(floor, None)
                     if step == 0:
                         current_paths = [[current_pose[0], current_pose[1]]] + self._trace_back_path(Pr, current_anchor_location, -1, step_info.get('index'))
@@ -365,11 +376,13 @@ class Trajectory():
                         else:
                             continue
                     command_instruction = self.navigator.commander(current_pose, current_paths[1:], scale)
+                    command_instruction = self.navigator.commander(current_pose, current_paths[1:], scale)
                     local_trajectory[step] = {
                         'name': inter_name if step < len(path_candidate) - 1 else session_data['destination_name'],
                         'building': building,
                         'floor': floor,
                         'paths': current_paths,
+                        'command': command_instruction,
                         'command': command_instruction,
                         'scale': manager.scale_data.get(manager.config['location']['place'], {}).get(building, {}).get(floor, None)
                     }
