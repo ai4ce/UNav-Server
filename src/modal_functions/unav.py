@@ -11,6 +11,7 @@ from logger_utils import setup_logger
     enable_memory_snapshot=True,
     concurrency_limit=20,
     allow_concurrent_inputs=20,
+    memory=32768,
 )
 class UnavServer:
 
