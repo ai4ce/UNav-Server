@@ -340,7 +340,7 @@ class Trajectory():
                 'floor': current_floor,
                 'paths': [[current_pose[0], current_pose[1]]] + following_paths,
                 'command': command_instruction,
-                'scale': scale
+                'scale': scale,
                 'paths': [[current_pose[0], current_pose[1]]] + following_paths,
                 'command': command_instruction,
                 'scale': scale
