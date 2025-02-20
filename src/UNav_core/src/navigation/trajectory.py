@@ -341,9 +341,6 @@ class Trajectory():
                 'paths': [[current_pose[0], current_pose[1], current_pose[2]]] + following_paths,
                 'command': command_instruction,
                 'scale': scale,
-                'paths': [[current_pose[0], current_pose[1]]] + following_paths,
-                'command': command_instruction,
-                'scale': scale
             }
         else:
             possible_paths = self.precalculated_global_paths.get((current_building, current_floor), {}).get((session_data['destination_building'], session_data['destination_floor']), {})
@@ -375,7 +372,6 @@ class Trajectory():
                             distance += self._calculate_trajectory_length(current_paths)
                         else:
                             continue
-                    command_instruction = self.navigator.commander(current_pose, current_paths[1:], scale)
                     command_instruction = self.navigator.commander(current_pose, current_paths[1:], scale)
                     local_trajectory[step] = {
                         'name': inter_name if step < len(path_candidate) - 1 else session_data['destination_name'],
