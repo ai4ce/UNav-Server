@@ -331,7 +331,7 @@ class Trajectory():
                 'name': 'destination',
                 'building': current_building,
                 'floor': current_floor,
-                'paths': [[current_pose[0], current_pose[1]]] + following_paths,
+                'paths': [[current_pose[0], current_pose[1], current_pose[2]]] + following_paths,
                 'command': command_instruction,
                 'scale': scale
             }
@@ -349,7 +349,7 @@ class Trajectory():
                     floor = step_info.get('floor')
                     scale = manager.scale_data.get(manager.config['location']['place'], {}).get(building, {}).get(floor, None)
                     if step == 0:
-                        current_paths = [[current_pose[0], current_pose[1]]] + self._trace_back_path(Pr, current_anchor_location, -1, step_info.get('index'))
+                        current_paths = [[current_pose[0], current_pose[1], current_pose[2]]] + self._trace_back_path(Pr, current_anchor_location, -1, step_info.get('index'))
                         distance += self._calculate_trajectory_length(current_paths)
                     elif step == len(path_candidate) - 1:
                         current_paths = session_data['dest_from_inter'].get(step_info.get('index'))
