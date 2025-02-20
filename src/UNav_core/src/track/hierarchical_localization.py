@@ -32,6 +32,7 @@ def read_pickle_file(file_path):
 
 class Coarse_Locator:
     def __init__(self, feature, config):
+    def __init__(self, feature, config):
         """
         Initializes the VPR class.
         :param root: Path to the directory containing the combined global_features.h5 file.
