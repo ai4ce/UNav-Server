@@ -3,8 +3,8 @@ server:
   port: 5000
 
 location:
-  place: New_York_City
-  building: LightHouse
+  place: 'New_York_City'
+  building: 'LightHouse'
   floor: "6_floor"
   scale: 0.01098358101
 

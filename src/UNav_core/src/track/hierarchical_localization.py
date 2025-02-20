@@ -1,10 +1,13 @@
 # from UNav_core.src.feature.global_extractor import Global_Extractors
 from UNav_core.src.feature.Global_Extractors import GlobalExtractors
+# from UNav_core.src.feature.global_extractor import Global_Extractors
+from UNav_core.src.feature.Global_Extractors import GlobalExtractors
 from UNav_core.src.feature.local_extractor import Local_extractor
 from UNav_core.src.feature.local_matcher import Local_matcher
 from UNav_core.src.third_party.torchSIFT.src.torchsift.ransac.ransac import ransac
-from UNav_core.src.track.implicit_distortion_model import coarse_pose,pose_multi_refine
+from UNav_core.src.track.implicit_distortion_model import coarse_pose, pose_multi_refine
 import torch
+import torchvision.transforms as transforms
 import torchvision.transforms as transforms
 import numpy as np
 from os.path import join
@@ -13,9 +16,10 @@ import h5py
 import pickle
 from skimage.transform import resize
 
+
 def read_pickle_file(file_path):
     try:
-        with open(file_path, 'rb') as file:
+        with open(file_path, "rb") as file:
             data = pickle.load(file)
         return data
     except FileNotFoundError:
@@ -24,8 +28,10 @@ def read_pickle_file(file_path):
     except Exception as e:
         print(f"An error occurred while reading the pickle file: {e}")
         return None
-    
+
+
 class Coarse_Locator:
+    def __init__(self, feature, config):
     def __init__(self, feature, config):
         """
         Initializes the VPR class.
@@ -50,13 +56,36 @@ class Coarse_Locator:
         self.config = config['hloc']
 
         # Load global descriptors and segment IDs
-        self.global_descriptors, self.segment_ids = self.load_global_features(join(config['IO_root'],'data', config['location']['place']))
-        
+        self.global_descriptors, self.segment_ids = self.load_global_features(
+            join(config["IO_root"], "data", config["location"]["place"])
+        )
+
         # Load connection graph
-        file_path = join(config['IO_root'],'data', config['location']['place'], 'MapConnnection_Graph.pkl')
+        file_path = join(
+            config["IO_root"],
+            "data",
+            config["location"]["place"],
+            "MapConnnection_Graph.pkl",
+        )
+        print(f"🔍 Attempting to load connection graph from: {file_path}")
         connection_graph = read_pickle_file(file_path)
+        print(f"📦 Connection graph loaded: {connection_graph is not None}")
+
         self.connection_graph = connection_graph
-        
+
+        if self.connection_graph is not None:
+            print("✅ Connection graph loaded successfully.")
+            print(f"   Number of segments in graph: {len(self.connection_graph)}")
+            # Optionally, print the first few segments and their neighbors for inspection:
+            num_to_print = min(5, len(self.connection_graph))
+            print("   First few segments and their neighbors:")
+            for i, (segment, neighbors) in enumerate(self.connection_graph.items()):
+                if i >= num_to_print:
+                    break
+                print(f"     Segment: {segment}, Neighbors: {neighbors}")
+        else:
+            print("❌ Connection graph failed to load.")
+
     def load_global_features(self, root):
         """
         Loads the global descriptors and segment IDs from the global_features.h5 file.
@@ -108,7 +137,7 @@ class Coarse_Locator:
         # which can be retrieved (this mapping should be maintained outside of this class)
         topk_segments = [self.get_segment_id(index) for index in topk_indices[0]]
         return topk_segments
-    
+
     def analyze_topk_results(self, topk_segments):
         """
         Analyze the top-k segments to determine if a majority belong to the same segment or its neighbors.
@@ -116,7 +145,7 @@ class Coarse_Locator:
         :return: The most likely segment and a boolean indicating if localization succeeded.
         """
         segment_counts = {}
-        
+
         # First, count occurrences of each segment in topk_segments
         for segment in topk_segments:
             if segment in segment_counts:
@@ -127,17 +156,18 @@ class Coarse_Locator:
         # Initialize a dictionary to accumulate counts for segments and their neighbors
         segment_wt_neighbor_counts = {}
 
+
         # Accumulate counts including neighbor segments
         for segment, count in segment_counts.items():
             # Start with the count of the segment itself
             total_count = count
-            
+
             # Add counts of neighbors if they exist in the topk_segments
             if segment in self.connection_graph:
                 for neighbor in self.connection_graph[segment]:
                     if neighbor in segment_counts:
                         total_count += segment_counts[neighbor]
-            
+
             # Record the accumulated count for the segment
             segment_wt_neighbor_counts[segment] = total_count
         
@@ -146,6 +176,7 @@ class Coarse_Locator:
         success = (segment_wt_neighbor_counts[most_likely_segment] / len(topk_segments)) >= 0.1
         
         return most_likely_segment, success
+
 
     def get_segment_id(self, index):
         """
@@ -161,9 +192,11 @@ class Coarse_Locator:
 
     def get_global_extractor(self):
         return self.global_extractor
-    
-class Hloc():
-    device='cuda' if torch.cuda.is_available() else "cpu"
+
+
+class Hloc:
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
     def __init__(self, coarse_locator, config, logger):
         # loading config setting
         self.config=config['hloc']
@@ -181,10 +214,11 @@ class Hloc():
         
         self.global_extractor = coarse_locator.get_global_extractor()
         self.model_name = list(self.global_extractor.models)[0]
+        self.model_name = list(self.global_extractor.models)[0]
 
-        local_feature = Local_extractor(self.feature_configs['local'])
+        local_feature = Local_extractor(self.feature_configs["local"])
         self.local_feature_extractor = local_feature.extractor()
-        
+
         self.logger = logger
 
     def form_global_descriptor_tensor(self):
@@ -195,15 +229,17 @@ class Hloc():
         self.db_name = []
 
         # Iterate over each frame in perspective_frames
-        for frame_name, frame_data in self.map_data['perspective_frames'].items():
+        for frame_name, frame_data in self.map_data["perspective_frames"].items():
             # Extract the global_descriptor for this frame
-            global_descriptor = frame_data['global_descriptor']
-            
+            global_descriptor = frame_data["global_descriptor"]
+
             # Append frame name
             self.db_name.append(frame_name)
-            
+
             # Append to the list of global descriptors
-            global_descriptors.append(torch.tensor(global_descriptor, dtype=torch.float32))
+            global_descriptors.append(
+                torch.tensor(global_descriptor, dtype=torch.float32)
+            )
 
         # Stack all global descriptors into a single tensor
         global_descriptor_tensor = torch.stack([descriptor.squeeze(0) for descriptor in global_descriptors], dim=0)
@@ -212,18 +248,23 @@ class Hloc():
 
     def update_maps(self, map_data):
         # loading map data
-        self.map_data=map_data
-        
-        self.rot_base=map_data['rot_base']
-        self.T=map_data['T']
-        self.db_global_descriptors=self.form_global_descriptor_tensor()
-        
-        self.local_feature_matcher= Local_matcher(self.db_name, self.map_data['perspective_frames'], threshold = self.thre, **self.feature_configs)
-        
+        self.map_data = map_data
+
+        self.rot_base = map_data["rot_base"]
+        self.T = map_data["T"]
+        self.db_global_descriptors = self.form_global_descriptor_tensor()
+
+        self.local_feature_matcher = Local_matcher(
+            self.db_name,
+            self.map_data["perspective_frames"],
+            threshold=self.thre,
+            **self.feature_configs,
+        )
+
         # load process default data
         self.list_2d, self.list_3d, self.initial_poses, self.pps = [], [], [], []
-        self.last_time=time()
-        
+        self.last_time = time()
+
     def global_retrieval(self, image):
         # # Extract the global descriptor from the query image
         # self.query_desc = self.global_extractor(image)
@@ -240,7 +281,7 @@ class Hloc():
 
         return topk
 
-    def feature_matching_lightglue_batch(self,image,topk):
+    def feature_matching_lightglue_batch(self, image, topk):
         """
         Local Feature Matching:
             Match the local features between query image and retrieved database images
@@ -250,9 +291,9 @@ class Hloc():
             feats0 = self.local_feature_extractor(image_np)
             valid_db_frame_name, pts0_list,pts1_list,lms_list,max_len=self.local_feature_matcher.lightglue_batch(self, topk[0], feats0, image_np)
 
-        return valid_db_frame_name, pts0_list,pts1_list,lms_list,max_len
+        return valid_db_frame_name, pts0_list, pts1_list, lms_list, max_len
 
-    def feature_matching_lightglue(self,image,topk):
+    def feature_matching_lightglue(self, image, topk):
         """
         Local Feature Matching:
             Match the local features between query image and retrieved database images
@@ -273,9 +314,9 @@ class Hloc():
                 pts0_list.append(pts0)
                 pts1_list.append(pts1)
                 lms_list.append(lms)
-                if feat_inliner_size>max_len:
-                    max_len=feat_inliner_size
-            del pts0,pts1,lms
+                if feat_inliner_size > max_len:
+                    max_len = feat_inliner_size
+            del pts0, pts1, lms
         del self.query_desc, feats0
         torch.cuda.empty_cache()
         return valid_db_frame_name, pts0_list,pts1_list,lms_list,max_len
@@ -287,22 +328,24 @@ class Hloc():
         """
         with torch.inference_mode():  # Use torch.no_grad during inference
             feats0 = self.local_feature_extractor(image)
-        pts0_list,pts1_list,lms_list=[],[],[]
-        max_len=0
+        pts0_list, pts1_list, lms_list = [], [], []
+        max_len = 0
         for i in topk[0]:
-            pts0,pts1,lms=self.local_feature_matcher.superglue(i, feats0)
-            feat_inliner_size=pts0.shape[0]
-            if feat_inliner_size>self.thre:
+            pts0, pts1, lms = self.local_feature_matcher.superglue(i, feats0)
+            feat_inliner_size = pts0.shape[0]
+            if feat_inliner_size > self.thre:
                 pts0_list.append(pts0)
                 pts1_list.append(pts1)
                 lms_list.append(lms)
-                if feat_inliner_size>max_len:
-                    max_len=feat_inliner_size
+                if feat_inliner_size > max_len:
+                    max_len = feat_inliner_size
         del self.query_desc, feats0
         torch.cuda.empty_cache()
-        return pts0_list,pts1_list,lms_list,max_len
+        return pts0_list, pts1_list, lms_list, max_len
 
-    def geometric_verification(self, valid_db_frame_name, pts0_list, pts1_list, lms_list, max_len):
+    def geometric_verification(
+        self, valid_db_frame_name, pts0_list, pts1_list, lms_list, max_len
+    ):
         """
         Geometric verification:
             Apply geometric verification between query and database images
@@ -318,10 +361,17 @@ class Hloc():
             pts0[i, :inliner_size, :] = torch.from_numpy(pts0_list[i])
             pts1[i, :inliner_size, :] = torch.from_numpy(pts1_list[i])
             lms[i, :inliner_size, :] = torch.from_numpy(lms_list[i])
-            mask[i, :inliner_size, :inliner_size] = torch.ones((inliner_size, inliner_size))
-            
-        pts0, pts1, lms, mask = pts0.to(self.device), pts1.to(self.device), lms.to(self.device), mask.to(self.device)
-        
+            mask[i, :inliner_size, :inliner_size] = torch.ones(
+                (inliner_size, inliner_size)
+            )
+
+        pts0, pts1, lms, mask = (
+            pts0.to(self.device),
+            pts1.to(self.device),
+            lms.to(self.device),
+            mask.to(self.device),
+        )
+
         # try:
         _, inliners, _ = ransac(pts0, pts1, mask)
         diag_masks = torch.diagonal(inliners, dim1=-2, dim2=-1)
@@ -334,7 +384,11 @@ class Hloc():
 
         # Apply thresholding
         diag_masks = diag_masks[valid_indices]
-        final_candidates = [name for name, valid in zip(valid_db_frame_name, valid_indices.cpu().numpy()) if valid]
+        final_candidates = [
+            name
+            for name, valid in zip(valid_db_frame_name, valid_indices.cpu().numpy())
+            if valid
+        ]
         pts0 = pts0[valid_indices]
         lms = lms[valid_indices]
 
@@ -344,7 +398,7 @@ class Hloc():
 
         del pts0, pts1, lms, mask
         torch.cuda.empty_cache()
-        
+
         if len(masked_pts0) > 0:
             return final_candidates, torch.cat(masked_pts0), torch.cat(masked_lms)
         else:
@@ -382,12 +436,15 @@ class Hloc():
             self.logger.warning("!!!Cannot localize at this point, please take some steps or turn around!!!")
         return pose
 
+
     def _determine_next_segment(self, candidates):
         candidate_histogram = {}
         max_counts = 0
         next_segment_id = None
         for candidate in candidates:
-            segment_id = self.map_data['perspective_frames'][candidate].get('segment_id')
+            segment_id = self.map_data["perspective_frames"][candidate].get(
+                "segment_id"
+            )
             if segment_id in candidate_histogram:
                 candidate_histogram[segment_id] += 1
             else:
@@ -395,30 +452,38 @@ class Hloc():
             if candidate_histogram[segment_id] > max_counts:
                 max_counts = candidate_histogram[segment_id]
                 next_segment_id = segment_id
-        
+
         return next_segment_id
-            
+
     def get_location(self, image):
         self.logger.debug("Start image retrieval")
 
-        topk=self.global_retrieval(image)
-        
+        topk = self.global_retrieval(image)
+
         valid_db_frame_name = []
         next_segment_id = None
-        
-        if self.match_type=='superglue':
-            self.logger.debug("Matching local feature")
-            pts0_list,pts1_list,lms_list,max_matched_num=self.feature_matching_superglue(image,topk)
-            self.logger.debug("Start geometric verification")
-            feature2D,landmark3D=self.geometric_verification(pts0_list, pts1_list, lms_list, max_matched_num)
 
-        elif self.match_type=='lightglue':
+        if self.match_type == "superglue":
+            self.logger.debug("Matching local feature")
+            pts0_list, pts1_list, lms_list, max_matched_num = (
+                self.feature_matching_superglue(image, topk)
+            )
+            self.logger.debug("Start geometric verification")
+            feature2D, landmark3D = self.geometric_verification(
+                pts0_list, pts1_list, lms_list, max_matched_num
+            )
+
+        elif self.match_type == "lightglue":
             self.logger.debug("Matching local feature")
             if self.batch_mode:
-                valid_db_frame_name, pts0_list,pts1_list,lms_list,max_matched_num=self.feature_matching_lightglue_batch(image,topk)
+                valid_db_frame_name, pts0_list, pts1_list, lms_list, max_matched_num = (
+                    self.feature_matching_lightglue_batch(image, topk)
+                )
             else:
-                valid_db_frame_name, pts0_list,pts1_list,lms_list,max_matched_num=self.feature_matching_lightglue(image,topk)
-            
+                valid_db_frame_name, pts0_list, pts1_list, lms_list, max_matched_num = (
+                    self.feature_matching_lightglue(image, topk)
+                )
+
             self.logger.debug("Start geometric verification")
             if len(pts0_list)>0:
                 final_candidates, feature2D,landmark3D=self.geometric_verification(valid_db_frame_name, pts0_list, pts1_list, lms_list, max_matched_num)
@@ -431,5 +496,5 @@ class Hloc():
                 return None, None
 
         self.logger.debug("Estimate the camera pose using PnP algorithm")
-        pose=self.pnp(image,feature2D,landmark3D)
+        pose = self.pnp(image, feature2D, landmark3D)
         return pose, next_segment_id

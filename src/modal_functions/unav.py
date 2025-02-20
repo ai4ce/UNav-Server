@@ -11,6 +11,7 @@ from logger_utils import setup_logger
     enable_memory_snapshot=True,
     concurrency_limit=20,
     allow_concurrent_inputs=20,
+    memory=32768,
 )
 class UnavServer:
 
@@ -58,6 +59,7 @@ class UnavServer:
         import base64
         import io
         from PIL import Image
+        import numpy as np
 
         """
             Handle localization request by processing the provided image and returning the pose.
@@ -88,7 +90,8 @@ class UnavServer:
 
         # Measure time for handle_localization
         start_localization_time = time.time()
-        pose = self.server.handle_localization(frame=query_image, session_id=session_id)
+        image_np = np.array(query_image)
+        pose = self.server.handle_localization(frame=image_np, session_id=session_id)
         end_localization_time = time.time()
         localization_time = end_localization_time - start_localization_time
         print(f"Localization Time: {localization_time:.2f} seconds")
@@ -136,7 +139,7 @@ class UnavServer:
         By starting the server in advance, it ensures that the server is ready to handle incoming requests immediately, 
         thus avoiding the latency associated with a cold start.
         """
-        print("Server Started...")
+        print("UNAV Container started...")
 
         response = {"status": "success", "message": "Server started."}
         return json.dumps(response)
