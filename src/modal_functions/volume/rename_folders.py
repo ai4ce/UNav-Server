@@ -45,5 +45,5 @@ def rename_specific_folder(old_folder_name: str, new_folder_name: str):
 @app.local_entrypoint()
 def main():
     # Example usage: rename "old_folder" to "new_folder"
-    result = rename_specific_folder.remote("data/nyc", "data/New_York_City")
+    result = rename_specific_folder.remote("data/New_York_City/LightHouse/6_floor/0topo-map.json", "data/New_York_City")
     print(result)
