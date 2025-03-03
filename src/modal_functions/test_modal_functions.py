@@ -11,7 +11,7 @@ def main():
     full_image_path = os.path.join(
         current_directory, "modal_functions/misc/sample_image_4.jpg"
     )
-    destination_id = "03038"
+    destination_id = "00856"
     with open(full_image_path, "rb") as image_file:
         image_data = image_file.read()
         base64_encoded = base64.b64encode(image_data).decode("utf-8")

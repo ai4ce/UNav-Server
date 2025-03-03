@@ -39,7 +39,7 @@ app = App(
 )
 
 unav_image = (
-    Image.debian_slim(python_version="3.8")
+    Image.debian_slim(python_version="3.9")
     .run_commands(
         "apt-get update",
         "apt-get install -y cmake git libgl1-mesa-glx libceres-dev libsuitesparse-dev libgoogle-glog-dev libgflags-dev libatlas-base-dev libeigen3-dev",
