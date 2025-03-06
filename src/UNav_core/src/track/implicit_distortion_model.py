@@ -70,7 +70,7 @@ def pose_multi_refine(list_2d, list_3d, initial_poses, pps,rot_base,T):
             tvecs.append('None')
     tvec, qvec = tvecs[-1], qvecs[-1]
     x_, _, y_ = tvec
-    ang = ((-qvec[1] - rot_base)* 180 / np.pi)%360
+    ang = ((-qvec[1] - rot_base + np.pi/4)* 180 / np.pi)%360
     tvec = T @ np.array([[x_], [y_], [1]])
     x_, y_ = tvec.tolist()
     return [x_[0],y_[0],ang]
