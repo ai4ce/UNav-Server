@@ -34,6 +34,10 @@ class UnavServer:
         feature = self.find_use_true_feature(feature_global)
 
         self.server = Server(logger=setup_logger(), config=config, feature=feature)
+        # Preload maps for common buildings/floors
+        print("Preloading map data...")
+        self.server.preload_maps("New_York_City", "LightHouse", "6_floor")
+    
 
     @method()
     def get_destinations_list(self):
