@@ -372,52 +372,83 @@ class Server(DataHandler):
         self.logger.info(f"Preloading map data for {place}/{building}/{floor}")
         
         try:
-            if self.load_all_maps:
-                # Use the same approach as in handle_localization when load_all_maps is True
-                current_cluster = [key for key in self.coarse_locator.connection_graph 
-                                if key.startswith(f"{building}_{floor}")]
                 
-                self.logger.info(f"Preloading {len(current_cluster)} map segments for {building}/{floor}")
+            # Define a cache file path for modal-level caching
+            cache_dir = os.path.join(self.root, 'cache', place, building, floor)
+            os.makedirs(cache_dir, exist_ok=True)
+            cache_file = os.path.join(cache_dir, 'map_data_cache.pkl')
+            
+            # Check if cache exists
+            if os.path.exists(cache_file):
+                self.logger.info(f"Found cached map data for {building}/{floor}, loading from cache")
+                import pickle
+                with open(cache_file, 'rb') as f:
+                    map_data = pickle.load(f)
+                self.logger.info(f"Map data loaded from cache, type: {type(map_data)}")
                 
-                # Load segments using cache manager
-                start_time = time.time()
-                map_data = self.cache_manager.load_segments(self, session_id, current_cluster)
-                load_time = time.time() - start_time
-                
+                # Update maps with cached data
                 start_time = time.time()
                 self.refine_locator.update_maps(map_data)
                 update_time = time.time() - start_time
                 
-                print(f"load_segments took {load_time:.3f}s, update_maps took {update_time:.3f}s")
-                
-                self.logger.info(f"Successfully preloaded all maps for {building}/{floor}")
+                print(f"Using cached data: update_maps took {update_time:.3f}s")
                 
             else:
-                # When not loading all maps, preload key segments that are likely to be used first
-                # Find segments for this floor
-                segments = []
-                for segment_id in self.coarse_locator.connection_graph:
-                    seg_building, seg_floor = self._split_id(segment_id)
-                    if seg_building == building and seg_floor == floor:
-                        segments.append(segment_id)
-                
-                # Load primary segments and their neighbors
-                for segment_id in segments:
-                    connection_data = self.coarse_locator.connection_graph.get(segment_id, {})
-                    neighbors = list(connection_data.get('adjacent_segment', set()))
-                    current_cluster = [segment_id] + neighbors
+                if self.load_all_maps:
+                    # Use the same approach as in handle_localization when load_all_maps is True
+                    current_cluster = [key for key in self.coarse_locator.connection_graph 
+                                    if key.startswith(f"{building}_{floor}")]
                     
-                    self.logger.info(f"Preloading segment {segment_id} and {len(neighbors)} neighbors")
+                    self.logger.info(f"Preloading {len(current_cluster)} map segments for {building}/{floor}")
+                    
+                    # Load segments using cache manager
+                    start_time = time.time()
                     map_data = self.cache_manager.load_segments(self, session_id, current_cluster)
-                    self.refine_locator.update_maps(map_data)
-                
-                self.logger.info(f"Successfully preloaded {len(segments)} segments and their neighbors")
+                    load_time = time.time() - start_time
                     
-            # Mark that maps were preloaded
-            self._preloaded_maps = True
+                    start_time = time.time()
+                    self.refine_locator.update_maps(map_data)
+                    update_time = time.time() - start_time
+                    
+                    print(f"load_segments took {load_time:.3f}s, update_maps took {update_time:.3f}s")
+                    
+                    self.logger.info(f"Map data type: {type(map_data)}")
+                
+                    # Save to cache for future use
+                    import pickle
+                    with open(cache_file, 'wb') as f:
+                        pickle.dump(map_data, f)
+                    self.logger.info(f"Map data cached to {cache_file}")
+                
             
-            self.logger.info(f"Map preloading completed for {place}/{building}/{floor}")
-            return True
+                    self.logger.info(f"Successfully preloaded all maps for {building}/{floor}")
+                    
+                else:
+                    # When not loading all maps, preload key segments that are likely to be used first
+                    # Find segments for this floor
+                    segments = []
+                    for segment_id in self.coarse_locator.connection_graph:
+                        seg_building, seg_floor = self._split_id(segment_id)
+                        if seg_building == building and seg_floor == floor:
+                            segments.append(segment_id)
+                    
+                    # Load primary segments and their neighbors
+                    for segment_id in segments:
+                        connection_data = self.coarse_locator.connection_graph.get(segment_id, {})
+                        neighbors = list(connection_data.get('adjacent_segment', set()))
+                        current_cluster = [segment_id] + neighbors
+                        
+                        self.logger.info(f"Preloading segment {segment_id} and {len(neighbors)} neighbors")
+                        map_data = self.cache_manager.load_segments(self, session_id, current_cluster)
+                        self.refine_locator.update_maps(map_data)
+                    
+                    self.logger.info(f"Successfully preloaded {len(segments)} segments and their neighbors")
+                        
+                # Mark that maps were preloaded
+                self._preloaded_maps = True
+                
+                self.logger.info(f"Map preloading completed for {place}/{building}/{floor}")
+                return True
         except Exception as e:
-            self.logger.error(f"Error preloading map data: {e}")
-            return False
+                self.logger.error(f"Error preloading map data: {e}")
+                return False
