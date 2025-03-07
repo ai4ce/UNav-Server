@@ -182,10 +182,8 @@ class Server(DataHandler):
                 current_cluster = [key for key in self.coarse_locator.connection_graph if key.startswith(building + '_' + floor)]
                 
                 print(f"Current cluster: {current_cluster}")
-                
                 map_data = self.cache_manager.load_segments(self, session_id, current_cluster)
                 self.refine_locator.update_maps(map_data)
-            
             pose, next_segment_id = self.refine_locator.get_location(frame)
             
             if pose:
@@ -382,8 +380,15 @@ class Server(DataHandler):
                 self.logger.info(f"Preloading {len(current_cluster)} map segments for {building}/{floor}")
                 
                 # Load segments using cache manager
+                start_time = time.time()
                 map_data = self.cache_manager.load_segments(self, session_id, current_cluster)
+                load_time = time.time() - start_time
+                
+                start_time = time.time()
                 self.refine_locator.update_maps(map_data)
+                update_time = time.time() - start_time
+                
+                print(f"Performance at preload_maps segment {segment_id}: load_segments took {load_time:.3f}s, update_maps took {update_time:.3f}s")
                 
                 self.logger.info(f"Successfully preloaded all maps for {building}/{floor}")
                 
