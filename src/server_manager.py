@@ -160,7 +160,7 @@ class Server(DataHandler):
     def _update_next_step(self):
         pass
 
-    def handle_localization(self, session_id, frame):
+    def handle_localization(self, session_id, frame,use_cache=False):
         """
         Handles the localization process for a given session and frame.
         Returns the pose and segment_id if localization is successful.
@@ -182,7 +182,29 @@ class Server(DataHandler):
                 current_cluster = [key for key in self.coarse_locator.connection_graph if key.startswith(building + '_' + floor)]
                 
                 print(f"Current cluster: {current_cluster}")
-                map_data = self.cache_manager.load_segments(self, session_id, current_cluster)
+                map_data = None
+                if use_cache:
+                    cache_dir = os.path.join(self.root, 'cache', "New_York_City", building, floor)
+                    os.makedirs(cache_dir, exist_ok=True)
+                    cache_file = os.path.join(cache_dir, 'map_data_cache.pkl')
+                    
+                    # Check if cache exists
+                    if os.path.exists(cache_file):
+                        self.logger.info(f"Found cached map data for {building}/{floor}, loading from cache")
+                        import pickle
+                        with open(cache_file, 'rb') as f:
+                            map_data = pickle.load(f)
+                        self.logger.info(f"Map data loaded from cache, type: {type(map_data)}")
+                        
+                        # Update maps with cached data
+                        start_time = time.time()
+                        self.refine_locator.update_maps(map_data)
+                        update_time = time.time() - start_time
+                        
+                        print(f"Using cached data: update_maps took {update_time:.3f}s")
+                    pass
+                else:
+                    map_data = self.cache_manager.load_segments(self, session_id, current_cluster)
                 self.refine_locator.update_maps(map_data)
             pose, next_segment_id = self.refine_locator.get_location(frame)
             

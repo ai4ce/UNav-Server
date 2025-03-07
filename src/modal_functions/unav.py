@@ -12,7 +12,7 @@ from logger_utils import setup_logger
     concurrency_limit=20,
     allow_concurrent_inputs=20,
     memory=32768,
-    container_idle_timeout=300,
+    container_idle_timeout=60,
 )
 class UnavServer:
 
@@ -22,7 +22,6 @@ class UnavServer:
                 return key
         return None
 
-    @build()
     @enter()
     def load_server(self):
         from server_manager import Server
@@ -36,8 +35,7 @@ class UnavServer:
         self.server = Server(logger=setup_logger(), config=config, feature=feature)
         # Preload maps for common buildings/floors
         print("Preloading map data...")
-        self.server.preload_maps("New_York_City", "LightHouse", "6_floor")
-    
+        # self.server.preload_maps("New_York_City", "LightHouse", "6_floor")
 
     @method()
     def get_destinations_list(self):
@@ -96,7 +94,9 @@ class UnavServer:
         # Measure time for handle_localization
         start_localization_time = time.time()
         image_np = np.array(query_image)
-        pose = self.server.handle_localization(frame=image_np, session_id=session_id)
+        pose = self.server.handle_localization(
+            frame=image_np, session_id=session_id, use_cache=True
+        )
         end_localization_time = time.time()
         localization_time = end_localization_time - start_localization_time
         print(f"Localization Time: {localization_time:.2f} seconds")
