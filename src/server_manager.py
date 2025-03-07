@@ -388,7 +388,7 @@ class Server(DataHandler):
                 self.refine_locator.update_maps(map_data)
                 update_time = time.time() - start_time
                 
-                print(f"Performance at preload_maps segment {segment_id}: load_segments took {load_time:.3f}s, update_maps took {update_time:.3f}s")
+                print(f"load_segments took {load_time:.3f}s, update_maps took {update_time:.3f}s")
                 
                 self.logger.info(f"Successfully preloaded all maps for {building}/{floor}")
                 
