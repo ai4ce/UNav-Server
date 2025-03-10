@@ -81,7 +81,6 @@ class Coarse_Locator:
             for i, (segment, neighbors) in enumerate(self.connection_graph.items()):
                 if i >= num_to_print:
                     break
-                print(f"     Segment: {segment}, Neighbors: {neighbors}")
         else:
             print("❌ Connection graph failed to load.")
 
