@@ -338,6 +338,192 @@ class Server(DataHandler):
         else:
             return {}, None
     
+    def handle_localization(self, session_id, frame,use_cache=False):
+        """
+        Handles the localization process for a given session and frame.
+        Returns the pose and segment_id if localization is successful.
+        localization is done here
+        """
+        state = self.localization_states.get(session_id, {'failures': 0, 'last_success_time': time.time(), 'building': None, 'floor': None, 'segment_id': None, 'pose': None})
+        pose_update_info = {
+            'building': None,
+            'floor': None,
+            'pose': None,
+            # 'floorplan_base64': None
+        }
+
+        if self.load_all_maps:
+            building = self.config["location"]["building"]
+            floor = self.config["location"]["floor"]
+            
+            if not state['building'] and not state['floor']:
+                current_cluster = [key for key in self.coarse_locator.connection_graph if key.startswith(building + '_' + floor)]
+                
+                print(f"Current cluster: {current_cluster}")
+                
+                if hasattr(self, 'map_data') and self.map_data is not None:
+                    self.logger.info("Using existing map data from memory")
+                    # Directly use the existing map_data
+                    self.refine_locator.update_maps(self.map_data)
+                
+                
+                if use_cache:
+                    cache_dir = os.path.join(self.root, 'cache', self.config['location']['place'], building, floor)
+                    os.makedirs(cache_dir, exist_ok=True)
+                    cache_file = os.path.join(cache_dir, 'map_data_cache.pkl')
+                    
+                    # Check if cache exists
+                    if os.path.exists(cache_file):
+                        self.logger.info(f"Found cached map data for {building}/{floor}, loading from cache")
+                        import pickle
+                        with open(cache_file, 'rb') as f:
+                            self.map_data = pickle.load(f)
+                        self.logger.info(f"Map data loaded from cache, type: {type(self.map_data)}")
+                        
+                        # Update maps with cached data
+                        start_time = time.time()
+                        self.refine_locator.update_maps(self.map_data)
+                        update_time = time.time() - start_time
+                        
+                        print(f"Using cached data: update_maps took {update_time:.3f}s")
+                    pass
+                else:
+                    self.map_data = self.cache_manager.load_segments(self, session_id, current_cluster)
+                self.refine_locator.update_maps(self.map_data)
+            pose, next_segment_id = self.refine_locator.get_location(frame)
+            
+            if pose:
+                pose_update_info['pose'] = pose
+                
+                state['pose'] = pose
+                state['segment_id'] = next_segment_id
+                
+                state['last_success_time'] = time.time()
+                
+                building, floor = self._split_id(next_segment_id)
+                
+                if building != state['building'] or floor != state['floor']:
+                    state['building'] = building
+                    state['floor'] = floor
+                    # pose_update_info['floorplan_base64'] = self.get_floorplan(building, floor).get('floorplan', None)
+
+        else:
+            time_since_last_success = time.time() - state['last_success_time']
+            previous_segment_id = state['segment_id']
+            if state['failures'] >= COARSE_LOCALIZE_THRESHOLD or time_since_last_success > TIMEOUT_SECONDS or not state['segment_id']:
+                segment_id = self.coarse_localize(frame) #debug
+                                
+                if segment_id:
+                    building, floor = self._split_id(segment_id)
+                        
+                    connection_data = self.coarse_locator.connection_graph.get(segment_id, {})
+                    current_neighbors = list(connection_data.get(segment_id, set()))
+                    
+                    current_cluster = [segment_id] + current_neighbors
+                    
+                    map_data = self.cache_manager.load_segments(self, session_id, current_cluster)
+                    
+                    self.refine_locator.update_maps(map_data)
+                    
+                    pose, next_segment_id = self.refine_locator.get_location(frame) #debug
+                    
+                    if pose:
+                        pose_update_info['pose'] = pose
+                        
+                        state['pose'] = pose
+                        state['segment_id'] = segment_id
+                        state['failures'] = 0
+                        state['last_success_time'] = time.time()
+                        
+                        # if building != state['building'] or floor != state['floor']:
+                        # pose_update_info['floorplan_base64'] = self.get_floorplan(building, floor).get('floorplan', None)
+                            
+                        state['floor'] = floor
+                        state['building'] = building
+                        
+                        if state['segment_id']:
+                            # judge if need switch segments
+                            if next_segment_id != state['segment_id']:
+                                
+                                next_building, next_floor = self._split_id(next_segment_id)
+                                state['segment_id'] = next_segment_id
+                                
+                                # if next_building != state['building'] or next_floor != state['floor']:
+                                # pose_update_info['floorplan_base64'] = self.get_floorplan(next_building, next_floor).get('floorplan', None)
+                                    
+                                # delete old segments in cache
+                                next_segment_neighbors = list(self.coarse_locator.connection_graph.get(next_segment_id, {}).get('adjacent_segment', set()))
+                                segments_to_release = list(set([next_segment_id] + next_segment_neighbors) - set(current_cluster))
+                                self.cache_manager.release_segments(session_id, segments_to_release)
+                                
+                                    
+                                state['building'] = next_building
+                                state['floor'] = next_floor
+                            
+                    else:
+                        state['pose'] = None
+                        state['segment_id'] = None
+                        state['floor'] = None
+                        state['building'] = None
+                        state['failures'] += 1
+                        
+                    # Release previous segment and its neighbors if they are no longer in use
+                    if previous_segment_id and previous_segment_id != segment_id:
+                        previous_neighbors = list(self.coarse_locator.connection_graph.get(previous_segment_id, {}).get('adjacent_segment'), set())
+                        segments_to_release = list(set([previous_segment_id] + previous_neighbors) - set(current_cluster))
+                        self.cache_manager.release_segments(session_id, segments_to_release)
+                else:
+                    state['failures'] += 1
+
+            else:      
+                # Retrieve the current segment and its neighbors from the cache
+                connection_data = self.coarse_locator.connection_graph.get(state['segment_id'], {})
+                current_neighbors = list(connection_data.get('adjacent_segment', set()))
+                current_cluster = [state['segment_id']] + current_neighbors
+                
+                map_data = self.cache_manager.load_segments(self, session_id, current_cluster)
+
+                self.refine_locator.update_maps(map_data)
+                
+                pose, next_segment_id = self.refine_locator.get_location(frame) #debug
+                
+                if pose:
+
+                    # judge if need switch segments
+                    next_building, next_floor = self._split_id(next_segment_id)
+                    state['building'] = next_building
+                    state['floor'] = next_floor
+                    if next_segment_id != state['segment_id']:
+                        state['segment_id'] = next_segment_id
+                        # if next_building != state['building'] or next_floor != state['floor']:
+                        # pose_update_info['floorplan_base64'] = self.get_floorplan(next_building, next_floor).get('floorplan', None)
+
+                        # delete old segments in cache
+                        next_segment_neighbors = list(self.coarse_locator.connection_graph.get(next_segment_id, {}).get('adjacent_segment', set()))
+                        segments_to_release = list(set([next_segment_id] + next_segment_neighbors) - set(current_cluster))
+                        self.cache_manager.release_segments(session_id, segments_to_release)
+
+                    pose_update_info['pose'] = pose
+                    
+                    # pose_update_info['floorplan_base64'] = self.get_floorplan(next_building, next_floor).get('floorplan', None)
+                    state['pose'] = pose
+                    state['failures'] = 0
+                    state['last_success_time'] = time.time()
+                else:
+                    state['pose'] = None
+                    state['floor'] = None
+                    state['building'] = None
+                    state['failures'] += 1
+
+        self.localization_states[session_id] = state
+
+        pose_update_info['building'] = state['building']
+        pose_update_info['floor'] = state['floor']
+        
+        return pose_update_info
+    
+    
+    
     def preload_maps(self, place=None, building=None, floor=None):
         """
         Preload map data for specified or default place, building, and floor
