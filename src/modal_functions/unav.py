@@ -12,7 +12,7 @@ from logger_utils import setup_logger
     concurrency_limit=20,
     allow_concurrent_inputs=20,
     memory=32768,
-    container_idle_timeout=60,
+    container_idle_timeout=300,
 )
 class UnavServer:
 
