@@ -39,7 +39,7 @@ class UnavServer:
     def get_destinations_list(self):
 
         response = self.server.get_destinations_list(
-            building="LightHouse", floor="6_floor"
+            building="LightHouse", floor="3_floor"
         )
         return response
 
@@ -81,7 +81,7 @@ class UnavServer:
             session_id=session_id,
             place=place,
             building=building,
-            floor=floor,
+            floor='3_floor',
             destination_id=destination_id,
         )
         if response == None:
