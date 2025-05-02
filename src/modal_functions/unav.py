@@ -40,7 +40,7 @@ class UnavServer:
         self,
         place: str = "",
         building: str = "LightHouse",
-        floor: str = "6_floor",
+        floor: str = "3_floor",
     ):
 
         response = self.server.get_destinations_list(building=building, floor=floor)
