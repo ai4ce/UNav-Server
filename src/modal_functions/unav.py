@@ -36,11 +36,14 @@ class UnavServer:
         self.server = Server(logger=setup_logger(), config=config, feature=feature)
 
     @method()
-    def get_destinations_list(self):
+    def get_destinations_list(
+        self,
+        place: str = "",
+        building: str = "LightHouse",
+        floor: str = "6_floor",
+    ):
 
-        response = self.server.get_destinations_list(
-            building="LightHouse", floor="3_floor"
-        )
+        response = self.server.get_destinations_list(building=building, floor=floor)
         return response
 
     @method()
@@ -81,7 +84,7 @@ class UnavServer:
             session_id=session_id,
             place=place,
             building=building,
-            floor='3_floor',
+            floor="3_floor",
             destination_id=destination_id,
         )
         if response == None:
