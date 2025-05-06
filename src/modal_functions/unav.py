@@ -84,7 +84,7 @@ class UnavServer:
             session_id=session_id,
             place=place,
             building=building,
-            floor="3_floor",
+            floor=floor,
             destination_id=destination_id,
         )
         if response == None:
