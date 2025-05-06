@@ -42,7 +42,10 @@ class UnavServer:
         building: str = "LightHouse",
         floor: str = "3_floor",
     ):
-
+        print("Getting destinations list... 🗺️")
+        print("📍 Place: ", place)
+        print("🏢 Building: ", building)
+        print("⌊Floor: ", floor)
         response = self.server.get_destinations_list(building=building, floor=floor)
         return response
 
