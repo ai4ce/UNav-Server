@@ -5,8 +5,8 @@ server:
 location:
   place: 'New_York_City'
   building: 'LightHouse'
-  floor: "3_floor"
-  scale: 0.02205862195
+  floor: "6_floor"
+  scale: 0.01098358101
 
 IO_root: "/root/UNav-IO"
 
