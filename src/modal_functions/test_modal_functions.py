@@ -12,7 +12,7 @@ def main():
         current_directory, "modal_functions/misc/sample_image_4.jpg"
     )
     destination_id = "01547"
-    floor = "6_floor"
+    floor = "3_floor"
     with open(full_image_path, "rb") as image_file:
         image_data = image_file.read()
         base64_encoded = base64.b64encode(image_data).decode("utf-8")
