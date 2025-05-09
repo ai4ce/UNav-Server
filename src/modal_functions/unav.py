@@ -36,11 +36,17 @@ class UnavServer:
         self.server = Server(logger=setup_logger(), config=config, feature=feature)
 
     @method()
-    def get_destinations_list(self):
-
-        response = self.server.get_destinations_list(
-            building="LightHouse", floor="6_floor"
-        )
+    def get_destinations_list(
+        self,
+        place: str = "",
+        building: str = "LightHouse",
+        floor: str = "3_floor",
+    ):
+        print("Getting destinations list... 🗺️")
+        print("📍 Place: ", place)
+        print("🏢 Building: ", building)
+        print("⌊Floor: ", floor)
+        response = self.server.get_destinations_list(building=building, floor=floor)
         return response
 
     @method()
