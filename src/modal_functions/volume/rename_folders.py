@@ -46,9 +46,9 @@ def rename_specific_folder(old_folder_name: str, new_folder_name: str):
 def main():
     # Example usage: rename "old_folder" to "new_folder"
     result = rename_specific_folder.remote(
-        "data/New_York_City/MapConnnection_Graph_v1.pkl", "data/New_York_City/MapConnnection_Graph.pkl"
+        "data/New_York_City/MapConnnection_Graph.pkl", "data/New_York_City/MapConnnection_Graph_3_floor.pkl"
     )
-    result = rename_specific_folder.remote(
-        "data/New_York_City/LightHouse/3_floor", "data/nyc/LightHouse/3_floor"
-    )
+    # result = rename_specific_folder.remote(
+    #     "data/New_York_City/LightHouse/3_floor", "data/nyc/LightHouse/3_floor"
+    # )
     print(result)
