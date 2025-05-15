@@ -48,4 +48,7 @@ def main():
     result = rename_specific_folder.remote(
         "data/New_York_City/MapConnnection_Graph_v1.pkl", "data/New_York_City/MapConnnection_Graph.pkl"
     )
+    result = rename_specific_folder.remote(
+        "data/New_York_City/LightHouse/3_floor", "data/nyc/LightHouse/3_floor"
+    )
     print(result)
