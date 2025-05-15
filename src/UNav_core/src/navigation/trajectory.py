@@ -10,6 +10,8 @@ class Navigator:
     def compute_distance(self, p1, p2, scale):
         """Compute real-world distance between two points on the floorplan."""
         pixel_distance = math.sqrt((p2[0] - p1[0]) ** 2 + (p1[1] - p2[1]) ** 2)  # Adjusted y-axis
+        if scale is None:
+            scale =  0.02205862195
         return pixel_distance * scale
 
     def compute_angle(self, p1, p2):
