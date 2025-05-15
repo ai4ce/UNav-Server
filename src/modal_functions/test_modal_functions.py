@@ -19,16 +19,16 @@ def main():
 
     print(unav_server.get_destinations_list.remote(floor=floor))
 
-    # print(
-    #     unav_server.planner.remote(
-    #         destination_id=destination_id,
-    #         base_64_image=base64_encoded,
-    #         session_id="test_session_id_2",
-    #         building="LightHouse",
-    #         floor=floor,
-    #         place="New_York_City",
-    #     )
-    # )
+    print(
+        unav_server.planner.remote(
+            destination_id=destination_id,
+            base_64_image=base64_encoded,
+            session_id="test_session_id_2",
+            building="LightHouse",
+            floor=floor,
+            place="New_York_City",
+        )
+    )
 
 
 if __name__ == "__main__":
