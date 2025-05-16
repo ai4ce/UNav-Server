@@ -22,7 +22,7 @@ class UnavServer:
                 return key
         return None
 
-    # @build()
+    @build()
     @enter()
     def load_server(self):
         from server_manager import Server
