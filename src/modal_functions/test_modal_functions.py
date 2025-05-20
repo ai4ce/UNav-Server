@@ -5,7 +5,7 @@ import modal
 
 
 def main():
-    UnavServer = modal.Cls.lookup("unav-server", "UnavServer")
+    UnavServer = modal.Cls.lookup("unav-server-3-floor", "UnavServer")
     unav_server = UnavServer()
     current_directory = os.getcwd()
     full_image_path = os.path.join(
