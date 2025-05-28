@@ -1,18 +1,20 @@
+import os
 from unav.config import UNavConfig
 from unav.localizer.localizer import UNavLocalizer
 from unav.navigator.multifloor import FacilityNavigator
 
-# --------------------------
-# Data and Model Parameters
-# --------------------------
+# ------------------------------------------
+# Load configuration from environment variables
+# ------------------------------------------
 
-DATA_FINAL_ROOT = "/mnt/data/UNav-IO/data"
-DATA_TEMP_ROOT = "/mnt/data/UNav-IO/temp"
-FEATURE_MODEL = "DinoV2Salad"
-LOCAL_FEATURE_MODEL = "superpoint+lightglue"
-PLACES = ["New_York_City"]
-BUILDINGS = ["LightHouse"]
-FLOORS = ["3_floor", "4_floor", "6_floor"]
+DATA_FINAL_ROOT = os.getenv("DATA_FINAL_ROOT", "/mnt/data/UNav-IO/data")
+FEATURE_MODEL = os.getenv("FEATURE_MODEL", "DinoV2Salad")
+LOCAL_FEATURE_MODEL = os.getenv("LOCAL_FEATURE_MODEL", "superpoint+lightglue")
+
+# Split comma-separated lists from environment variables
+PLACES = os.getenv("PLACES", "New_York_City").split(",")
+BUILDINGS = os.getenv("BUILDINGS", "LightHouse").split(",")
+FLOORS = os.getenv("FLOORS", "3_floor,4_floor,6_floor").split(",")
 
 # -----------------------------------
 # UNavConfig: Centralized Configuration

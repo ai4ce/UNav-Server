@@ -2,7 +2,6 @@
 
 # ===== UNav Server Configuration =====
 export DATA_FINAL_ROOT="/mnt/data/UNav-IO/data"
-export DATA_TEMP_ROOT="/mnt/data/UNav-IO/temp"
 export FEATURE_MODEL="DinoV2Salad"
 export LOCAL_FEATURE_MODEL="superpoint+lightglue"
 export PLACES="New_York_City"
