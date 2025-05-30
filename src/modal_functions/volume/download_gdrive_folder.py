@@ -191,7 +191,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--destination",
         type=str,
-        default="/data/cloned_folder",
+        default="/data",
         help="Destination path in Modal volume",
     )
     parser.add_argument("--detach", action="store_true", help="Run in detached mode")
