@@ -7,6 +7,7 @@ import zipfile
 import requests
 import json
 import time
+import random
 from pathlib import Path
 
 # Configure logging
@@ -16,12 +17,166 @@ logging.basicConfig(
 
 # Reference the requirements for installing dependencies
 image = modal.Image.debian_slim().pip_install(
-    ["gdown", "PyYAML", "boto3", "python-dotenv", "requests", "beautifulsoup4", "lxml"]
+    [
+        "gdown",
+        "PyYAML",
+        "boto3",
+        "python-dotenv",
+        "requests",
+        "beautifulsoup4",
+        "lxml",
+        "fake-useragent",
+    ]
 )
 # Create or reference existing volume
 volume = modal.Volume.from_name("unav_v2", create_if_missing=True)
 
 app = modal.App("GDriveFolderDownload", image=image)
+
+
+def get_random_user_agent():
+    """Get a random user agent to avoid detection"""
+    try:
+        from fake_useragent import UserAgent
+
+        ua = UserAgent()
+        return ua.random
+    except ImportError:
+        # Fallback user agents if fake_useragent is not available
+        user_agents = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:121.0) Gecko/20100101 Firefox/121.0",
+            "Mozilla/5.0 (X11; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/120.0.0.0 Safari/537.36",
+        ]
+        return random.choice(user_agents)
+    except Exception:
+        # Ultimate fallback
+        return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+
+def create_rate_limit_session():
+    """Create a requests session with rate limiting bypass features"""
+    session = requests.Session()
+
+    # Random user agent for each session
+    user_agent = get_random_user_agent()
+
+    # Randomize headers to look more like different browsers
+    accept_languages = [
+        "en-US,en;q=0.9",
+        "en-US,en;q=0.8,fr;q=0.6",
+        "en-US,en;q=0.7,es;q=0.3",
+        "en-GB,en;q=0.9,en-US;q=0.8",
+        "en-US,en;q=0.5",
+    ]
+
+    encodings = [
+        "gzip, deflate, br",
+        "gzip, deflate",
+        "gzip",
+    ]
+
+    session.headers.update(
+        {
+            "User-Agent": user_agent,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
+            "Accept-Language": random.choice(accept_languages),
+            "Accept-Encoding": random.choice(encodings),
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Cache-Control": "max-age=0",
+            "DNT": "1",  # Do Not Track
+        }
+    )
+
+    # Add some randomization to request timing
+    if random.random() < 0.3:  # 30% chance
+        session.headers["Pragma"] = "no-cache"
+
+    return session
+
+
+def exponential_backoff_download(download_func, max_retries=5, base_delay=1):
+    """
+    Perform download with exponential backoff to handle rate limiting
+
+    Args:
+        download_func: Function to call for download
+        max_retries: Maximum number of retry attempts
+        base_delay: Base delay in seconds
+    """
+    for attempt in range(max_retries):
+        try:
+            return download_func()
+        except Exception as e:
+            error_str = str(e).lower()
+
+            # Check if it's a rate limiting error
+            if any(
+                keyword in error_str
+                for keyword in ["rate", "limit", "quota", "too many", "429", "503"]
+            ):
+                if attempt < max_retries - 1:
+                    # Calculate delay with jitter
+                    delay = (base_delay * (2**attempt)) + random.uniform(0, 1)
+                    logging.warning(
+                        f"Rate limited, retrying in {delay:.2f} seconds (attempt {attempt + 1}/{max_retries})"
+                    )
+                    time.sleep(delay)
+                    continue
+                else:
+                    logging.error(f"Max retries reached for rate limiting: {e}")
+                    raise
+            else:
+                # Not a rate limiting error, re-raise immediately
+                raise
+
+    return None
+
+
+def smart_delay_between_requests():
+    """Add intelligent delay between requests to avoid rate limiting"""
+    # Random delay between 0.5 to 3 seconds with some longer pauses
+    if random.random() < 0.1:  # 10% chance of longer pause
+        delay = random.uniform(5.0, 10.0)
+        logging.debug(f"Taking longer pause: {delay:.2f} seconds")
+    else:
+        delay = random.uniform(0.5, 3.0)
+    time.sleep(delay)
+
+
+def get_alternative_download_urls(file_id):
+    """Generate alternative download URLs to try different endpoints"""
+    # Primary Google Drive download endpoints
+    primary_urls = [
+        f"https://drive.google.com/uc?id={file_id}&export=download",
+        f"https://drive.google.com/uc?export=download&id={file_id}",
+    ]
+
+    # Alternative endpoints and methods
+    alternative_urls = [
+        f"https://docs.google.com/uc?id={file_id}&export=download",
+        f"https://drive.google.com/file/d/{file_id}/view?usp=sharing",
+        f"https://drive.google.com/open?id={file_id}",
+        f"https://drive.google.com/uc?id={file_id}&confirm=t",
+        f"https://docs.google.com/uc?export=download&id={file_id}",
+        f"https://drive.usercontent.google.com/download?id={file_id}&export=download",
+    ]
+
+    # Randomize the order to distribute load
+    all_urls = primary_urls + alternative_urls
+    random.shuffle(all_urls)
+
+    return all_urls
 
 
 @app.function(
@@ -471,6 +626,83 @@ def check_gdrive_folder_permissions(folder_url: str):
         }
 
 
+def extract_file_info_from_gdrive_page(page_content):
+    """
+    Enhanced file information extraction from Google Drive page
+
+    Args:
+        page_content: HTML content of the Google Drive folder page
+
+    Returns:
+        list: List of dictionaries with file_id and name
+    """
+    import re
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(page_content, "lxml")
+    script_tags = soup.find_all("script")
+    file_info_list = []
+
+    for script in script_tags:
+        if script.string:
+            # Pattern 1: Look for file arrays with ID and name
+            # Matches: ["file_id","filename.ext",...]
+            file_array_matches = re.findall(
+                r'\["([a-zA-Z0-9_-]{25,})","([^"]+\.[a-zA-Z0-9]+)"[^\]]*\]',
+                script.string,
+            )
+
+            for file_id, filename in file_array_matches:
+                if len(file_id) > 20:
+                    file_info_list.append({"id": file_id, "name": filename})
+
+            # Pattern 2: Look for JSON objects with id and name
+            # Matches: "id":"file_id"..."name":"filename"
+            file_obj_matches = re.findall(
+                r'"id"\s*:\s*"([a-zA-Z0-9_-]{25,})"[^}]*"name"\s*:\s*"([^"]+)"',
+                script.string,
+            )
+
+            for file_id, filename in file_obj_matches:
+                if len(file_id) > 20:
+                    file_info_list.append({"id": file_id, "name": filename})
+
+            # Pattern 3: Look for alternative object structure
+            # Matches: ["id","file_id"]...["name","filename"]
+            id_matches = re.findall(r'\["id","([a-zA-Z0-9_-]{25,})"\]', script.string)
+            name_matches = re.findall(
+                r'\["name","([^"]+\.[a-zA-Z0-9]+)"\]', script.string
+            )
+
+            # Try to pair IDs with names if they appear in similar contexts
+            if len(id_matches) == len(name_matches):
+                for file_id, filename in zip(id_matches, name_matches):
+                    if len(file_id) > 20:
+                        file_info_list.append({"id": file_id, "name": filename})
+
+    # Remove duplicates based on file ID
+    seen_ids = set()
+    unique_file_info = []
+    for file_info in file_info_list:
+        if file_info["id"] not in seen_ids:
+            unique_file_info.append(file_info)
+            seen_ids.add(file_info["id"])
+
+    # If no files found with names, try to get just IDs as fallback
+    if not unique_file_info:
+        for script in script_tags:
+            if script.string:
+                file_id_matches = re.findall(r'"([a-zA-Z0-9_-]{25,})"', script.string)
+                for file_id in file_id_matches:
+                    if len(file_id) > 20 and file_id not in seen_ids:
+                        unique_file_info.append(
+                            {"id": file_id, "name": f"unknown_file_{file_id[:8]}.bin"}
+                        )
+                        seen_ids.add(file_id)
+
+    return unique_file_info
+
+
 def download_folder_files_individually(folder_url, destination_path, progress_file):
     """
     Download files from Google Drive folder one by one, skipping files with permission errors
@@ -497,10 +729,22 @@ def download_folder_files_individually(folder_url, destination_path, progress_fi
 
         # Get the folder page HTML
         folder_page_url = f"https://drive.google.com/drive/folders/{folder_id}"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-        }
-        response = requests.get(folder_page_url, headers=headers)
+
+        # Use rate limiting bypass session
+        session = create_rate_limit_session()
+
+        def fetch_folder_page():
+            return session.get(folder_page_url, timeout=30)
+
+        try:
+            response = exponential_backoff_download(fetch_folder_page, max_retries=3)
+        except Exception as e:
+            logging.warning(
+                f"Failed to fetch folder page with rate limiting bypass: {str(e)}"
+            )
+            # Fallback to basic request
+            headers = {"User-Agent": get_random_user_agent()}
+            response = requests.get(folder_page_url, headers=headers)
 
         if response.status_code != 200:
             logging.warning(
@@ -508,124 +752,136 @@ def download_folder_files_individually(folder_url, destination_path, progress_fi
             )
             return success_count, fail_count
 
-        # Parse HTML to find file IDs and names
-        soup = BeautifulSoup(response.text, "lxml")
+        # Parse HTML to find file IDs and names using enhanced extraction
+        unique_file_info = extract_file_info_from_gdrive_page(response.text)
 
-        # Look for file data in the page (Google Drive embeds this in JavaScript)
-        # This is a simplified approach - Google Drive's actual structure is complex
-        script_tags = soup.find_all("script")
-        file_patterns = []
+        logging.info(f"Found {len(unique_file_info)} files to download")
+        if unique_file_info:
+            logging.info("Sample files found:")
+            for i, file_info in enumerate(
+                unique_file_info[:5]
+            ):  # Show first 5 as sample
+                logging.info(
+                    f"  {i+1}. {file_info['name']} (ID: {file_info['id'][:12]}...)"
+                )
 
-        for script in script_tags:
-            if script.string:
-                # Look for patterns that might contain file IDs
-                matches = re.findall(r'"([a-zA-Z0-9_-]{25,})"', script.string)
-                for match in matches:
-                    if len(match) > 20:  # Google Drive file IDs are typically long
-                        file_patterns.append(match)
+        # Try to download each file
+        for i, file_info in enumerate(unique_file_info[:100]):  # Increased limit to 100
+            file_id = file_info["id"]
+            filename = file_info["name"]
 
-        # Remove duplicates and filter likely file IDs
-        potential_file_ids = list(set(file_patterns))
-
-        logging.info(f"Found {len(potential_file_ids)} potential file IDs to try")
-
-        # Try to download each potential file
-        for i, file_id in enumerate(potential_file_ids[:100]):  # Increased limit to 100
             try:
                 logging.info(
-                    f"Attempting to download file {i+1}/{min(100, len(potential_file_ids))}: {file_id}"
+                    f"Attempting to download file {i+1}/{min(100, len(unique_file_info))}: {filename} (ID: {file_id})"
                 )
+
+                # Add delay between downloads to avoid rate limiting
+                if i > 0:  # Skip delay for first file
+                    smart_delay_between_requests()
 
                 # First, check if file is accessible with a HEAD request
                 file_url = f"https://drive.google.com/uc?id={file_id}"
 
                 try:
-                    head_response = requests.head(
+                    # Use rate limiting bypass session for HEAD request
+                    session = create_rate_limit_session()
+                    head_response = session.head(
                         file_url, allow_redirects=True, timeout=10
                     )
 
+                    # Add delay to avoid rate limiting
+                    smart_delay_between_requests()
+
                     # Check for permission denied or other access issues
                     if head_response.status_code == 403:
-                        logging.warning(f"✗ Permission denied for file: {file_id}")
-                        permission_denied_files.append(file_id)
+                        output_path = os.path.join(destination_path, filename)
+                        logging.warning(
+                            f"✗ Permission denied for file: {filename} -> {output_path}"
+                        )
+                        permission_denied_files.append(
+                            {"file_id": file_id, "name": filename, "path": output_path}
+                        )
                         fail_count += 1
                         continue
                     elif head_response.status_code == 404:
-                        logging.warning(f"✗ File not found: {file_id}")
-                        failed_files.append(file_id)
+                        output_path = os.path.join(destination_path, filename)
+                        logging.warning(
+                            f"✗ File not found: {filename} -> {output_path}"
+                        )
+                        failed_files.append(
+                            {"file_id": file_id, "name": filename, "path": output_path}
+                        )
                         fail_count += 1
                         continue
                     elif head_response.status_code != 200:
+                        output_path = os.path.join(destination_path, filename)
                         logging.warning(
-                            f"✗ HTTP {head_response.status_code} for file: {file_id}"
+                            f"✗ HTTP {head_response.status_code} for file: {filename} -> {output_path}"
                         )
-                        failed_files.append(file_id)
+                        failed_files.append(
+                            {"file_id": file_id, "name": filename, "path": output_path}
+                        )
                         fail_count += 1
                         continue
 
                 except requests.RequestException as req_error:
+                    output_path = os.path.join(destination_path, filename)
                     logging.warning(
-                        f"✗ Request error for file {file_id}: {str(req_error)}"
+                        f"✗ Request error for file {filename} -> {output_path}: {str(req_error)}"
                     )
-                    failed_files.append(file_id)
+                    failed_files.append(
+                        {"file_id": file_id, "name": filename, "path": output_path}
+                    )
                     fail_count += 1
                     continue
 
-                # Try to download the file
-                output_path = os.path.join(destination_path, f"file_{file_id}")
+                # Try to download the file with the actual filename
+                # Sanitize filename for filesystem
+                safe_filename = re.sub(r'[<>:"/\\|?*]', "_", filename)
+                output_path = os.path.join(destination_path, safe_filename)
 
-                # Try download with gdown
-                try:
-                    # Use gdown with error handling
-                    result = gdown.download(file_url, output_path, quiet=True)
+                # Use advanced download with comprehensive rate limiting bypass
+                download_success, error_message = advanced_download_with_bypass(
+                    file_id, filename, output_path, max_retries=5
+                )
 
-                    # Check if file was actually downloaded and has content
-                    if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-                        success_count += 1
-                        downloaded_files.append(file_id)
-                        logging.info(
-                            f"✓ Successfully downloaded file: {file_id} ({os.path.getsize(output_path)} bytes)"
+                if download_success:
+                    success_count += 1
+                    downloaded_files.append(
+                        {"file_id": file_id, "name": filename, "path": output_path}
+                    )
+                    logging.info(
+                        f"✓ Successfully downloaded: {filename} -> {output_path} ({os.path.getsize(output_path)} bytes)"
+                    )
+                else:
+                    # Handle different types of failures
+                    if error_message and "permission denied" in error_message.lower():
+                        permission_denied_files.append(
+                            {"file_id": file_id, "name": filename, "path": output_path}
+                        )
+                        logging.warning(
+                            f"✗ Permission denied for {filename}: {error_message}"
                         )
                     else:
-                        # Remove empty file
-                        if os.path.exists(output_path):
-                            os.remove(output_path)
-                        fail_count += 1
-                        failed_files.append(file_id)
-                        logging.warning(
-                            f"✗ Downloaded file is empty or invalid: {file_id}"
+                        failed_files.append(
+                            {"file_id": file_id, "name": filename, "path": output_path}
                         )
-
-                except Exception as download_error:
-                    error_str = str(download_error).lower()
-
-                    # Check for specific permission errors
-                    if (
-                        "permission" in error_str
-                        or "forbidden" in error_str
-                        or "403" in error_str
-                    ):
-                        permission_denied_files.append(file_id)
                         logging.warning(
-                            f"✗ Permission denied for file {file_id}: {str(download_error)}"
-                        )
-                    else:
-                        failed_files.append(file_id)
-                        logging.warning(
-                            f"✗ Failed to download {file_id}: {str(download_error)}"
+                            f"✗ Failed to download {filename}: {error_message}"
                         )
 
                     fail_count += 1
-
-                    # Clean up any partially downloaded file
-                    if os.path.exists(output_path):
-                        os.remove(output_path)
-
                     continue
 
             except Exception as e:
-                logging.warning(f"Error processing file ID {file_id}: {str(e)}")
-                failed_files.append(file_id)
+                safe_filename = re.sub(r'[<>:"/\\|?*]', "_", filename)
+                output_path = os.path.join(destination_path, safe_filename)
+                logging.warning(
+                    f"Error processing file {filename} -> {output_path}: {str(e)}"
+                )
+                failed_files.append(
+                    {"file_id": file_id, "name": filename, "path": output_path}
+                )
                 fail_count += 1
                 continue
 
@@ -651,15 +907,252 @@ def download_folder_files_individually(folder_url, destination_path, progress_fi
             f"Individual download summary: {success_count} successful, {fail_count} failed ({len(permission_denied_files)} permission denied, {len(failed_files)} other errors)"
         )
 
+        # Log comprehensive statistics
+        log_rate_limiting_stats(downloaded_files, failed_files, permission_denied_files)
+
         if permission_denied_files:
-            logging.info(
-                f"Files with permission issues: {permission_denied_files[:10]}..."
-            )  # Show first 10
+            logging.info(f"Files with permission issues:")
+            for file_info in permission_denied_files[:10]:  # Show first 10
+                if isinstance(file_info, dict) and "name" in file_info:
+                    logging.info(f"  - {file_info['name']} -> {file_info['path']}")
+                elif isinstance(file_info, dict):
+                    logging.info(f"  - {file_info['file_id']} -> {file_info['path']}")
+                else:
+                    logging.info(f"  - {file_info}")
+
+        if failed_files:
+            logging.info(f"Files that failed for other reasons:")
+            for file_info in failed_files[:10]:  # Show first 10
+                if isinstance(file_info, dict) and "name" in file_info:
+                    logging.info(f"  - {file_info['name']} -> {file_info['path']}")
+                elif isinstance(file_info, dict):
+                    logging.info(f"  - {file_info['file_id']} -> {file_info['path']}")
+                else:
+                    logging.info(f"  - {file_info}")
+
+        if downloaded_files:
+            logging.info(f"Successfully downloaded files:")
+            for file_info in downloaded_files[:10]:  # Show first 10
+                if isinstance(file_info, dict) and "name" in file_info:
+                    logging.info(f"  - {file_info['name']} -> {file_info['path']}")
+                elif isinstance(file_info, dict):
+                    logging.info(f"  - {file_info['file_id']} -> {file_info['path']}")
+                else:
+                    logging.info(f"  - {file_info}")
+
+        # Monitor rate limiting bypass effectiveness
+        monitor_rate_limiting_effectiveness()
 
     except Exception as e:
         logging.error(f"Error in individual file download: {str(e)}")
 
     return success_count, fail_count
+
+
+def advanced_download_with_bypass(file_id, filename, output_path, max_retries=5):
+    """
+    Advanced download function with comprehensive rate limiting bypass
+
+    Args:
+        file_id: Google Drive file ID
+        filename: Original filename
+        output_path: Local path to save file
+        max_retries: Maximum retry attempts
+
+    Returns:
+        tuple: (success: bool, error_message: str)
+    """
+
+    # Create multiple sessions with different configurations
+    sessions = []
+    for _ in range(3):
+        session = create_rate_limit_session()
+        sessions.append(session)
+
+    download_urls = get_alternative_download_urls(file_id)
+
+    for attempt in range(max_retries):
+        for session_idx, session in enumerate(sessions):
+            for url_idx, url in enumerate(download_urls):
+                try:
+                    logging.debug(
+                        f"Attempt {attempt+1}/{max_retries}, Session {session_idx+1}, URL {url_idx+1}"
+                    )
+
+                    # Add progressive delay based on attempt number
+                    if attempt > 0:
+                        delay = (2**attempt) + random.uniform(0, 2)
+                        logging.debug(f"Waiting {delay:.2f} seconds before retry...")
+                        time.sleep(delay)
+
+                    # Try downloading with current session and URL
+                    response = session.get(url, stream=True, timeout=45)
+
+                    # Handle Google Drive's virus scan warning page
+                    if (
+                        "virus" in response.text.lower()
+                        and "download anyway" in response.text.lower()
+                    ):
+                        # Extract the actual download URL from the warning page
+                        import re
+
+                        confirm_url_match = re.search(
+                            r'href="([^"]*&amp;confirm=[^"]*)"', response.text
+                        )
+                        if confirm_url_match:
+                            confirm_url = confirm_url_match.group(1).replace(
+                                "&amp;", "&"
+                            )
+                            logging.info(f"Bypassing virus scan warning for {filename}")
+                            response = session.get(confirm_url, stream=True, timeout=45)
+
+                    response.raise_for_status()
+
+                    # Check if we got actual file content (not an error page)
+                    content_type = response.headers.get("content-type", "").lower()
+                    if (
+                        "text/html" in content_type
+                        and response.headers.get("content-length", "0") != "0"
+                    ):
+                        # This might be an error page, check content
+                        first_chunk = next(response.iter_content(chunk_size=1024), b"")
+                        if b"<!DOCTYPE html>" in first_chunk or b"<html" in first_chunk:
+                            logging.debug(
+                                f"Received HTML page instead of file content for {filename}"
+                            )
+                            continue
+                        else:
+                            # Reset response for full download
+                            response = session.get(url, stream=True, timeout=45)
+                            response.raise_for_status()
+
+                    # Download the file
+                    total_size = int(response.headers.get("content-length", 0))
+                    downloaded_size = 0
+
+                    with open(output_path, "wb") as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                                downloaded_size += len(chunk)
+
+                    # Verify the download
+                    if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                        file_size = os.path.getsize(output_path)
+                        if (
+                            total_size > 0 and file_size < total_size * 0.9
+                        ):  # Less than 90% of expected size
+                            logging.warning(
+                                f"Downloaded file seems incomplete: {file_size}/{total_size} bytes"
+                            )
+                            os.remove(output_path)
+                            continue
+
+                        logging.debug(
+                            f"Successfully downloaded {filename}: {file_size} bytes"
+                        )
+                        return True, None
+                    else:
+                        logging.debug(f"Download resulted in empty file for {filename}")
+                        if os.path.exists(output_path):
+                            os.remove(output_path)
+                        continue
+
+                except requests.exceptions.HTTPError as e:
+                    if e.response.status_code in [429, 503]:  # Rate limiting
+                        logging.debug(
+                            f"Rate limited (HTTP {e.response.status_code}) for {filename}"
+                        )
+                        continue
+                    elif e.response.status_code == 403:  # Forbidden
+                        return False, f"Permission denied (HTTP 403)"
+                    elif e.response.status_code == 404:  # Not found
+                        return False, f"File not found (HTTP 404)"
+                    else:
+                        logging.debug(
+                            f"HTTP error {e.response.status_code} for {filename}"
+                        )
+                        continue
+
+                except requests.exceptions.RequestException as e:
+                    logging.debug(f"Request error for {filename}: {str(e)}")
+                    continue
+
+                except Exception as e:
+                    logging.debug(f"Unexpected error for {filename}: {str(e)}")
+                    continue
+
+                # Add small delay between URL attempts
+                time.sleep(random.uniform(0.2, 0.8))
+
+            # Add delay between session attempts
+            time.sleep(random.uniform(1.0, 2.0))
+
+        # Add longer delay between full retry attempts
+        if attempt < max_retries - 1:
+            delay = (3**attempt) + random.uniform(2, 5)
+            logging.debug(
+                f"All methods failed, waiting {delay:.2f} seconds before next attempt..."
+            )
+            time.sleep(delay)
+
+    return False, f"All download attempts failed after {max_retries} retries"
+
+
+def log_rate_limiting_stats(downloaded_files, failed_files, permission_denied_files):
+    """Log statistics about rate limiting encounters and download success"""
+    total_files = (
+        len(downloaded_files) + len(failed_files) + len(permission_denied_files)
+    )
+
+    if total_files == 0:
+        return
+
+    success_rate = (len(downloaded_files) / total_files) * 100
+
+    logging.info("=" * 60)
+    logging.info("DOWNLOAD STATISTICS WITH RATE LIMITING BYPASS:")
+    logging.info(f"  Total files processed: {total_files}")
+    logging.info(
+        f"  Successfully downloaded: {len(downloaded_files)} ({success_rate:.1f}%)"
+    )
+    logging.info(f"  Permission denied: {len(permission_denied_files)}")
+    logging.info(f"  Failed (other reasons): {len(failed_files)}")
+
+    if len(downloaded_files) > 0:
+        total_size = sum(
+            os.path.getsize(file_info["path"])
+            for file_info in downloaded_files
+            if os.path.exists(file_info["path"])
+        )
+        logging.info(f"  Total downloaded size: {total_size / (1024*1024):.2f} MB")
+
+    logging.info("=" * 60)
+
+
+def monitor_rate_limiting_effectiveness():
+    """Monitor and log the effectiveness of rate limiting bypass strategies"""
+
+    # This would be called at the end of downloads to provide insights
+    logging.info("RATE LIMITING BYPASS EFFECTIVENESS:")
+    logging.info("- User Agent Rotation: Enabled")
+    logging.info("- Session Management: Multiple sessions with randomized headers")
+    logging.info("- Request Delays: Smart delays with random intervals")
+    logging.info("- Alternative Endpoints: Multiple Google Drive endpoints")
+    logging.info("- Exponential Backoff: Progressive retry delays")
+    logging.info("- Virus Scan Bypass: Automatic handling of Google's warnings")
+    logging.info("- Content Validation: Verification of downloaded content")
+
+    recommendations = [
+        "For large folders (>100 files), consider running downloads in smaller batches",
+        "If many files fail, try running the script again later with different user agents",
+        "Check folder permissions if many files show 'permission denied'",
+        "Monitor Google Drive quota limits for your account",
+    ]
+
+    logging.info("RECOMMENDATIONS:")
+    for i, rec in enumerate(recommendations, 1):
+        logging.info(f"  {i}. {rec}")
 
 
 if __name__ == "__main__":
