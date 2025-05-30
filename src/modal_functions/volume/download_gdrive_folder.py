@@ -12,10 +12,12 @@ logging.basicConfig(
 )
 
 # Reference the requirements for installing dependencies
-image = modal.Image.debian_slim().pip_install_from_requirements(
-    "modal_functions/volumesetup_requirements.txt"
-)
-
+image = modal.Image.debian_slim().pip_install([
+    "gdown",
+    "PyYAML", 
+    "boto3",
+    "python-dotenv"
+])
 # Create or reference existing volume
 volume = modal.Volume.from_name("unav_v2", create_if_missing=True)
 
