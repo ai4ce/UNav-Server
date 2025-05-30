@@ -466,7 +466,7 @@ def list_volume_contents(path="/data"):
         return [f"Error listing contents: {str(e)}"]
 
 
-@app.function()
+@app.function(timeout=7200)  # 2 hour timeout for large folders
 def main(folder_url: str, destination_path: str = "/data/gdrive_folder_data"):
     """Main orchestration function for downloading Google Drive folder"""
     logging.info(f"Starting Google Drive folder download process")
