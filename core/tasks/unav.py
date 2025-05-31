@@ -6,7 +6,7 @@
 # - scale retrieval (current floor)
 # - localization + navigation pipeline
 
-from core.unav_state import localizer, nav, commander, user_sessions
+from core.unav_state import localizer, nav, commander, get_session
 from config import DATA_ROOT
 import numpy as np
 import cv2
@@ -60,7 +60,7 @@ def get_destinations(inputs):
     destinations = [{"id": did, "label": pf_target.labels[did]} for did in pf_target.dest_ids]
 
     # Cache the user's selected target floor context
-    session = user_sessions.setdefault(user_id, {})
+    session = get_session(user_id)
     session["target_place"] = place
     session["target_building"] = building
     session["target_floor"] = floor
@@ -83,7 +83,7 @@ def select_destination(inputs):
     """
     user_id = inputs["user_id"]
     dest_id = inputs["dest_id"]
-    session = user_sessions.setdefault(user_id, {})
+    session = get_session(user_id)
     session["selected_dest_id"] = dest_id
     return {"success": True}
 
@@ -102,7 +102,7 @@ def get_floorplan(inputs):
         dict: {"floorplan": base64-encoded JPEG string} or {"error": str}
     """
     user_id = inputs["user_id"]
-    session = user_sessions.get(user_id)
+    session = get_session(user_id)
     if not session or "current_place" not in session or "current_building" not in session or "current_floor" not in session:
         return {"error": "No current floor context set for this user."}
 
@@ -134,7 +134,7 @@ def get_scale(inputs):
         dict: {"scale": float} or {"error": str}
     """
     user_id = inputs["user_id"]
-    session = user_sessions.get(user_id)
+    session = get_session(user_id)
     if not session or "current_place" not in session or "current_building" not in session or "current_floor" not in session:
         return {"error": "No current floor context set for this user."}
 
@@ -168,7 +168,7 @@ def unav_navigation(inputs):
         or dict with "error" key on failure.
     """
     user_id = inputs["user_id"]
-    session = user_sessions.setdefault(user_id, {})
+    session = get_session(user_id)
 
     # Check for required navigation context
     dest_id = session.get("selected_dest_id")
