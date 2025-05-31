@@ -1,7 +1,7 @@
 # core/tasks/unav.py
 # All UNav-specific tasks: destination, navigation, map, scale, etc.
 
-from core.unav_state import localizer, nav, user_sessions
+from core.unav_state import localizer, nav, commander, user_sessions
 from config import DATA_ROOT
 import numpy as np
 import cv2
@@ -9,6 +9,20 @@ import os
 import base64
 import math
 
+def safe_serialize(obj):
+    import numpy as np
+
+    if isinstance(obj, dict):
+        return {k: safe_serialize(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [safe_serialize(v) for v in obj]
+    elif isinstance(obj, (np.generic, np.ndarray)):
+        return obj.tolist()  # numpy对象转list
+    elif isinstance(obj, (float, int, str, bool)) or obj is None:
+        return obj
+    else:
+        return str(obj)  # 兜底：强转字符串
+    
 def get_destinations(inputs):
     place = inputs["place"]
     building = inputs["building"]
@@ -60,6 +74,7 @@ def get_scale(inputs):
 def unav_navigation(inputs):
     user_id = inputs["user_id"]
     session = user_sessions.setdefault(user_id, {})
+    print("Session state:", session)  # Debugging line
     dest_id = session.get("selected_dest_id")
     target_place = session.get("target_place")
     target_building = session.get("target_building")
@@ -67,10 +82,11 @@ def unav_navigation(inputs):
     unit = session.get("unit", "feet")
     if not all([dest_id, target_place, target_building, target_floor]):
         return {"error": "Incomplete navigation context. Please select a destination."}
-    refinement_queue = session.get("refinement_queue")
+    refinement_queue = session.get("refinement_queue") or {}
     query_img = inputs["image"]
-    top_k = inputs.get("top_k", None)
-    output = localizer.localize(query_img, refinement_queue, top_k=top_k)
+    output = localizer.localize(query_img, refinement_queue)
+    if output is None or "floorplan_pose" not in output:
+        return {"error": "Localization failed, no pose found."}
     floorplan_pose = output["floorplan_pose"]
     start_xy, start_heading = floorplan_pose["xy"], floorplan_pose["ang"]
     source_key = output["best_map_key"]
@@ -79,12 +95,17 @@ def unav_navigation(inputs):
         start_place, start_building, start_floor, start_xy,
         target_place, target_building, target_floor, dest_id
     )
-    from unav.navigator.commander import commands_from_result
-    cmds = commands_from_result(
-        nav, result, initial_heading=math.degrees(start_heading), unit=unit
+
+    cmds = commander(
+        nav, result, initial_heading=start_heading, unit=unit
     )
+
     session["refinement_queue"] = output["refinement_queue"]
-    return {"result": result, "cmds": cmds}
+    
+    return {
+        "result": safe_serialize(result),
+        "cmds": safe_serialize(cmds)
+    }
 
 UNAV_TASKS = {
     "get_destinations": get_destinations,

@@ -18,23 +18,26 @@ def get_user_id_from_token(token: str = Depends(oauth2_scheme)):
 async def run_task(
     request: Request,
     token: str = Depends(oauth2_scheme),
-    file: UploadFile = File(None),  # Only required for image-based tasks
+    file: UploadFile = File(None),  # For image-based tasks
 ):
-    """
-    Universal Task API: Call any registered backend task.
-    Body: { "task": "task_name", "inputs": {...} }
-    """
     user_id = get_user_id_from_token(token)
-    # 1. 解析请求体
-    try:
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
         data = await request.json()
-    except Exception:
-        data = {}
-    task_name = data.get("task")
-    inputs = data.get("inputs", {})
+        task_name = data.get("task")
+        inputs = data.get("inputs", {})
+    else:
+        # Fallback to form (multipart/form-data, for files)
+        form = await request.form()
+        task_name = form.get("task")
+        inputs_raw = form.get("inputs", "{}")
+        try:
+            inputs = json.loads(inputs_raw)
+        except Exception:
+            inputs = {}
     # 2. 自动补充 user_id
     inputs["user_id"] = user_id
-    # 3. 若是图片任务，解析file
+    # 3. 图片任务
     if file is not None:
         img_bytes = await file.read()
         nparr = np.frombuffer(img_bytes, np.uint8)
