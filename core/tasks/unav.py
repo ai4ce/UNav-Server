@@ -86,18 +86,17 @@ def get_destinations(inputs):
     building = inputs["building"]
     floor = inputs["floor"]
     user_id = inputs["user_id"]
-
     target_key = (place, building, floor)
     pf_target = nav.pf_map[target_key]
 
-    destinations = [{"id": did, "name": pf_target.labels[did]} for did in pf_target.dest_ids]
+    destinations = [{"id": str(did), "name": pf_target.labels[did]} for did in pf_target.dest_ids]
 
     # Cache the user's selected target floor context
     session = get_session(user_id)
     session["target_place"] = place
     session["target_building"] = building
     session["target_floor"] = floor
-
+    
     return {"destinations": destinations}
 
 
@@ -117,7 +116,7 @@ def select_destination(inputs):
     user_id = inputs["user_id"]
     dest_id = inputs["dest_id"]
     session = get_session(user_id)
-    session["selected_dest_id"] = dest_id
+    session["selected_dest_id"] = int(dest_id)
     return {"success": True}
 
 
