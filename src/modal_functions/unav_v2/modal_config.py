@@ -32,9 +32,6 @@ app = App(
     name="unav-server-v2",
     mounts=[
         Mount.from_local_dir(local_dir.resolve(), remote_path="/root"),
-        # Mount.from_local_file(
-        #     "modal_functions/config.yaml", remote_path="/root/config.yaml"
-        # ),
     ],
 )
 
@@ -45,8 +42,8 @@ unav_image = (
         "apt-get install -y cmake git libgl1-mesa-glx libceres-dev libsuitesparse-dev libgoogle-glog-dev libgflags-dev libatlas-base-dev libeigen3-dev",
     )
     .run_commands("git clone https://github.com/ai4ce/UNav-Server.git unav_server_v2")
+    .workdir("/unav_server_v2")
     .run_commands(
-        "cd unav_server_v2",
         "git checkout endeleze",
         "pip install -r modal_requirements.txt",
         "pip install unav_pretrained",
