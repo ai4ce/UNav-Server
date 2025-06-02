@@ -70,5 +70,5 @@ unav_image = (
         git_user="surendharpalanisamy",
         secrets=[github_secret],
     )
-    .run_commands("pip install unav_pretrained")
+    # .run_commands("pip install unav_pretrained")
 )
