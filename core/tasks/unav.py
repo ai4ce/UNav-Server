@@ -7,7 +7,7 @@
 # - localization + navigation pipeline
 
 from core.unav_state import localizer, nav, commander, get_session
-from config import DATA_ROOT
+from config import DATA_ROOT, PLACES
 import numpy as np
 import cv2
 import os
@@ -33,6 +33,39 @@ def safe_serialize(obj):
         # Fallback: convert unknown objects to string
         return str(obj)
 
+def get_places(inputs):
+    """
+    Returns all available places as [{"id": ..., "name": ...}, ...]
+    """
+    places = [{"id": place, "name": place} for place in PLACES.keys()]
+    return {"places": places}
+
+def get_buildings(inputs):
+    """
+    Args:
+        inputs = {"place": "New_York_City"}
+    Returns:
+        {"buildings": [{"id": ..., "name": ...}, ...]}
+    """
+    place = inputs["place"]
+    if place not in PLACES:
+        return {"buildings": []}
+    buildings = [{"id": bld, "name": bld} for bld in PLACES[place].keys()]
+    return {"buildings": buildings}
+
+def get_floors(inputs):
+    """
+    Args:
+        inputs = {"place": "New_York_City", "building": "LightHouse"}
+    Returns:
+        {"floors": [{"id": ..., "name": ...}, ...]}
+    """
+    place = inputs["place"]
+    building = inputs["building"]
+    if place not in PLACES or building not in PLACES[place]:
+        return {"floors": []}
+    floors = [{"id": flr, "name": flr} for flr in PLACES[place][building]]
+    return {"floors": floors}
 
 def get_destinations(inputs):
     """
@@ -47,7 +80,7 @@ def get_destinations(inputs):
         }
 
     Returns:
-        dict: {"destinations": [{"id": int, "label": str}, ...]}
+        dict: {"destinations": [{"id": int, "name": str}, ...]}
     """
     place = inputs["place"]
     building = inputs["building"]
@@ -57,7 +90,7 @@ def get_destinations(inputs):
     target_key = (place, building, floor)
     pf_target = nav.pf_map[target_key]
 
-    destinations = [{"id": did, "label": pf_target.labels[did]} for did in pf_target.dest_ids]
+    destinations = [{"id": did, "name": pf_target.labels[did]} for did in pf_target.dest_ids]
 
     # Cache the user's selected target floor context
     session = get_session(user_id)
@@ -225,6 +258,9 @@ def unav_navigation(inputs):
 
 # Register all UNav-related tasks in a dictionary
 UNAV_TASKS = {
+    "get_places": get_places,
+    "get_buildings": get_buildings,
+    "get_floors": get_floors,
     "get_destinations": get_destinations,
     "select_destination": select_destination,
     "get_floorplan": get_floorplan,
