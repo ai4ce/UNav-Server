@@ -41,11 +41,27 @@ unav_image = (
         "apt-get update",
         "apt-get install -y cmake git libgl1-mesa-glx libceres-dev libsuitesparse-dev libgoogle-glog-dev libgflags-dev libatlas-base-dev libeigen3-dev",
     )
+    .run_commands(
+        "echo 'DEBUG: Current directory after package installation:' && pwd && ls -la"
+    )
     .run_commands("git clone https://github.com/ai4ce/UNav-Server.git unav_server_v2")
+    .run_commands(
+        "echo 'DEBUG: Current directory after git clone:' && pwd && ls -la && echo 'DEBUG: Contents of unav_server_v2:' && ls -la unav_server_v2/"
+    )
     .workdir("/unav_server_v2")
     .run_commands(
-        "git checkout endeleze",
-        "pip install -r modal_requirements.txt",
-        "pip install unav_pretrained",
+        "echo 'DEBUG: Current directory after workdir change:' && pwd && ls -la"
+    )
+    .run_commands("git checkout endeleze")
+    .run_commands(
+        "echo 'DEBUG: Current directory after git checkout:' && pwd && ls -la && echo 'DEBUG: Looking for requirements files:' && find . -name '*requirements*.txt' && echo 'DEBUG: Checking root directory:' && ls -la /"
+    )
+    .run_commands("pip install -r /modal_requirements.txt")
+    .run_commands(
+        "echo 'DEBUG: Current directory after requirements install:' && pwd && ls -la"
+    )
+    .run_commands("pip install unav_pretrained")
+    .run_commands(
+        "echo 'DEBUG: Final directory state:' && pwd && ls -la"
     )
 )
