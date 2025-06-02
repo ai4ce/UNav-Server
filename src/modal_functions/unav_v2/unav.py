@@ -1,8 +1,6 @@
 from modal import method, gpu, build, enter
 
 from modal_config import app, unav_image, volume
-from logger_utils import setup_logger
-
 
 @app.cls(
     image=unav_image,
