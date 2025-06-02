@@ -1,4 +1,4 @@
-from modal import App, Image, Mount, NetworkFileSystem, Volume
+from modal import App, Image, Mount, NetworkFileSystem, Volume, Secret
 from pathlib import Path
 
 volume = Volume.from_name("unav_multifloor")
@@ -35,6 +35,9 @@ app = App(
     ],
 )
 
+
+github_secret = Secret.from_name("github-read-private")
+
 unav_image = (
     Image.debian_slim(python_version="3.9")
     .run_commands(
@@ -60,8 +63,12 @@ unav_image = (
     .run_commands(
         "echo 'DEBUG: Current directory after requirements install:' && pwd && ls -la"
     )
-    .run_commands("pip install unav_pretrained")
-    .run_commands(
-        "echo 'DEBUG: Final directory state:' && pwd && ls -la"
+    # .run_commands("pip install unav_pretrained")
+    .run_commands("echo 'DEBUG: Final directory state:' && pwd && ls -la")
+    .pip_install_private_repos(
+        "github.com/ai4ce/UNav_Navigation",
+        git_user="surendharpalanisamy",
+        secrets=[github_secret],
     )
+    .run_commands("pip install unav_pretrained")
 )
