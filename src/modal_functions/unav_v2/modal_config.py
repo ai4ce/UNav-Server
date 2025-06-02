@@ -44,8 +44,9 @@ unav_image = (
         "apt-get update",
         "apt-get install -y cmake git libgl1-mesa-glx libceres-dev libsuitesparse-dev libgoogle-glog-dev libgflags-dev libatlas-base-dev libeigen3-dev",
     )
-    .run_commands("git clone https://github.com/ai4ce/UNav-Server.git")
+    .run_commands("git clone https://github.com/ai4ce/UNav-Server.git unav_server_v2")
     .run_commands(
+        "cd unav_server_v2",
         "git checkout endeleze",
         "pip install -r modal_requirements.txt",
         "pip install unav_pretrained",
