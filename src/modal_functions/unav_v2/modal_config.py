@@ -44,30 +44,39 @@ unav_image = (
         "apt-get update",
         "apt-get install -y cmake git libgl1-mesa-glx libceres-dev libsuitesparse-dev libgoogle-glog-dev libgflags-dev libatlas-base-dev libeigen3-dev",
     )
+    .run_commands("git clone https://gitlab.com/libeigen/eigen.git eigen")
+    .workdir("/eigen")
     .run_commands(
-        "echo 'DEBUG: Current directory after package installation:' && pwd && ls -la"
+        "git checkout 3.4",
+        "mkdir build",
     )
-    .run_commands("git clone https://github.com/ai4ce/UNav-Server.git unav_server_v2")
+    .workdir("/eigen/build")
     .run_commands(
-        "echo 'DEBUG: Current directory after git clone:' && pwd && ls -la && echo 'DEBUG: Contents of unav_server_v2:' && ls -la unav_server_v2/"
+        "cmake ..",
+        "make",
+        "make install",
     )
-    .workdir("/unav_server_v2")
+    .workdir("/")
     .run_commands(
-        "echo 'DEBUG: Current directory after workdir change:' && pwd && ls -la"
+        "git clone https://github.com/cvg/implicit_dist.git implicit_dist",
     )
-    .run_commands("git checkout endeleze")
+    .workdir("/implicit_dist")
     .run_commands(
-        "echo 'DEBUG: Current directory after git checkout:' && pwd && ls -la && echo 'DEBUG: Looking for requirements files:' && find . -name '*requirements*.txt' && echo 'DEBUG: Checking root directory:' && ls -la /"
+        "ls",
+        "python3 -m venv .venv",
+        ". .venv/bin/activate",
+        "pip install .",
+        "pip freeze",
     )
-    .run_commands("pip install -r /modal_requirements.txt")
-    .run_commands(
-        "echo 'DEBUG: Current directory after requirements install:' && pwd && ls -la"
-    )
-    .run_commands("echo 'DEBUG: Final directory state:' && pwd && ls -la")
     .pip_install_private_repos(
-        "github.com/ai4ce/UNav_Navigation",
+        "github.com/ai4ce/unav",
         git_user="surendharpalanisamy",
         secrets=[github_secret],
     )
+    .workdir("/root")
+    .run_commands("git clone https://github.com/ai4ce/UNav-Server.git unav_server_v2")
+    .workdir("/unav_server_v2")
+    .run_commands("git checkout endeleze")
+    .run_commands("pip install -r /modal_requirements.txt")
     .run_commands("pip freeze")
 )
