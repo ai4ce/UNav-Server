@@ -75,8 +75,13 @@ unav_image = (
     )
     .workdir("/root")
     .run_commands("git clone https://github.com/ai4ce/UNav-Server.git unav_server_v2")
-    .workdir("/unav_server_v2")
-    .run_commands("git checkout endeleze")
+    .workdir("/root/unav_server_v2")
+    .run_commands(
+        "pwd",  # Debug: show current directory
+        "ls -la",  # Debug: show directory contents
+        "git branch -a",  # Debug: show available branches
+        "git checkout endeleze",
+    )
     .run_commands("pip install -r /modal_requirements.txt")
     .run_commands("pip freeze")
 )
