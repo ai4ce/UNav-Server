@@ -37,18 +37,25 @@ class UnavServer:
         place="NewYorkCity",
         building="LightHouse",
     ):
-        from core.tasks.unav import get_destinations
+        try:
+            from core.tasks.unav import get_destinations
 
-        """
-        Retrieves the list of available destinations from the UNAV model.
-        """
-        print("Retrieving destinations...")
-        print(f"📍 Place: {place}")
-        print(f"🏢 Building: {building}")
-        print(f"🏠 Floor: {floor}")
+            # """
+            # Retrieves the list of available destinations from the UNAV model.
+            # """
+            # print("Retrieving destinations...")
+            # print(f"📍 Place: {place}")
+            # print(f"🏢 Building: {building}")
+            # print(f"🏠 Floor: {floor}")
 
-        print(
-            get_destinations(
-                inputs={"floor": floor, "place": place, "building": building}
-            )
-        )
+            # result = get_destinations(
+            #     inputs={"floor": floor, "place": place, "building": building}
+            # )
+            # print(result)
+            # return result
+        except ImportError as e:
+            print(f"Import error: {e}")
+            return {"error": f"Failed to import required modules: {e}"}
+        except Exception as e:
+            print(f"Error getting destinations: {e}")
+            return {"error": f"Failed to get destinations: {e}"}
