@@ -63,12 +63,10 @@ unav_image = (
     .run_commands(
         "echo 'DEBUG: Current directory after requirements install:' && pwd && ls -la"
     )
-    # .run_commands("pip install unav_pretrained")
     .run_commands("echo 'DEBUG: Final directory state:' && pwd && ls -la")
     .pip_install_private_repos(
         "github.com/ai4ce/UNav_Navigation",
         git_user="surendharpalanisamy",
         secrets=[github_secret],
     )
-    # .run_commands("pip install unav_pretrained")
 )
