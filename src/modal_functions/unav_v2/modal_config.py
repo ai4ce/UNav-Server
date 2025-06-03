@@ -69,4 +69,5 @@ unav_image = (
         git_user="surendharpalanisamy",
         secrets=[github_secret],
     )
+    .run_commands("pip freeze")
 )
