@@ -223,7 +223,7 @@ def unav_navigation(inputs):
         return {"error": "Localization failed, no pose found."}
 
     floorplan_pose = output["floorplan_pose"]
-    start_xy, start_heading = floorplan_pose["xy"], floorplan_pose["ang"]
+    start_xy, start_heading = floorplan_pose["xy"], -floorplan_pose["ang"]
     source_key = output["best_map_key"]
     start_place, start_building, start_floor = source_key
 
