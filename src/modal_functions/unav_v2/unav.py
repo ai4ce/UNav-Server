@@ -10,8 +10,8 @@ from modal_config import app, unav_image, volume
     enable_memory_snapshot=True,
     concurrency_limit=20,
     allow_concurrent_inputs=20,
-    memory=49152,
-    container_idle_timeout=900,
+    memory=16152,
+    container_idle_timeout=300,
 )
 class UnavServer:
     @method()
@@ -38,6 +38,29 @@ class UnavServer:
         building="LightHouse",
     ):
         try:
+            import os
+
+            # Print current directory and its contents
+            current_dir = os.getcwd()
+            print(f"Current directory: {current_dir}")
+            print("Contents of current directory:")
+            for item in os.listdir(current_dir):
+                print(f"  {item}")
+
+            # Check if 'core' directory exists
+            if os.path.exists("core"):
+                print("Contents of 'core' directory:")
+                for item in os.listdir("core"):
+                    print(f"  core/{item}")
+
+                # Check if 'core/tasks' directory exists
+                if os.path.exists("core/tasks"):
+                    print("Contents of 'core/tasks' directory:")
+                    for item in os.listdir("core/tasks"):
+                        print(f"  core/tasks/{item}")
+            else:
+                print("'core' directory does not exist in current directory")
+
             from core.tasks.unav import get_destinations
 
             # """
