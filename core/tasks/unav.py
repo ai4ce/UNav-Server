@@ -208,6 +208,7 @@ def unav_navigation(inputs):
     target_building = session.get("target_building")
     target_floor = session.get("target_floor")
     unit = session.get("unit", "feet")
+    user_lang = session.get("language", "en")
 
     if not all([dest_id, target_place, target_building, target_floor]):
         return {"error": "Incomplete navigation context. Please select a destination."}
@@ -240,7 +241,7 @@ def unav_navigation(inputs):
 
     # Generate spoken/navigation commands
     cmds = commander(
-        nav, result, initial_heading=start_heading, unit=unit
+        nav, result, initial_heading=start_heading, unit=unit, language=user_lang
     )
 
     # Update refinement queue for subsequent localization calls

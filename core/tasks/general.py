@@ -6,15 +6,6 @@ from core.unav_state import get_session
 def select_unit(inputs):
     """
     Store the user's preferred unit for navigation instructions (e.g., 'feet' or 'meters').
-
-    Args:
-        inputs (dict): {
-            "user_id": str,     # Unique user identifier
-            "unit": str         # Preferred unit ("feet" or "meters")
-        }
-
-    Returns:
-        dict: {"success": True}
     """
     user_id = inputs["user_id"]
     unit = inputs["unit"]
@@ -22,10 +13,27 @@ def select_unit(inputs):
     session["unit"] = unit
     return {"success": True}
 
-# --- Placeholder for future extensible session or user management tasks ---
-# Example: reset_session, set_language, etc.
+def select_language(inputs):
+    """
+    Store the user's preferred language for interface and TTS prompts.
+
+    Args:
+        inputs (dict): {
+            "user_id": str,       # Unique user identifier
+            "language": str       # Preferred language code ("en", "zh", "th", etc.)
+        }
+
+    Returns:
+        dict: {"success": True}
+    """
+    user_id = inputs["user_id"]
+    language = inputs["language"]
+    session = get_session(user_id)
+    session["language"] = language
+    return {"success": True}
 
 GENERAL_TASKS = {
     "select_unit": select_unit,
+    "select_language": select_language,
     # "reset_session": reset_session,      # Example for future extensibility
 }
