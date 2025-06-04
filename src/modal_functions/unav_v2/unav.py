@@ -129,8 +129,6 @@ class UnavServer:
                 traceback.print_exc()
                 return {"error": f"Failed to fix imports: {e}"}
 
-            # The issue is that core/unav_state.py imports 'from unav.config import UNavConfig'
-            # but 'unav' is not a package in Modal. We need to create a mock unav module.
 
             # Actually call the function now
             print("Retrieving destinations...")
