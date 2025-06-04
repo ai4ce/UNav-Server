@@ -75,7 +75,7 @@ class UnavServer:
             commander = commands_from_result  # Navigation command generator function
 
         except Exception as e:
-            import subprocess
+            # import subprocess
             # import traceback
 
             # print(f"❌ Error during initialization: {e}")
