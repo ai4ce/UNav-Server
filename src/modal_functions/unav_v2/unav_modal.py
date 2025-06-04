@@ -40,11 +40,18 @@ class UnavServer:
         try:
             import os
             import sys
-            from config import DATA_ROOT, FEATURE_MODEL, LOCAL_FEATURE_MODEL, PLACES
+
             from unav.config import UNavConfig
             from unav.localizer.localizer import UNavLocalizer
             from unav.navigator.multifloor import FacilityNavigator
             from unav.navigator.commander import commands_from_result
+
+            DATA_ROOT = "data"
+            FEATURE_MODEL = "DinoV2Salad"
+            LOCAL_FEATURE_MODEL = "superpoint+lightglue"
+            PLACES = {
+                "New_York_City": {"LightHouse": ["3_floor", "4_floor", "6_floor"]}
+            }
 
             place_names = list(PLACES.keys())
             building_names = [b for p in PLACES.values() for b in p.keys()]
