@@ -14,7 +14,7 @@ echo "Launching Docker container: ${IMAGE_NAME}"
 echo "Mounting local data directory: ${DATA_ROOT} -> /data (in container)"
 echo "Exposing port: ${HOST_PORT} -> ${CONTAINER_PORT}"
 
-docker run --gpus all -it \
+docker run --gpus all --rm -it \
   -p "${HOST_PORT}:${CONTAINER_PORT}" \
   -v ./config.py:/workspace/config.py \
   -v "${DATA_ROOT}:/data" \
