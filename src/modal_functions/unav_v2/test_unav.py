@@ -62,7 +62,6 @@ def test_unav_initialization():
 
         config = UNavConfig(
             data_final_root=DATA_ROOT,
-            parameters_root="/root/UNav-IO/parameters",  # Separate parameters path
             places=PLACES,
             global_descriptor_model=FEATURE_MODEL,
             local_feature_model=LOCAL_FEATURE_MODEL,

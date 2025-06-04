@@ -224,7 +224,6 @@ class UnavServer:
             # Initialize UNav configuration with all necessary parameters
             config = UNavConfig(
                 data_final_root=DATA_ROOT,
-                parameters_root="/root/UNav-IO/parameters",  # Separate parameters path
                 places=PLACES,  # Keep hierarchical structure for flexible access
                 global_descriptor_model=FEATURE_MODEL,
                 local_feature_model=LOCAL_FEATURE_MODEL,
