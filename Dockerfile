@@ -1,39 +1,42 @@
 FROM nvidia/cuda:12.6.3-cudnn-devel-ubuntu22.04
 
-# 1. Install basic tools and C++ libraries (Eigen3, Ceres, CMake)
+# 1. Install basic Linux utilities and required C++ libraries (Eigen3, Ceres, CMake)
 RUN apt-get update && \
-    apt-get install -y wget git vim cmake libeigen3-dev libceres-dev && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends \
+        wget \
+        git \
+        vim \
+        cmake \
+        libeigen3-dev \
+        libceres-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# 2. Install Miniconda
+# 2. Install Miniconda to /opt/conda and update PATH
 ENV CONDA_DIR=/opt/conda
 RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh && \
     bash /tmp/miniconda.sh -b -p $CONDA_DIR && \
     rm /tmp/miniconda.sh
 ENV PATH=$CONDA_DIR/bin:$PATH
 
-# 3. Copy Conda environment specification
+# 3. Copy Conda environment file
 COPY environment.yml /tmp/environment.yml
 
-# 4. Create and activate the 'unav' conda environment
+# 4. Create Conda environment 'unav' and clean up
 RUN conda env create -f /tmp/environment.yml && conda clean -afy
 
-# NOTE: The following SHELL affects only RUN, not CMD/ENTRYPOINT
-# It's recommended to use `conda run ...` explicitly in the final command.
+# Set default shell to use 'conda run' for subsequent RUN instructions
 SHELL ["conda", "run", "-n", "unav", "/bin/bash", "-c"]
 
-# 5. Set working directory and copy project code
+# 5. Set working directory and copy all project files
 WORKDIR /workspace
 COPY . /workspace
 
-# 6. Install private local package (implicit_dist) and GitHub package (ai4ce/unav) using a build argument for GitHub token
-# The GITHUB_TOKEN argument should be passed at build time for security.
-RUN pip install --no-deps ./third_party/unav \
- && pip install ./third_party/implicit_dist
+# 6. Install external/private Python packages (no dependency resolution)
+RUN pip install --no-deps git+https://github.com/cvg/implicit_dist.git
+RUN pip install --no-deps git+https://github.com/endeleze/UNav.git
 
-# 7. Expose port
+# 7. Expose the API port
 EXPOSE 5001
 
-# 8. Entry point
-# Use exec form to avoid zombie processes
-CMD ["conda", "run", "-n", "unav", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5001"]
+# 8. Set entrypoint: activate environment and launch FastAPI app via Uvicorn
+CMD ["bash", "-c", "source /opt/conda/etc/profile.d/conda.sh && conda activate unav && uvicorn main:app --host 0.0.0.0 --port 5001 --log-level info"]

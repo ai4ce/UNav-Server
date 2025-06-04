@@ -5,43 +5,47 @@ channels:
   - nvidia
   - defaults
 dependencies:
-  # ===== 基础环境 =====
+  # ===== Basic Environment =====
   - python=3.10
   - pip
   - setuptools
   - wheel
 
-  # ===== 科学计算 =====
+  # ===== Scientific Computing =====
   - numpy=1.26.4
   - scipy=1.15.3
   - pandas=2.2.3
   - h5py=3.13.0
 
-  # ===== 机器学习/深度学习 =====
-  - xformers  # conda-forge 频道有
+  # ===== Machine/Deep Learning =====
+  - pytorch
+  - torchvision
+  - xformers
   - open3d
   - kornia
 
-  # ===== 通用工具包 =====
-  - matplotlib=3.10.3
+  # ===== Data Processing & Visualization =====
   - scikit-learn=1.6.1
   - scikit-image=0.25.2
   - pillow=11.2.1
+  - matplotlib=3.10.3
   - tqdm=4.67.1
   - prettytable=3.11.0
   - networkx=3.4.2
   - einops=0.8.1
   - joblib=1.5.1
 
-  # ===== 后端/开发 =====
+  # ===== Backend & Development =====
   - fastapi
   - uvicorn
   - sqlalchemy
 
-  # ===== 其他依赖 =====
+  # ===== Others =====
   - yaml
   - pyyaml
   - cryptography
+
+  # ===== Additional pip dependencies =====
   - pip:
       - einops==0.8.1
       - faiss-gpu-cu12==1.11.0
@@ -50,7 +54,7 @@ dependencies:
       - h5py==3.13.0
       - jupyter-core==5.8.1
       - jupyterlab-widgets==3.0.15
-      - jwt==1.3.1
+      - PyJWT>=2.0.0
       - kornia==0.8.1
       - lazy-loader==0.4
       - matplotlib==3.10.3
@@ -72,3 +76,9 @@ dependencies:
       - transformers==4.52.4
       - wandb==0.20.0
       - xformers==0.0.30
+
+# ===== Usage =====
+# 1. Run `conda env create -f environment.yaml` to create the environment.
+# 2. To update, use `conda env update -f environment.yaml`.
+# 3. Make sure the correct CUDA drivers are installed for GPU packages.
+# 4. Use conda for most packages, pip only for those unavailable in conda.

@@ -1,20 +1,20 @@
 #!/bin/bash
 
-# 用户设置数据根路径（只需改这里）
-DATA_ROOT=/mnt/data/UNav-IO/data
+# Path to the local data directory to be mounted inside the container
+DATA_ROOT="/mnt/d/unav/data"
 
-# 镜像名
-IMAGE_NAME=unav-server
+# Docker image name for the UNav server
+IMAGE_NAME="unav-server"
 
-# 宿主机端口（可修改）
+# Host and container port mapping
 HOST_PORT=5001
 CONTAINER_PORT=5001
 
-echo "Launching $IMAGE_NAME"
-echo "Host data: $DATA_ROOT"
-echo "Mounting to container: /data"
+echo "Launching Docker container: ${IMAGE_NAME}"
+echo "Mounting local data directory: ${DATA_ROOT} -> /data (in container)"
+echo "Exposing port: ${HOST_PORT} -> ${CONTAINER_PORT}"
 
 docker run --gpus all -it \
-  -p ${HOST_PORT}:${CONTAINER_PORT} \
-  -v ${DATA_ROOT}:/data \
-  ${IMAGE_NAME}
+  -p "${HOST_PORT}:${CONTAINER_PORT}" \
+  -v "${DATA_ROOT}:/data" \
+  "${IMAGE_NAME}"
