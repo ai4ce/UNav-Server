@@ -30,6 +30,7 @@ SHELL ["conda", "run", "-n", "unav", "/bin/bash", "-c"]
 # 5. Set working directory and copy all project files
 WORKDIR /workspace
 COPY . /workspace
+RUN rm -f /workspace/config.py
 
 # 6. Install external/private Python packages (no dependency resolution)
 RUN pip install --no-deps git+https://github.com/cvg/implicit_dist.git

@@ -13,9 +13,10 @@ LOCAL_FEATURE_MODEL = "superpoint+lightglue"
 # --- Place/Building/Floor Structure ---
 # Add or modify locations, buildings, and available floors as needed.
 PLACES = {
-    # "New_York_University": {
-    #     "Langone": ["15_floor", "16_floor", "17_floor"]
-    # },
+    "New_York_University": {
+        "Langone": ["15_floor", "16_floor", "17_floor"],
+        "Tandon": ["4_floor"]
+    },
     "New_York_City": {
         "LightHouse": ["3_floor", "4_floor", "6_floor"]
     }

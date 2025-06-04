@@ -16,5 +16,6 @@ echo "Exposing port: ${HOST_PORT} -> ${CONTAINER_PORT}"
 
 docker run --gpus all -it \
   -p "${HOST_PORT}:${CONTAINER_PORT}" \
+  -v ./config.py:/workspace/config.py \
   -v "${DATA_ROOT}:/data" \
   "${IMAGE_NAME}"

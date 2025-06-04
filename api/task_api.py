@@ -1,5 +1,6 @@
 # api/task_api.py
-# FastAPI router for handling generic task execution with authentication and file support.
+# FastAPI router for generic authenticated task execution, supporting JSON and file uploads.
+# Logs user, task function, and execution time for every call.
 
 from fastapi import APIRouter, Request, Depends, UploadFile, File, HTTPException
 from fastapi.security import OAuth2PasswordBearer
@@ -8,17 +9,28 @@ from api.user_api import decode_access_token
 import numpy as np
 import cv2
 import json
+import logging
+import time
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
+# Set up a dedicated logger for task execution
+logger = logging.getLogger("unav.task")
+if not logger.hasHandlers():
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        "[%(asctime)s] %(levelname)s %(message)s", "%Y-%m-%d %H:%M:%S"
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
 def get_user_id_from_token(token: str = Depends(oauth2_scheme)) -> str:
     """
     Decode JWT token to extract user ID.
-
     Args:
         token (str): JWT bearer token from the Authorization header.
-
     Returns:
         str: User ID extracted from the token payload.
     """
@@ -29,41 +41,42 @@ def get_user_id_from_token(token: str = Depends(oauth2_scheme)) -> str:
 async def run_task(
     request: Request,
     token: str = Depends(oauth2_scheme),
-    file: UploadFile = File(None),  # Optional file for image-based tasks
+    file: UploadFile = File(None),
 ):
     """
-    Universal task endpoint to invoke any registered backend task by name.
-    Accepts JSON body or form-data (for file upload support).
+    Universal endpoint to execute any registered backend task.
+    - Accepts both JSON and multipart/form-data (for file upload support)
+    - Logs user, task name, function, and execution time
 
-    Body format (JSON):
+    Body (JSON):
         {
             "task": "task_name",
             "inputs": {...}
         }
 
-    For image tasks, the image file should be sent as 'file' form-data field.
-
     Args:
-        request (Request): Incoming HTTP request.
-        token (str): OAuth2 bearer token for authentication.
-        file (UploadFile, optional): Uploaded image file.
+        request (Request): The incoming HTTP request object.
+        token (str): Bearer token for authentication.
+        file (UploadFile, optional): Uploaded image file for image-based tasks.
 
     Returns:
-        dict: Result returned by the executed task.
+        dict: The result of the executed task, with optional execution time.
 
     Raises:
         HTTPException 404: If the requested task is not found.
         HTTPException 500: If the task raises an error during execution.
     """
+    # Extract user ID from the JWT token
     user_id = get_user_id_from_token(token)
 
+    # Parse input data from JSON or form-data
     content_type = request.headers.get("content-type", "")
     if "application/json" in content_type:
         data = await request.json()
         task_name = data.get("task")
         inputs = data.get("inputs", {})
     else:
-        # Fallback for multipart/form-data (with file upload)
+        # Fallback for multipart/form-data (used for file uploads)
         form = await request.form()
         task_name = form.get("task")
         inputs_raw = form.get("inputs", "{}")
@@ -72,10 +85,10 @@ async def run_task(
         except Exception:
             inputs = {}
 
-    # Automatically inject authenticated user_id into inputs
+    # Inject authenticated user ID into task inputs
     inputs["user_id"] = user_id
 
-    # If file is provided (image), decode to OpenCV BGR ndarray
+    # If file is provided (e.g. image), decode it to an OpenCV ndarray
     if file is not None:
         img_bytes = await file.read()
         nparr = np.frombuffer(img_bytes, np.uint8)
@@ -85,11 +98,26 @@ async def run_task(
     # Retrieve the registered task function by name
     task = get_task(task_name)
     if not task:
+        logger.warning(f"User {user_id} tried to execute unknown task '{task_name}'")
         raise HTTPException(status_code=404, detail=f"No such task: {task_name}")
 
+    # Execute the task function and record execution time
     try:
+        start_time = time.time()
         result = task(inputs)
+        elapsed = time.time() - start_time
+        logger.info(
+            f"User {user_id} finished task '{task_name}' "
+            f"({task.__module__}.{task.__name__}) in {elapsed:.3f} seconds"
+        )
     except Exception as e:
+        logger.error(
+            f"Error during task '{task_name}' for user {user_id}: {e}"
+        )
         raise HTTPException(status_code=500, detail=f"Task error: {str(e)}")
+
+    # Optionally include execution time in the response (for debugging/monitoring)
+    if isinstance(result, dict):
+        result["_exec_time"] = elapsed
 
     return result
