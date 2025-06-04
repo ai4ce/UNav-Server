@@ -16,12 +16,10 @@ router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 # Set up a dedicated logger for task execution
-logger = logging.getLogger("unav.task")
+logger = logging.getLogger("unav.api")
 if not logger.hasHandlers():
     handler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        "[%(asctime)s] %(levelname)s %(message)s", "%Y-%m-%d %H:%M:%S"
-    )
+    formatter = logging.Formatter("[UNav-API] %(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 logger.setLevel(logging.INFO)
@@ -68,7 +66,10 @@ async def run_task(
     """
     # Extract user ID from the JWT token
     user_id = get_user_id_from_token(token)
-
+    username = None
+    payload = decode_access_token(token)
+    username = payload.get("sub", "-")
+    
     # Parse input data from JSON or form-data
     content_type = request.headers.get("content-type", "")
     if "application/json" in content_type:
@@ -98,7 +99,10 @@ async def run_task(
     # Retrieve the registered task function by name
     task = get_task(task_name)
     if not task:
-        logger.warning(f"User {user_id} tried to execute unknown task '{task_name}'")
+        logger.info(
+            f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] User: id={user_id}, username={username} | "
+            f"Path: {request.url.path} | Method: {request.method} | Task: {task_name} | Status: 404 | Time: 0.000s"
+        )
         raise HTTPException(status_code=404, detail=f"No such task: {task_name}")
 
     # Execute the task function and record execution time
@@ -107,16 +111,20 @@ async def run_task(
         result = task(inputs)
         elapsed = time.time() - start_time
         logger.info(
-            f"User {user_id} finished task '{task_name}' "
-            f"({task.__module__}.{task.__name__}) in {elapsed:.3f} seconds"
+            f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] User: id={user_id}, username={username} | "
+            f"Path: {request.url.path} | Method: {request.method} | "
+            f"Task: {task_name} ({task.__module__}.{task.__name__}) | "
+            f"Status: 200 | Time: {elapsed:.3f}s"
         )
     except Exception as e:
-        logger.error(
-            f"Error during task '{task_name}' for user {user_id}: {e}"
+        logger.info(
+            f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] User: id={user_id}, username={username} | "
+            f"Path: {request.url.path} | Method: {request.method} | "
+            f"Task: {task_name} ({task.__module__}.{task.__name__}) | "
+            f"Status: 500 | Time: 0.000s | Error: {e}"
         )
         raise HTTPException(status_code=500, detail=f"Task error: {str(e)}")
 
-    # Optionally include execution time in the response (for debugging/monitoring)
     if isinstance(result, dict):
         result["_exec_time"] = elapsed
 
