@@ -31,8 +31,8 @@ CONTAINER_PORT=5001            # Port inside the container (usually leave as 500
 ### On Linux/macOS
 
 ```bash
-chmod +x run_unav_docker.sh
-./run_unav_docker.sh
+chmod +x run_docker_unav_server.sh
+./run_docker_unav_server.sh
 ```
 
 ### On Windows
@@ -40,7 +40,7 @@ chmod +x run_unav_docker.sh
 Open [Git Bash](https://gitforwindows.org/), [WSL](https://docs.microsoft.com/en-us/windows/wsl/), or any Bash-compatible terminal and run:
 
 ```bash
-wsl bash run_unav_docker.sh
+wsl bash run_docker_unav_server.sh
 ```
 
 > **Tips:**  
