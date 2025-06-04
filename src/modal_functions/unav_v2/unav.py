@@ -74,9 +74,6 @@ class UnavServer:
 
             commander = commands_from_result  # Navigation command generator function
 
-        except ImportError as e:
-            print(f"Import error: {e}")
-            print(
-                "Ensure that the required packages are installed in the Modal environment."
-            )
-            sys.exit(1)
+        except Exception as e:
+            print(f"Error during initialization: {e}")
+            return {"status": "error", "message": str(e)}
