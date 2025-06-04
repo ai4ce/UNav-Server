@@ -76,33 +76,33 @@ class UnavServer:
 
         except Exception as e:
             import subprocess
-            import traceback
+            # import traceback
 
-            print(f"❌ Error during initialization: {e}")
-            print(f"❌ Error type: {type(e).__name__}")
-            print("❌ Full traceback:")
-            traceback.print_exc()
+            # print(f"❌ Error during initialization: {e}")
+            # print(f"❌ Error type: {type(e).__name__}")
+            # print("❌ Full traceback:")
+            # traceback.print_exc()
 
-            # Check what packages are actually installed
-            print("\n📦 Checking installed packages with pip freeze:")
-            try:
-                result = subprocess.run(
-                    ["pip", "freeze"], capture_output=True, text=True
-                )
-                print("Installed packages:")
-                for line in result.stdout.split("\n"):
-                    if "unav" in line.lower() or "UNav" in line:
-                        print(f"  🎯 {line}")
-                    elif line.strip():
-                        print(f"  {line}")
-            except Exception as pip_error:
-                print(f"❌ Failed to run pip freeze: {pip_error}")
+            # # Check what packages are actually installed
+            # print("\n📦 Checking installed packages with pip freeze:")
+            # try:
+            #     result = subprocess.run(
+            #         ["pip", "freeze"], capture_output=True, text=True
+            #     )
+            #     print("Installed packages:")
+            #     for line in result.stdout.split("\n"):
+            #         if "unav" in line.lower() or "UNav" in line:
+            #             print(f"  🎯 {line}")
+            #         elif line.strip():
+            #             print(f"  {line}")
+            # except Exception as pip_error:
+            #     print(f"❌ Failed to run pip freeze: {pip_error}")
 
-            # Check sys.path
-            import sys
+            # # Check sys.path
+            # import sys
 
-            print(f"\n📁 Python path (sys.path):")
-            for path in sys.path:
-                print(f"  {path}")
+            # print(f"\n📁 Python path (sys.path):")
+            # for path in sys.path:
+            #     print(f"  {path}")
 
             return {"status": "error", "message": str(e), "type": type(e).__name__}
