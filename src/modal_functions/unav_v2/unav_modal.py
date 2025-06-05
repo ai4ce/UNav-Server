@@ -34,7 +34,7 @@ class UnavServer:
     def get_destinations(
         self,
         floor="6_floor",
-        place="NewYorkCity",
+        place="New_York_City",
         building="LightHouse",
     ):
         try:
@@ -240,34 +240,38 @@ class UnavServer:
             # Initialize global singletons for UNav algorithm modules
             places = PLACES  # Global place/building/floor info
 
-            place = inputs["place"]
-            building = inputs["building"]
-            floor = inputs["floor"]
-            user_id = inputs["user_id"]
+            print("🔍 Attempting to initialize UNavLocalizer...")
+            localizer = UNavLocalizer(localizor_config)
+
+            print("🔍 Attempting to load maps and features...")
+            localizer.load_maps_and_features()  # Preload all maps and features for fast localization
+
+            print("✅ UNavLocalizer initialized and loaded successfully")
+
+            nav = FacilityNavigator(
+                navigator_config
+            )  # Initialize multi-floor navigator instance
+
+            commander = commands_from_result  # Navigation command generator function
+
+            print("✅ All components initialized successfully")
+
+            place = place
+            building = building
+            floor = floor
+            user_id = "test_user_id"  # Placeholder for user ID
             target_key = (place, building, floor)
             pf_target = nav.pf_map[target_key]
 
-            destinations = [{"id": str(did), "name": pf_target.labels[did]} for did in pf_target.dest_ids]
-
-            # print("🔍 Attempting to initialize UNavLocalizer...")
-            # localizer = UNavLocalizer(localizor_config)
-
-            # print("🔍 Attempting to load maps and features...")
-            # localizer.load_maps_and_features()  # Preload all maps and features for fast localization
-
-            # print("✅ UNavLocalizer initialized and loaded successfully")
-
-            # nav = FacilityNavigator(
-            #     navigator_config
-            # )  # Initialize multi-floor navigator instance
-
-            # commander = commands_from_result  # Navigation command generator function
-
-            print("✅ All components initialized successfully")
+            destinations = [
+                {"id": str(did), "name": pf_target.labels[did]}
+                for did in pf_target.dest_ids
+            ]
 
             return {
                 "status": "success",
                 "message": "UNav system initialized successfully",
+                destinations: destinations,
             }
 
         except Exception as e:
