@@ -106,109 +106,109 @@ class UnavServer:
                 "New_York_City": {"LightHouse": ["3_floor", "4_floor", "6_floor"]}
             }
 
-            # Debug: Check if data paths exist
-            print(f"\n🔍 Checking DATA_ROOT path: {DATA_ROOT}")
-            if os.path.exists(DATA_ROOT):
-                print(f"  ✅ {DATA_ROOT} exists")
-                try:
-                    contents = os.listdir(DATA_ROOT)
-                    print(f"  📁 Contents of {DATA_ROOT}:")
-                    for item in contents:
-                        item_path = os.path.join(DATA_ROOT, item)
-                        if os.path.isdir(item_path):
-                            print(f"    📂 {item}/")
-                            # Show contents of data directory specifically
-                            if item == "data":
-                                try:
-                                    data_contents = os.listdir(item_path)
-                                    print(f"      📁 Contents of data/:")
-                                    for data_item in data_contents:
-                                        data_item_path = os.path.join(
-                                            item_path, data_item
-                                        )
-                                        if os.path.isdir(data_item_path):
-                                            print(f"        📂 {data_item}/")
-                                        else:
-                                            print(f"        📄 {data_item}")
-                                except:
-                                    print(f"      ❌ Cannot read data directory")
-                        else:
-                            print(f"    📄 {item}")
+            # # Debug: Check if data paths exist
+            # print(f"\n🔍 Checking DATA_ROOT path: {DATA_ROOT}")
+            # if os.path.exists(DATA_ROOT):
+            #     print(f"  ✅ {DATA_ROOT} exists")
+            #     try:
+            #         contents = os.listdir(DATA_ROOT)
+            #         print(f"  📁 Contents of {DATA_ROOT}:")
+            #         for item in contents:
+            #             item_path = os.path.join(DATA_ROOT, item)
+            #             if os.path.isdir(item_path):
+            #                 print(f"    📂 {item}/")
+            #                 # Show contents of data directory specifically
+            #                 if item == "data":
+            #                     try:
+            #                         data_contents = os.listdir(item_path)
+            #                         print(f"      📁 Contents of data/:")
+            #                         for data_item in data_contents:
+            #                             data_item_path = os.path.join(
+            #                                 item_path, data_item
+            #                             )
+            #                             if os.path.isdir(data_item_path):
+            #                                 print(f"        📂 {data_item}/")
+            #                             else:
+            #                                 print(f"        📄 {data_item}")
+            #                     except:
+            #                         print(f"      ❌ Cannot read data directory")
+            #             else:
+            #                 print(f"    📄 {item}")
 
-                    # Check for expected map structure
-                    expected_places = ["New_York_City", "NewYorkCity"]
-                    for place in expected_places:
-                        place_path = os.path.join(DATA_ROOT, place)
-                        if os.path.exists(place_path):
-                            print(f"  ✅ Found place directory: {place_path}")
-                            try:
-                                buildings = os.listdir(place_path)
-                                for building in buildings:
-                                    building_path = os.path.join(place_path, building)
-                                    if os.path.isdir(building_path):
-                                        print(f"    📂 Building: {building}")
-                                        floors = os.listdir(building_path)
-                                        for floor in floors:
-                                            floor_path = os.path.join(
-                                                building_path, floor
-                                            )
-                                            if os.path.isdir(floor_path):
-                                                print(f"      📂 Floor: {floor}")
-                                                # Check for required files
-                                                boundaries_file = os.path.join(
-                                                    floor_path, "boundaries.json"
-                                                )
-                                                colmap_dir = os.path.join(
-                                                    floor_path, "colmap_map"
-                                                )
-                                                print(
-                                                    f"        boundaries.json: {'✅' if os.path.exists(boundaries_file) else '❌'}"
-                                                )
-                                                print(
-                                                    f"        colmap_map/: {'✅' if os.path.exists(colmap_dir) else '❌'}"
-                                                )
-                            except Exception as e:
-                                print(f"    ❌ Error reading {place_path}: {e}")
-                        else:
-                            print(f"  ❌ Place directory not found: {place_path}")
+            #         # Check for expected map structure
+            #         expected_places = ["New_York_City", "NewYorkCity"]
+            #         for place in expected_places:
+            #             place_path = os.path.join(DATA_ROOT, place)
+            #             if os.path.exists(place_path):
+            #                 print(f"  ✅ Found place directory: {place_path}")
+            #                 try:
+            #                     buildings = os.listdir(place_path)
+            #                     for building in buildings:
+            #                         building_path = os.path.join(place_path, building)
+            #                         if os.path.isdir(building_path):
+            #                             print(f"    📂 Building: {building}")
+            #                             floors = os.listdir(building_path)
+            #                             for floor in floors:
+            #                                 floor_path = os.path.join(
+            #                                     building_path, floor
+            #                                 )
+            #                                 if os.path.isdir(floor_path):
+            #                                     print(f"      📂 Floor: {floor}")
+            #                                     # Check for required files
+            #                                     boundaries_file = os.path.join(
+            #                                         floor_path, "boundaries.json"
+            #                                     )
+            #                                     colmap_dir = os.path.join(
+            #                                         floor_path, "colmap_map"
+            #                                     )
+            #                                     print(
+            #                                         f"        boundaries.json: {'✅' if os.path.exists(boundaries_file) else '❌'}"
+            #                                     )
+            #                                     print(
+            #                                         f"        colmap_map/: {'✅' if os.path.exists(colmap_dir) else '❌'}"
+            #                                     )
+            #                 except Exception as e:
+            #                     print(f"    ❌ Error reading {place_path}: {e}")
+            #             else:
+            #                 print(f"  ❌ Place directory not found: {place_path}")
 
-                except Exception as e:
-                    print(f"  ❌ Error listing {DATA_ROOT}: {e}")
-            else:
-                print(f"  ❌ {DATA_ROOT} does not exist")
-                # Try alternative paths
-                alternative_paths = [
-                    "/root/UNav-IO/final",
-                    "/root/UNav-IO/data",
-                    "/data",
-                    "data",
-                ]
-                for alt_path in alternative_paths:
-                    if os.path.exists(alt_path):
-                        print(f"  🔄 Alternative path found: {alt_path}")
-                        DATA_ROOT = alt_path
-                        break
+            #     except Exception as e:
+            #         print(f"  ❌ Error listing {DATA_ROOT}: {e}")
+            # else:
+            #     print(f"  ❌ {DATA_ROOT} does not exist")
+            #     # Try alternative paths
+            #     alternative_paths = [
+            #         "/root/UNav-IO/final",
+            #         "/root/UNav-IO/data",
+            #         "/data",
+            #         "data",
+            #     ]
+            #     for alt_path in alternative_paths:
+            #         if os.path.exists(alt_path):
+            #             print(f"  🔄 Alternative path found: {alt_path}")
+            #             DATA_ROOT = alt_path
+            #             break
 
-            # Look for parameters directory
-            parameters_paths = [
-                "/root/UNav-IO/parameters",
-                "/root/UNav-IO/final/parameters",
-                "/parameters",
-                "parameters",
-            ]
-            print(f"\n🔍 Looking for parameters directory:")
-            for param_path in parameters_paths:
-                if os.path.exists(param_path):
-                    print(f"  ✅ Found parameters at: {param_path}")
-                    try:
-                        contents = os.listdir(param_path)
-                        print(f"    📁 Contents:")
-                        for item in contents[:10]:  # Show first 10 items
-                            print(f"      📂 {item}")
-                    except Exception as e:
-                        print(f"    ❌ Error listing: {e}")
-                else:
-                    print(f"  ❌ {param_path} not found")
+            # # Look for parameters directory
+            # parameters_paths = [
+            #     "/root/UNav-IO/parameters",
+            #     "/root/UNav-IO/final/parameters",
+            #     "/parameters",
+            #     "parameters",
+            # ]
+            # print(f"\n🔍 Looking for parameters directory:")
+            # for param_path in parameters_paths:
+            #     if os.path.exists(param_path):
+            #         print(f"  ✅ Found parameters at: {param_path}")
+            #         try:
+            #             contents = os.listdir(param_path)
+            #             print(f"    📁 Contents:")
+            #             for item in contents[:10]:  # Show first 10 items
+            #                 print(f"      📂 {item}")
+            #         except Exception as e:
+            #             print(f"    ❌ Error listing: {e}")
+            #     else:
+            #         print(f"  ❌ {param_path} not found")
 
             place_names = list(PLACES.keys())
             building_names = [b for p in PLACES.values() for b in p.keys()]
@@ -239,6 +239,15 @@ class UnavServer:
 
             # Initialize global singletons for UNav algorithm modules
             places = PLACES  # Global place/building/floor info
+
+            place = inputs["place"]
+            building = inputs["building"]
+            floor = inputs["floor"]
+            user_id = inputs["user_id"]
+            target_key = (place, building, floor)
+            pf_target = nav.pf_map[target_key]
+
+            destinations = [{"id": str(did), "name": pf_target.labels[did]} for did in pf_target.dest_ids]
 
             # print("🔍 Attempting to initialize UNavLocalizer...")
             # localizer = UNavLocalizer(localizor_config)
