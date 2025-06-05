@@ -41,56 +41,56 @@ class UnavServer:
             import os
             import sys
 
-            # Debug: Show current working directory and file structure
-            print("🔍 DEBUG: Current working directory and file structure:")
-            cwd = os.getcwd()
-            print(f"Current working directory: {cwd}")
+            # # Debug: Show current working directory and file structure
+            # print("🔍 DEBUG: Current working directory and file structure:")
+            # cwd = os.getcwd()
+            # print(f"Current working directory: {cwd}")
 
-            print("\n📁 Contents of current directory:")
-            for item in os.listdir(cwd):
-                item_path = os.path.join(cwd, item)
-                if os.path.isdir(item_path):
-                    print(f"  📂 {item}/")
-                    # Show first level of subdirectories
-                    try:
-                        subitems = os.listdir(item_path)[:10]  # Limit to first 10 items
-                        for subitem in subitems:
-                            subitem_path = os.path.join(item_path, subitem)
-                            if os.path.isdir(subitem_path):
-                                print(f"    📂 {subitem}/")
-                            else:
-                                print(f"    📄 {subitem}")
-                        if len(os.listdir(item_path)) > 10:
-                            print(
-                                f"    ... and {len(os.listdir(item_path)) - 10} more items"
-                            )
-                    except PermissionError:
-                        print(f"    [Permission denied]")
-                else:
-                    print(f"  📄 {item}")
+            # print("\n📁 Contents of current directory:")
+            # for item in os.listdir(cwd):
+            #     item_path = os.path.join(cwd, item)
+            #     if os.path.isdir(item_path):
+            #         print(f"  📂 {item}/")
+            #         # Show first level of subdirectories
+            #         try:
+            #             subitems = os.listdir(item_path)[:10]  # Limit to first 10 items
+            #             for subitem in subitems:
+            #                 subitem_path = os.path.join(item_path, subitem)
+            #                 if os.path.isdir(subitem_path):
+            #                     print(f"    📂 {subitem}/")
+            #                 else:
+            #                     print(f"    📄 {subitem}")
+            #             if len(os.listdir(item_path)) > 10:
+            #                 print(
+            #                     f"    ... and {len(os.listdir(item_path)) - 10} more items"
+            #                 )
+            #         except PermissionError:
+            #             print(f"    [Permission denied]")
+            #     else:
+            #         print(f"  📄 {item}")
 
-            # Check for common data directories
-            common_paths = [
-                "/root",
-                "/root/UNav-IO",
-                "/root/app",
-                "/data",
-                "/parameters",
-            ]
-            print("\n🔍 Checking common data paths:")
-            for path in common_paths:
-                if os.path.exists(path):
-                    print(f"  ✅ {path} exists")
-                    try:
-                        contents = os.listdir(path)[:5]  # First 5 items
-                        for item in contents:
-                            print(f"    📄 {item}")
-                        if len(os.listdir(path)) > 5:
-                            print(f"    ... and {len(os.listdir(path)) - 5} more items")
-                    except PermissionError:
-                        print(f"    [Permission denied]")
-                else:
-                    print(f"  ❌ {path} does not exist")
+            # # Check for common data directories
+            # common_paths = [
+            #     "/root",
+            #     "/root/UNav-IO",
+            #     "/root/app",
+            #     "/data",
+            #     "/parameters",
+            # ]
+            # print("\n🔍 Checking common data paths:")
+            # for path in common_paths:
+            #     if os.path.exists(path):
+            #         print(f"  ✅ {path} exists")
+            #         try:
+            #             contents = os.listdir(path)[:5]  # First 5 items
+            #             for item in contents:
+            #                 print(f"    📄 {item}")
+            #             if len(os.listdir(path)) > 5:
+            #                 print(f"    ... and {len(os.listdir(path)) - 5} more items")
+            #         except PermissionError:
+            #             print(f"    [Permission denied]")
+            #     else:
+            #         print(f"  ❌ {path} does not exist")
 
             from unav.config import UNavConfig
             from unav.localizer.localizer import UNavLocalizer
