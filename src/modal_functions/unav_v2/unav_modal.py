@@ -271,7 +271,7 @@ class UnavServer:
             return {
                 "status": "success",
                 "message": "UNav system initialized successfully",
-                destinations: destinations,
+                "destinations": destinations,
             }
 
         except Exception as e:
