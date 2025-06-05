@@ -240,19 +240,19 @@ class UnavServer:
             # Initialize global singletons for UNav algorithm modules
             places = PLACES  # Global place/building/floor info
 
-            print("🔍 Attempting to initialize UNavLocalizer...")
-            localizer = UNavLocalizer(localizor_config)
+            # print("🔍 Attempting to initialize UNavLocalizer...")
+            # localizer = UNavLocalizer(localizor_config)
 
-            print("🔍 Attempting to load maps and features...")
-            localizer.load_maps_and_features()  # Preload all maps and features for fast localization
+            # print("🔍 Attempting to load maps and features...")
+            # localizer.load_maps_and_features()  # Preload all maps and features for fast localization
 
-            print("✅ UNavLocalizer initialized and loaded successfully")
+            # print("✅ UNavLocalizer initialized and loaded successfully")
 
-            nav = FacilityNavigator(
-                navigator_config
-            )  # Initialize multi-floor navigator instance
+            # nav = FacilityNavigator(
+            #     navigator_config
+            # )  # Initialize multi-floor navigator instance
 
-            commander = commands_from_result  # Navigation command generator function
+            # commander = commands_from_result  # Navigation command generator function
 
             print("✅ All components initialized successfully")
 
