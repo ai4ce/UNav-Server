@@ -14,6 +14,54 @@ from modal_config import app, unav_image, volume
     container_idle_timeout=60,
 )
 class UnavServer:
+    @enter()
+    def initialize_unav_system(self):
+        """
+        Initialize UNav system components during container startup.
+        This runs once when the container starts, dramatically improving
+        performance for subsequent method calls.
+        """
+        print("🚀 Initializing UNav system during container startup...")
+
+        from unav.config import UNavConfig
+        from unav.localizer.localizer import UNavLocalizer
+        from unav.navigator.multifloor import FacilityNavigator
+
+        # Configuration constants
+        self.DATA_ROOT = "/root/UNav-IO/data"
+        self.FEATURE_MODEL = "DinoV2Salad"
+        self.LOCAL_FEATURE_MODEL = "superpoint+lightglue"
+        self.PLACES = {
+            "New_York_City": {"LightHouse": ["3_floor", "4_floor", "6_floor"]}
+        }
+
+        print("🔧 Initializing UNavConfig...")
+        self.config = UNavConfig(
+            data_final_root=self.DATA_ROOT,
+            places=self.PLACES,
+            global_descriptor_model=self.FEATURE_MODEL,
+            local_feature_model=self.LOCAL_FEATURE_MODEL,
+        )
+        print("✅ UNavConfig initialized successfully")
+
+        # Extract specific sub-configs for localization and navigation modules
+        self.localizor_config = self.config.localizer_config
+        self.navigator_config = self.config.navigator_config
+        print("✅ Config objects extracted successfully")
+
+        print("🤖 Initializing UNavLocalizer...")
+        self.localizer = UNavLocalizer(self.localizor_config)
+
+        print("📊 Loading maps and features...")
+        self.localizer.load_maps_and_features()  # Preload all maps and features
+        print("✅ UNavLocalizer initialized and maps/features loaded successfully")
+
+        print("🧭 Initializing FacilityNavigator...")
+        self.nav = FacilityNavigator(self.navigator_config)
+        print("✅ FacilityNavigator initialized successfully")
+
+        print("🎉 UNav system initialization complete! Ready for fast inference.")
+
     @method()
     def start_server(self):
         import json
@@ -37,66 +85,28 @@ class UnavServer:
         place="New_York_City",
         building="LightHouse",
     ):
+        """
+        Get destinations for a specific place, building, and floor.
+        Uses pre-initialized UNav components for fast response.
+        """
         try:
-            from unav.config import UNavConfig
-            from unav.localizer.localizer import UNavLocalizer
-            from unav.navigator.multifloor import FacilityNavigator
+            print(f"🎯 Getting destinations for {place}/{building}/{floor}")
 
-            DATA_ROOT = (
-                "/root/UNav-IO/data"  # Point to the data subdirectory in the volume
-            )
-            FEATURE_MODEL = "DinoV2Salad"
-            LOCAL_FEATURE_MODEL = "superpoint+lightglue"
-            PLACES = {
-                "New_York_City": {"LightHouse": ["3_floor", "4_floor", "6_floor"]}
-            }
-
-            # Initialize UNav configuration with all necessary parameters
-            config = UNavConfig(
-                data_final_root=DATA_ROOT,
-                places=PLACES,  # Keep hierarchical structure for flexible access
-                global_descriptor_model=FEATURE_MODEL,
-                local_feature_model=LOCAL_FEATURE_MODEL,
-            )
-
-            print("✅ UNavConfig initialized successfully")
-
-            # Extract specific sub-configs for localization and navigation modules
-            localizor_config = config.localizer_config
-            navigator_config = config.navigator_config
-
-            print("✅ Config objects extracted successfully")
-
-            # Initialize global singletons for UNav algorithm modules
-            places = PLACES  # Global place/building/floor info
-
-            print("🔍 Attempting to initialize UNavLocalizer...")
-            localizer = UNavLocalizer(localizor_config)
-
-            print("🔍 Attempting to load maps and features...")
-            localizer.load_maps_and_features()  # Preload all maps and features for fast localization
-
-            print("✅ UNavLocalizer initialized and loaded successfully")
-
-            nav = FacilityNavigator(
-                navigator_config
-            )  # Initialize multi-floor navigator instance
-
-            print("✅ All components initialized successfully")
-
+            # Use pre-initialized components from @enter method
             target_key = (place, building, floor)
-            pf_target = nav.pf_map[target_key]
+            pf_target = self.nav.pf_map[target_key]
 
             destinations = [
                 {"id": str(did), "name": pf_target.labels[did]}
                 for did in pf_target.dest_ids
             ]
 
+            print(f"✅ Found {len(destinations)} destinations")
             return {
                 "status": "success",
                 "destinations": destinations,
             }
 
         except Exception as e:
-            print(f"❌ Error during initialization: {e}")
+            print(f"❌ Error getting destinations: {e}")
             return {"status": "error", "message": str(e), "type": type(e).__name__}
