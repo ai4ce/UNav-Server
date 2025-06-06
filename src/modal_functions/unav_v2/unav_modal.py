@@ -165,7 +165,7 @@ class UnavServer:
     @method()
     def unav_navigation(
         self,
-        user_id: str,
+        session_id: str,
         image,  # np.ndarray (BGR image)
         destination_id: str,
         place: str,
@@ -215,6 +215,7 @@ class UnavServer:
             target_place = place
             target_building = building
             target_floor = floor
+            user_id = session_id
             
             print(f"🧭 Starting navigation for user {user_id}")
 
