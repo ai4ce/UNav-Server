@@ -1,4 +1,7 @@
 from modal import method, gpu, build, enter
+import json
+import traceback
+import numpy as np
 
 from modal_config import app, unav_image, volume
 
@@ -342,6 +345,31 @@ class UnavServer:
                 print(f"   Current: {start_place}/{start_building}/{start_floor}")
                 print(f"   Target: {target_place}/{target_building}/{target_floor}")
                 print(f"   This requires multi-floor navigation")
+            else:
+                print(f"✅ User and destination are on same floor: {start_place}/{start_building}/{start_floor}")
+                
+                # Additional validation for same-floor navigation
+                try:
+                    current_floor_key = (start_place, start_building, start_floor)
+                    if current_floor_key in self.nav.pf_map:
+                        current_pf = self.nav.pf_map[current_floor_key]
+                        print(f"🔍 Current floor map validation:")
+                        print(f"   Floor map loaded: True")
+                        print(f"   Map bounds: {getattr(current_pf, 'bounds', 'N/A')}")
+                        print(f"   Start position {start_xy} within bounds check...")
+                        
+                        # Check if start position is within reasonable bounds
+                        if hasattr(current_pf, 'occupancy_grid'):
+                            grid_shape = current_pf.occupancy_grid.shape
+                            print(f"   Occupancy grid shape: {grid_shape}")
+                            x_valid = 0 <= start_xy[0] <= grid_shape[1] if len(grid_shape) > 1 else True
+                            y_valid = 0 <= start_xy[1] <= grid_shape[0] if len(grid_shape) > 0 else True
+                            print(f"   Position validity: x={x_valid}, y={y_valid}")
+                        
+                    else:
+                        print(f"❌ Current floor key {current_floor_key} not in navigation maps!")
+                except Exception as e:
+                    print(f"⚠️ Error validating current floor: {e}")
 
             # Update user's current floor context and pose for real-time tracking
             self.update_session(
@@ -385,11 +413,22 @@ class UnavServer:
                     except:
                         pass
 
+                    print(f"🔍 Destination ID conversion check:")
+                    print(f"   Original dest_id: {dest_id} (type: {type(dest_id)})")
+                    print(f"   String version: {dest_id_str} (type: {type(dest_id_str)})")
+                    print(f"   Int version: {dest_id_int} (type: {type(dest_id_int)})")
+
                     dest_exists = (
                         dest_id in available_dest_ids
                         or dest_id_int in available_dest_ids
                         or dest_id_str in available_dest_ids
                     )
+                    
+                    print(f"🔍 Destination existence checks:")
+                    print(f"   dest_id in available_dest_ids: {dest_id in available_dest_ids}")
+                    if dest_id_int is not None:
+                        print(f"   dest_id_int in available_dest_ids: {dest_id_int in available_dest_ids}")
+                    print(f"   dest_id_str in available_dest_ids: {dest_id_str in available_dest_ids}")
 
                     if dest_exists:
                         print(f"   ✅ Destination {dest_id} found in target floor")
@@ -401,6 +440,18 @@ class UnavServer:
                             print(
                                 f"   📍 Destination name: {pf_target.labels[dest_id_int]}"
                             )
+                            
+                        # Get destination coordinates if available
+                        dest_coords = None
+                        if hasattr(pf_target, 'destinations') and dest_id_int in pf_target.destinations:
+                            dest_coords = pf_target.destinations[dest_id_int]
+                        elif hasattr(pf_target, 'destinations') and dest_id in pf_target.destinations:
+                            dest_coords = pf_target.destinations[dest_id]
+                        
+                        if dest_coords:
+                            print(f"   📍 Destination coordinates: {dest_coords}")
+                        else:
+                            print(f"   ⚠️ Destination coordinates not found")
                     else:
                         print(f"   ❌ Destination {dest_id} NOT found in target floor")
                         print(f"   Available destinations with names:")
@@ -428,6 +479,14 @@ class UnavServer:
             )
             print(f"   target_floor: {target_floor} (type: {type(target_floor)})")
             print(f"   dest_id: {dest_id} (type: {type(dest_id)})")
+            
+            # Convert dest_id to int if it's a string (common issue)
+            try:
+                dest_id_for_path = int(dest_id)
+                print(f"🔄 Converted dest_id to int: {dest_id_for_path}")
+            except (ValueError, TypeError):
+                dest_id_for_path = dest_id
+                print(f"🔄 Using dest_id as-is: {dest_id_for_path}")
 
             result = self.nav.find_path(
                 start_place,
@@ -437,7 +496,7 @@ class UnavServer:
                 target_place,
                 target_building,
                 target_floor,
-                dest_id,
+                dest_id_for_path,
             )
 
             print(f"🔍 Path planning result type: {type(result)}")
