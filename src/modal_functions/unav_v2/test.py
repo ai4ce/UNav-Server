@@ -12,7 +12,7 @@ def main():
         full_image_path = os.path.join(
             current_directory, "sample_image_7.jpg"
         )
-        destination_id = "03727"
+        destination_id = "42"
         floor = "3_floor"
         with open(full_image_path, "rb") as image_file:
             image_data = image_file.read()
