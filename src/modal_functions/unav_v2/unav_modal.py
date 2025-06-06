@@ -60,7 +60,7 @@ class UnavServer:
         print("🧭 Initializing FacilityNavigator...")
         self.nav = FacilityNavigator(self.navigator_config)
         print("✅ FacilityNavigator initialized successfully")
-        
+
         # Store commander function for navigation
         self.commander = commands_from_result
 
@@ -114,7 +114,7 @@ class UnavServer:
         except Exception as e:
             print(f"❌ Error getting destinations: {e}")
             return {"status": "error", "message": str(e), "type": type(e).__name__}
-    
+
     @method()
     def unav_navigation(
         self,
@@ -129,85 +129,13 @@ class UnavServer:
         language: str = "en",
         refinement_queue: dict = None,
     ):
-        """
-        Full localization and navigation pipeline.
-        - Performs localization from query image.
-        - Plans path to user-selected destination.
-        - Generates human-readable navigation commands.
+        pass
 
-        Args:
-            user_id: User identifier
-            image: BGR image for localization
-            dest_id: Destination ID
-            target_place: Target place name
-            target_building: Target building name
-            target_floor: Target floor name
-            top_k: Optional localization parameter
-            unit: Unit for distances (default: "feet")
-            language: Language for commands (default: "en")
-            refinement_queue: Optional refinement queue for localization
-
-        Returns:
-            dict: {
-                "result": dict (path info),
-                "cmds": list(str) (step-by-step instructions),
-                "best_map_key": tuple(str, str, str) (current floor),
-                "floorplan_pose": dict (current pose)
-            }
-            or dict with "error" key on failure.
-        """
-        try:
-            # Set default for mutable argument
-            if refinement_queue is None:
-                refinement_queue = {}
-            
-            query_img = image
-
-            print(f"🧭 Starting navigation for user {user_id} to {target_place}/{target_building}/{target_floor}")
-
-            # Perform localization using pre-initialized localizer
-            output = self.localizer.localize(query_img, refinement_queue, top_k=top_k)
-            if output is None or "floorplan_pose" not in output:
-                return {"error": "Localization failed, no pose found."}
-
-            floorplan_pose = output["floorplan_pose"]
-            start_xy, start_heading = floorplan_pose["xy"], -floorplan_pose["ang"]
-            source_key = output["best_map_key"]
-            start_place, start_building, start_floor = source_key
-
-            print(f"📍 Localized user at {start_place}/{start_building}/{start_floor}")
-
-            # Plan navigation path to destination using pre-initialized navigator
-            result = self.nav.find_path(
-                start_place, start_building, start_floor, start_xy,
-                target_place, target_building, target_floor, dest_id
-            )
-
-            # Generate spoken/navigation commands using pre-initialized commander
-            cmds = self.commander(
-                self.nav, result, initial_heading=start_heading, unit=unit, language=language
-            )
-
-            print(f"✅ Navigation path calculated with {len(cmds)} commands")
-
-            # Return all relevant info - convert to JSON-serializable format
-            return {
-                "result": self._safe_serialize(result),
-                "cmds": self._safe_serialize(cmds),
-                "best_map_key": self._safe_serialize(source_key),
-                "floorplan_pose": self._safe_serialize(floorplan_pose),
-                "refinement_queue": self._safe_serialize(output["refinement_queue"]),
-            }
-            
-        except Exception as e:
-            print(f"❌ Error in navigation: {e}")
-            return {"error": str(e), "type": type(e).__name__}
-    
     def _safe_serialize(self, obj):
         """Helper method to safely serialize objects for JSON response"""
         import json
         import numpy as np
-        
+
         def convert_obj(o):
             if isinstance(o, np.ndarray):
                 return o.tolist()
@@ -221,5 +149,5 @@ class UnavServer:
                 return [convert_obj(item) for item in o]
             else:
                 return o
-        
+
         return convert_obj(obj)
