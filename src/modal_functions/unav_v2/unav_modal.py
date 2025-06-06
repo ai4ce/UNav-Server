@@ -178,10 +178,14 @@ class UnavServer:
     ):
         """
         Full localization and navigation pipeline.
-        - Performs localization from query image.
-        - Updates user's current position and floor context.
-        - Plans path to user-selected destination.
-        - Generates human-readable navigation commands.
+        - Automatically sets navigation context in user session
+        - Performs localization from query image
+        - Updates user's current position and floor context
+        - Plans path to user-selected destination
+        - Generates human-readable navigation commands
+
+        This method is self-contained and automatically manages the navigation context.
+        No need to call set_navigation_context() separately.
 
         Args:
             user_id (str): Unique identifier for the user
@@ -197,12 +201,14 @@ class UnavServer:
 
         Returns:
             dict: {
+                "status": "success",
                 "result": dict (path info),
                 "cmds": list(str) (step-by-step instructions),
                 "best_map_key": tuple(str, str, str) (current floor),
-                "floorplan_pose": dict (current pose)
+                "floorplan_pose": dict (current pose),
+                "navigation_info": dict (summary information)
             }
-            or dict with "error" key on failure.
+            or dict with "status": "error", "error": str on failure.
         """
         try:
             print(f"🧭 Starting navigation for user {user_id}")
@@ -236,6 +242,20 @@ class UnavServer:
                         "target_floor": target_floor is None,
                     },
                 }
+
+            # Automatically set/update navigation context in session
+            print("📝 Setting navigation context in user session")
+            self.update_session(
+                user_id,
+                {
+                    "selected_dest_id": dest_id,
+                    "target_place": target_place,
+                    "target_building": target_building,
+                    "target_floor": target_floor,
+                    "unit": unit,
+                    "language": language,
+                },
+            )
 
             # Use provided refinement queue or get from session
             if refinement_queue is None:
