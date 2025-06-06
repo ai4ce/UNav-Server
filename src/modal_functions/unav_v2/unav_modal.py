@@ -220,11 +220,8 @@ class UnavServer:
             target_floor = floor
             user_id = session_id
 
-            print(f"🧭 Starting navigation for user {user_id}")
-
             # Get user session
             session = self.get_session(user_id)
-            print(f"🔍 Current session for user {user_id}: {session}")
 
             # Use provided parameters or fallback to session values
             if not dest_id:
@@ -240,14 +237,6 @@ class UnavServer:
             if language == "en":
                 language = session.get("language", "en")
 
-            print(f"🔍 Final navigation parameters:")
-            print(f"   dest_id: {dest_id}")
-            print(f"   target_place: {target_place}")
-            print(f"   target_building: {target_building}")
-            print(f"   target_floor: {target_floor}")
-            print(f"   unit: {unit}")
-            print(f"   language: {language}")
-
             # Check for required navigation context
             if not all([dest_id, target_place, target_building, target_floor]):
                 return {
@@ -262,7 +251,6 @@ class UnavServer:
                 }
 
             # Automatically set/update navigation context in session
-            print("📝 Setting navigation context in user session")
             self.update_session(
                 user_id,
                 {
@@ -279,34 +267,10 @@ class UnavServer:
             if refinement_queue is None:
                 refinement_queue = session.get("refinement_queue") or {}
 
-            print(
-                f"📍 Localizing user at {target_place}/{target_building}/{target_floor}"
-            )
-
             # Perform localization
-            print(f"🔍 Calling localizer.localize with:")
-            print(
-                f"   Image shape: {image.shape if hasattr(image, 'shape') else 'Unknown'}"
-            )
-            print(f"   Image type: {type(image)}")
-            print(f"   Refinement queue: {refinement_queue}")
-            print(f"   Top K: {top_k}")
-
             output = self.localizer.localize(image, refinement_queue, top_k=top_k)
-            print(f"🔍 Localization output type: {type(output)}")
-            print(
-                f"🔍 Localization output keys: {list(output.keys()) if isinstance(output, dict) else 'Not a dict'}"
-            )
-            print(f"🔍 Full localization output: {output}")
-
+            
             if output is None or "floorplan_pose" not in output:
-                print("❌ Localization failed - no output or missing floorplan_pose")
-                if output is None:
-                    print("   Output is None - possible image processing failure")
-                else:
-                    print(
-                        f"   Output missing floorplan_pose. Available keys: {list(output.keys()) if isinstance(output, dict) else 'Not a dict'}"
-                    )
                 return {
                     "status": "error",
                     "error": "Localization failed, no pose found.",
@@ -317,19 +281,8 @@ class UnavServer:
             source_key = output["best_map_key"]
             start_place, start_building, start_floor = source_key
 
-            print(f"✅ Localized at {start_place}/{start_building}/{start_floor}")
-            print(f"📍 Position: {start_xy}, Heading: {start_heading}")
-            print(f"🔍 Source key: {source_key}")
-            print(f"🔍 Floorplan pose details:")
-            print(f"   xy: {floorplan_pose['xy']} (type: {type(floorplan_pose['xy'])})")
-            print(
-                f"   ang: {floorplan_pose['ang']} (type: {type(floorplan_pose['ang'])})"
-            )
-            print(f"   confidence: {floorplan_pose.get('confidence', 'N/A')}")
-
             # Validate start position
             if start_xy is None or len(start_xy) != 2:
-                print(f"❌ Invalid start position: {start_xy}")
                 return {
                     "status": "error",
                     "error": "Invalid start position from localization.",
@@ -341,35 +294,8 @@ class UnavServer:
                 target_building,
                 target_floor,
             ):
-                print(f"⚠️ User is on different floor than destination!")
-                print(f"   Current: {start_place}/{start_building}/{start_floor}")
-                print(f"   Target: {target_place}/{target_building}/{target_floor}")
-                print(f"   This requires multi-floor navigation")
-            else:
-                print(f"✅ User and destination are on same floor: {start_place}/{start_building}/{start_floor}")
-                
-                # Additional validation for same-floor navigation
-                try:
-                    current_floor_key = (start_place, start_building, start_floor)
-                    if current_floor_key in self.nav.pf_map:
-                        current_pf = self.nav.pf_map[current_floor_key]
-                        print(f"🔍 Current floor map validation:")
-                        print(f"   Floor map loaded: True")
-                        print(f"   Map bounds: {getattr(current_pf, 'bounds', 'N/A')}")
-                        print(f"   Start position {start_xy} within bounds check...")
-                        
-                        # Check if start position is within reasonable bounds
-                        if hasattr(current_pf, 'occupancy_grid'):
-                            grid_shape = current_pf.occupancy_grid.shape
-                            print(f"   Occupancy grid shape: {grid_shape}")
-                            x_valid = 0 <= start_xy[0] <= grid_shape[1] if len(grid_shape) > 1 else True
-                            y_valid = 0 <= start_xy[1] <= grid_shape[0] if len(grid_shape) > 0 else True
-                            print(f"   Position validity: x={x_valid}, y={y_valid}")
-                        
-                    else:
-                        print(f"❌ Current floor key {current_floor_key} not in navigation maps!")
-                except Exception as e:
-                    print(f"⚠️ Error validating current floor: {e}")
+                # Multi-floor navigation will be handled by the navigator
+                pass
 
             # Update user's current floor context and pose for real-time tracking
             self.update_session(
@@ -383,111 +309,13 @@ class UnavServer:
                 },
             )
 
-            print(f"🎯 Planning path to destination {dest_id}")
-            print(f"📊 Path planning parameters:")
-            print(
-                f"   Start: {start_place}/{start_building}/{start_floor} at {start_xy}"
-            )
-            print(f"   Target: {target_place}/{target_building}/{target_floor}")
-            print(f"   Destination ID: {dest_id}")
-
-            # Check if destination exists in target floor
-            try:
-                target_key = (target_place, target_building, target_floor)
-                print(f"🔍 Checking if destination exists in target floor...")
-                print(f"   Target key: {target_key}")
-
-                if target_key in self.nav.pf_map:
-                    pf_target = self.nav.pf_map[target_key]
-                    available_dest_ids = list(pf_target.dest_ids)
-                    print(f"   Available destination IDs: {available_dest_ids}")
-                    print(
-                        f"   Requested destination ID: {dest_id} (type: {type(dest_id)})"
-                    )
-
-                    # Check if dest_id exists (try both string and int versions)
-                    dest_id_int = None
-                    dest_id_str = str(dest_id)
-                    try:
-                        dest_id_int = int(dest_id)
-                    except:
-                        pass
-
-                    print(f"🔍 Destination ID conversion check:")
-                    print(f"   Original dest_id: {dest_id} (type: {type(dest_id)})")
-                    print(f"   String version: {dest_id_str} (type: {type(dest_id_str)})")
-                    print(f"   Int version: {dest_id_int} (type: {type(dest_id_int)})")
-
-                    dest_exists = (
-                        dest_id in available_dest_ids
-                        or dest_id_int in available_dest_ids
-                        or dest_id_str in available_dest_ids
-                    )
-                    
-                    print(f"🔍 Destination existence checks:")
-                    print(f"   dest_id in available_dest_ids: {dest_id in available_dest_ids}")
-                    if dest_id_int is not None:
-                        print(f"   dest_id_int in available_dest_ids: {dest_id_int in available_dest_ids}")
-                    print(f"   dest_id_str in available_dest_ids: {dest_id_str in available_dest_ids}")
-
-                    if dest_exists:
-                        print(f"   ✅ Destination {dest_id} found in target floor")
-                        if dest_id in pf_target.labels:
-                            print(
-                                f"   📍 Destination name: {pf_target.labels[dest_id]}"
-                            )
-                        elif dest_id_int and dest_id_int in pf_target.labels:
-                            print(
-                                f"   📍 Destination name: {pf_target.labels[dest_id_int]}"
-                            )
-                            
-                        # Get destination coordinates if available
-                        dest_coords = None
-                        if hasattr(pf_target, 'destinations') and dest_id_int in pf_target.destinations:
-                            dest_coords = pf_target.destinations[dest_id_int]
-                        elif hasattr(pf_target, 'destinations') and dest_id in pf_target.destinations:
-                            dest_coords = pf_target.destinations[dest_id]
-                        
-                        if dest_coords:
-                            print(f"   📍 Destination coordinates: {dest_coords}")
-                        else:
-                            print(f"   ⚠️ Destination coordinates not found")
-                    else:
-                        print(f"   ❌ Destination {dest_id} NOT found in target floor")
-                        print(f"   Available destinations with names:")
-                        for did in available_dest_ids:
-                            name = pf_target.labels.get(did, "Unknown")
-                            print(f"     ID: {did} (type: {type(did)}) -> Name: {name}")
-                else:
-                    print(
-                        f"   ❌ Target floor key {target_key} not found in navigation maps"
-                    )
-                    print(f"   Available floor keys: {list(self.nav.pf_map.keys())}")
-
-            except Exception as e:
-                print(f"   ⚠️ Error checking destination existence: {e}")
-
-            # Plan navigation path to destination
-            print(f"🚀 Calling nav.find_path with parameters:")
-            print(f"   start_place: {start_place} (type: {type(start_place)})")
-            print(f"   start_building: {start_building} (type: {type(start_building)})")
-            print(f"   start_floor: {start_floor} (type: {type(start_floor)})")
-            print(f"   start_xy: {start_xy} (type: {type(start_xy)})")
-            print(f"   target_place: {target_place} (type: {type(target_place)})")
-            print(
-                f"   target_building: {target_building} (type: {type(target_building)})"
-            )
-            print(f"   target_floor: {target_floor} (type: {type(target_floor)})")
-            print(f"   dest_id: {dest_id} (type: {type(dest_id)})")
-            
             # Convert dest_id to int if it's a string (common issue)
             try:
                 dest_id_for_path = int(dest_id)
-                print(f"🔄 Converted dest_id to int: {dest_id_for_path}")
             except (ValueError, TypeError):
                 dest_id_for_path = dest_id
-                print(f"🔄 Using dest_id as-is: {dest_id_for_path}")
 
+            # Plan navigation path to destination
             result = self.nav.find_path(
                 start_place,
                 start_building,
@@ -499,15 +327,7 @@ class UnavServer:
                 dest_id_for_path,
             )
 
-            print(f"🔍 Path planning result type: {type(result)}")
-            print(f"🔍 Path planning result: {result}")
-
             if result is None:
-                print("❌ Path planning returned None")
-                print("🔍 Possible reasons:")
-                print("   - Invalid start or destination coordinates")
-                print("   - No valid path exists between start and destination")
-                print("   - Floor connectivity issues")
                 return {
                     "status": "error",
                     "error": "Path planning failed. Could not find route to destination.",
@@ -515,75 +335,19 @@ class UnavServer:
 
             # Check if result contains an error
             if isinstance(result, dict) and "error" in result:
-                print(f"❌ Path planning failed with error: {result['error']}")
-                print("🔍 Error details:")
-                if "message" in result:
-                    print(f"   Message: {result['message']}")
-                if "details" in result:
-                    print(f"   Details: {result['details']}")
-                print("🔍 Possible solutions:")
-                print("   - Check if destination ID exists in the target floor")
-                print("   - Verify floor connectivity in navigation maps")
-                print("   - Ensure start position is valid on the current floor")
                 return {
                     "status": "error",
                     "error": f"Path planning failed: {result['error']}",
                 }
 
-            # Check result structure and content
-            print("🔍 Analyzing path planning result:")
-            if isinstance(result, dict):
-                print(f"   Result keys: {list(result.keys())}")
-                if "path" in result:
-                    print(
-                        f"   Path length: {len(result['path']) if result['path'] else 0}"
-                    )
-                if "waypoints" in result:
-                    print(
-                        f"   Waypoints count: {len(result['waypoints']) if result['waypoints'] else 0}"
-                    )
-                if "floors" in result:
-                    print(f"   Floors involved: {result['floors']}")
-                if "total_distance" in result:
-                    print(f"   Total distance: {result['total_distance']}")
-            else:
-                print(f"   Result is not a dict, type: {type(result)}")
-                print(f"   Result content: {result}")
-
-            print("🗣️ Generating navigation commands")
-            print(f"🔍 Commander parameters:")
-            print(f"   Navigator: {type(self.nav)}")
-            print(f"   Result: {result}")
-            print(f"   Initial heading: {start_heading}")
-            print(f"   Unit: {unit}")
-            print(f"   Language: {language}")
-
             # Generate spoken/navigation commands
-            try:
-                cmds = self.commander(
-                    self.nav,
-                    result,
-                    initial_heading=start_heading,
-                    unit=unit,
-                    language=language,
-                )
-                print(f"✅ Successfully generated {len(cmds)} navigation commands")
-                for i, cmd in enumerate(cmds, 1):
-                    print(f"   Command {i}: {cmd}")
-
-            except Exception as cmd_error:
-                print(f"❌ Command generation failed: {cmd_error}")
-                print(f"🔍 Command generation error type: {type(cmd_error)}")
-                import traceback
-
-                traceback.print_exc()
-                return {
-                    "status": "error",
-                    "error": f"Command generation failed: {str(cmd_error)}",
-                    "path_result": self._safe_serialize(result),
-                }
-
-            print(f"✅ Navigation completed successfully with {len(cmds)} commands")
+            cmds = self.commander(
+                self.nav,
+                result,
+                initial_heading=start_heading,
+                unit=unit,
+                language=language,
+            )
 
             # Return all relevant info safely serialized for JSON
             return {
@@ -602,27 +366,13 @@ class UnavServer:
             }
 
         except Exception as e:
-            print(f"❌ Navigation error: {e}")
-            print(f"🔍 Error type: {type(e).__name__}")
-            print(f"🔍 Error details: {str(e)}")
-
             # Log current state for debugging
             try:
                 session = self.get_session(user_id)
-                print(f"🔍 Current session state: {session}")
             except:
-                print("🔍 Could not retrieve session state")
-
-            print(f"🔍 Navigation parameters at error:")
-            print(f"   user_id: {locals().get('user_id', 'N/A')}")
-            print(f"   dest_id: {locals().get('dest_id', 'N/A')}")
-            print(f"   target_place: {locals().get('target_place', 'N/A')}")
-            print(f"   target_building: {locals().get('target_building', 'N/A')}")
-            print(f"   target_floor: {locals().get('target_floor', 'N/A')}")
+                session = None
 
             import traceback
-
-            print("🔍 Full traceback:")
             traceback.print_exc()
 
             return {"status": "error", "error": str(e), "type": type(e).__name__}
