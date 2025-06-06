@@ -168,9 +168,9 @@ class UnavServer:
         user_id: str,
         image,  # np.ndarray (BGR image)
         destination_id: str,
-        target_place: str,
-        target_building: str,
-        target_floor: str,
+        place: str,
+        building: str,
+        floor: str,
         top_k: int = None,
         unit: str = "feet",
         language: str = "en",
@@ -212,6 +212,10 @@ class UnavServer:
         """
         try:
             dest_id = destination_id
+            target_place = place
+            target_building = building
+            target_floor = floor
+            
             print(f"🧭 Starting navigation for user {user_id}")
 
             # Get user session
