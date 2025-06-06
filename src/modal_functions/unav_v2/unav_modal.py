@@ -13,7 +13,7 @@ from modal_config import app, unav_image, volume
     enable_memory_snapshot=True,
     concurrency_limit=20,
     allow_concurrent_inputs=20,
-    memory=16152,
+    memory=48152,
     container_idle_timeout=60,
 )
 class UnavServer:
