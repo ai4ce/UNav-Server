@@ -21,7 +21,6 @@ class UnavServer:
         # Initialize session storage for user contexts
         self.user_sessions = {}
 
-    @enter()
     @build()
     def initialize_unav_system(self):
         """
