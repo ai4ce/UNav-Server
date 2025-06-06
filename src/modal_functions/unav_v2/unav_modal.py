@@ -180,40 +180,18 @@ class UnavServer:
         refinement_queue: dict = None,
     ):
         """
-        Full localization and navigation pipeline.
-        - Automatically sets navigation context in user session
-        - Performs localization from query image
-        - Updates user's current position and floor context
-        - Plans path to user-selected destination
-        - Generates human-readable navigation commands
-
-        This method is self-contained and automatically manages the navigation context.
-        No need to call set_navigation_context() separately.
-
-        Args:
-            user_id (str): Unique identifier for the user
-            image (np.ndarray): BGR image for localization
-            dest_id (str): Destination ID to navigate to
-            target_place (str): Target place name
-            target_building (str): Target building name
-            target_floor (str): Target floor name
-            top_k (int, optional): Number of top candidates for localization
-            unit (str): Unit for distance measurements (default: "feet")
-            language (str): Language for navigation commands (default: "en")
-            refinement_queue (dict, optional): Refinement queue for localization
-
-        Returns:
-            dict: {
-                "status": "success",
-                "result": dict (path info),
-                "cmds": list(str) (step-by-step instructions),
-                "best_map_key": tuple(str, str, str) (current floor),
-                "floorplan_pose": dict (current pose),
-                "navigation_info": dict (summary information)
-            }
-            or dict with "status": "error", "error": str on failure.
+        Full localization and navigation pipeline with timing tracking.
         """
+        import time
+
+        # Start total timing
+        start_time = time.time()
+        timing_data = {}
+
         try:
+            # Step 1: Setup and session management
+            setup_start = time.time()
+
             dest_id = destination_id
             target_place = place
             target_building = building
@@ -267,14 +245,27 @@ class UnavServer:
             if refinement_queue is None:
                 refinement_queue = session.get("refinement_queue") or {}
 
+            timing_data["setup"] = (time.time() - setup_start) * 1000  # Convert to ms
+            print(f"⏱️ Setup: {timing_data['setup']:.2f}ms")
+
+            # Step 2: Localization
+            localization_start = time.time()
+
             # Perform localization
             output = self.localizer.localize(image, refinement_queue, top_k=top_k)
-            
+
+            timing_data["localization"] = (time.time() - localization_start) * 1000
+            print(f"⏱️ Localization: {timing_data['localization']:.2f}ms")
+
             if output is None or "floorplan_pose" not in output:
                 return {
                     "status": "error",
                     "error": "Localization failed, no pose found.",
+                    "timing": timing_data,
                 }
+
+            # Step 3: Process localization results
+            processing_start = time.time()
 
             floorplan_pose = output["floorplan_pose"]
             start_xy, start_heading = floorplan_pose["xy"], -floorplan_pose["ang"]
@@ -286,6 +277,7 @@ class UnavServer:
                 return {
                     "status": "error",
                     "error": "Invalid start position from localization.",
+                    "timing": timing_data,
                 }
 
             # Check if we're on the right floor for navigation
@@ -315,6 +307,12 @@ class UnavServer:
             except (ValueError, TypeError):
                 dest_id_for_path = dest_id
 
+            timing_data["processing"] = (time.time() - processing_start) * 1000
+            print(f"⏱️ Processing: {timing_data['processing']:.2f}ms")
+
+            # Step 4: Path planning
+            path_planning_start = time.time()
+
             # Plan navigation path to destination
             result = self.nav.find_path(
                 start_place,
@@ -327,10 +325,14 @@ class UnavServer:
                 dest_id_for_path,
             )
 
+            timing_data["path_planning"] = (time.time() - path_planning_start) * 1000
+            print(f"⏱️ Path Planning: {timing_data['path_planning']:.2f}ms")
+
             if result is None:
                 return {
                     "status": "error",
                     "error": "Path planning failed. Could not find route to destination.",
+                    "timing": timing_data,
                 }
 
             # Check if result contains an error
@@ -338,7 +340,11 @@ class UnavServer:
                 return {
                     "status": "error",
                     "error": f"Path planning failed: {result['error']}",
+                    "timing": timing_data,
                 }
+
+            # Step 5: Command generation
+            command_generation_start = time.time()
 
             # Generate spoken/navigation commands
             cmds = self.commander(
@@ -349,13 +355,54 @@ class UnavServer:
                 language=language,
             )
 
+            timing_data["command_generation"] = (
+                time.time() - command_generation_start
+            ) * 1000
+            print(f"⏱️ Command Generation: {timing_data['command_generation']:.2f}ms")
+
+            # Step 6: Serialization
+            serialization_start = time.time()
+
+            serialized_result = self._safe_serialize(result)
+            serialized_cmds = self._safe_serialize(cmds)
+            serialized_source_key = self._safe_serialize(source_key)
+            serialized_floorplan_pose = self._safe_serialize(floorplan_pose)
+
+            timing_data["serialization"] = (time.time() - serialization_start) * 1000
+            print(f"⏱️ Serialization: {timing_data['serialization']:.2f}ms")
+
+            # Calculate total time
+            timing_data["total"] = (time.time() - start_time) * 1000
+            print(f"⏱️ Total Navigation Time: {timing_data['total']:.2f}ms")
+
+            # Print summary
+            print(f"📊 Timing Breakdown:")
+            print(
+                f"   Setup: {timing_data['setup']:.1f}ms ({timing_data['setup']/timing_data['total']*100:.1f}%)"
+            )
+            print(
+                f"   Localization: {timing_data['localization']:.1f}ms ({timing_data['localization']/timing_data['total']*100:.1f}%)"
+            )
+            print(
+                f"   Processing: {timing_data['processing']:.1f}ms ({timing_data['processing']/timing_data['total']*100:.1f}%)"
+            )
+            print(
+                f"   Path Planning: {timing_data['path_planning']:.1f}ms ({timing_data['path_planning']/timing_data['total']*100:.1f}%)"
+            )
+            print(
+                f"   Commands: {timing_data['command_generation']:.1f}ms ({timing_data['command_generation']/timing_data['total']*100:.1f}%)"
+            )
+            print(
+                f"   Serialization: {timing_data['serialization']:.1f}ms ({timing_data['serialization']/timing_data['total']*100:.1f}%)"
+            )
+
             # Return all relevant info safely serialized for JSON
             return {
                 "status": "success",
-                "result": self._safe_serialize(result),
-                "cmds": self._safe_serialize(cmds),
-                "best_map_key": self._safe_serialize(source_key),
-                "floorplan_pose": self._safe_serialize(floorplan_pose),
+                "result": serialized_result,
+                "cmds": serialized_cmds,
+                "best_map_key": serialized_source_key,
+                "floorplan_pose": serialized_floorplan_pose,
                 "navigation_info": {
                     "start_location": f"{start_place}/{start_building}/{start_floor}",
                     "destination": f"{target_place}/{target_building}/{target_floor}",
@@ -363,9 +410,13 @@ class UnavServer:
                     "unit": unit,
                     "language": language,
                 },
+                "timing": timing_data,  # Include timing data in response
             }
 
         except Exception as e:
+            # Calculate partial timing data
+            timing_data["total"] = (time.time() - start_time) * 1000
+
             # Log current state for debugging
             try:
                 session = self.get_session(user_id)
@@ -373,9 +424,15 @@ class UnavServer:
                 session = None
 
             import traceback
+
             traceback.print_exc()
 
-            return {"status": "error", "error": str(e), "type": type(e).__name__}
+            return {
+                "status": "error",
+                "error": str(e),
+                "type": type(e).__name__,
+                "timing": timing_data,
+            }
 
     def _safe_serialize(self, obj):
         """Helper method to safely serialize objects for JSON response"""
