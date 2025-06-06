@@ -14,6 +14,10 @@ from modal_config import app, unav_image, volume
     container_idle_timeout=60,
 )
 class UnavServer:
+    def __init__(self):
+        # Initialize session storage for user contexts
+        self.user_sessions = {}
+
     @enter()
     def initialize_unav_system(self):
         """
@@ -65,6 +69,49 @@ class UnavServer:
         self.commander = commands_from_result
 
         print("🎉 UNav system initialization complete! Ready for fast inference.")
+
+    def get_session(self, user_id: str) -> dict:
+        """Get or create user session"""
+        if user_id not in self.user_sessions:
+            self.user_sessions[user_id] = {}
+        return self.user_sessions[user_id]
+
+    def update_session(self, user_id: str, updates: dict):
+        """Update user session with new data"""
+        session = self.get_session(user_id)
+        session.update(updates)
+
+    @method()
+    def set_navigation_context(
+        self,
+        user_id: str,
+        dest_id: str,
+        target_place: str,
+        target_building: str,
+        target_floor: str,
+        unit: str = "feet",
+        language: str = "en",
+    ):
+        """Set navigation context for a user session"""
+        try:
+            self.update_session(
+                user_id,
+                {
+                    "selected_dest_id": dest_id,
+                    "target_place": target_place,
+                    "target_building": target_building,
+                    "target_floor": target_floor,
+                    "unit": unit,
+                    "language": language,
+                },
+            )
+
+            return {
+                "status": "success",
+                "message": "Navigation context set successfully",
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e), "type": type(e).__name__}
 
     @method()
     def start_server(self):
@@ -129,7 +176,158 @@ class UnavServer:
         language: str = "en",
         refinement_queue: dict = None,
     ):
-        pass
+        """
+        Full localization and navigation pipeline.
+        - Performs localization from query image.
+        - Updates user's current position and floor context.
+        - Plans path to user-selected destination.
+        - Generates human-readable navigation commands.
+
+        Args:
+            user_id (str): Unique identifier for the user
+            image (np.ndarray): BGR image for localization
+            dest_id (str): Destination ID to navigate to
+            target_place (str): Target place name
+            target_building (str): Target building name
+            target_floor (str): Target floor name
+            top_k (int, optional): Number of top candidates for localization
+            unit (str): Unit for distance measurements (default: "feet")
+            language (str): Language for navigation commands (default: "en")
+            refinement_queue (dict, optional): Refinement queue for localization
+
+        Returns:
+            dict: {
+                "result": dict (path info),
+                "cmds": list(str) (step-by-step instructions),
+                "best_map_key": tuple(str, str, str) (current floor),
+                "floorplan_pose": dict (current pose)
+            }
+            or dict with "error" key on failure.
+        """
+        try:
+            print(f"🧭 Starting navigation for user {user_id}")
+
+            # Get user session
+            session = self.get_session(user_id)
+
+            # Use provided parameters or fallback to session values
+            if not dest_id:
+                dest_id = session.get("selected_dest_id")
+            if not target_place:
+                target_place = session.get("target_place")
+            if not target_building:
+                target_building = session.get("target_building")
+            if not target_floor:
+                target_floor = session.get("target_floor")
+            if unit == "feet":
+                unit = session.get("unit", "feet")
+            if language == "en":
+                language = session.get("language", "en")
+
+            # Check for required navigation context
+            if not all([dest_id, target_place, target_building, target_floor]):
+                return {
+                    "status": "error",
+                    "error": "Incomplete navigation context. Please select a destination.",
+                    "missing_fields": {
+                        "dest_id": dest_id is None,
+                        "target_place": target_place is None,
+                        "target_building": target_building is None,
+                        "target_floor": target_floor is None,
+                    },
+                }
+
+            # Use provided refinement queue or get from session
+            if refinement_queue is None:
+                refinement_queue = session.get("refinement_queue") or {}
+
+            print(
+                f"📍 Localizing user at {target_place}/{target_building}/{target_floor}"
+            )
+
+            # Perform localization
+            output = self.localizer.localize(image, refinement_queue, top_k=top_k)
+            if output is None or "floorplan_pose" not in output:
+                return {
+                    "status": "error",
+                    "error": "Localization failed, no pose found.",
+                }
+
+            floorplan_pose = output["floorplan_pose"]
+            start_xy, start_heading = floorplan_pose["xy"], -floorplan_pose["ang"]
+            source_key = output["best_map_key"]
+            start_place, start_building, start_floor = source_key
+
+            print(f"✅ Localized at {start_place}/{start_building}/{start_floor}")
+            print(f"📍 Position: {start_xy}, Heading: {start_heading}")
+
+            # Update user's current floor context and pose for real-time tracking
+            self.update_session(
+                user_id,
+                {
+                    "current_place": start_place,
+                    "current_building": start_building,
+                    "current_floor": start_floor,
+                    "floorplan_pose": floorplan_pose,
+                    "refinement_queue": output["refinement_queue"],
+                },
+            )
+
+            print(f"🎯 Planning path to destination {dest_id}")
+
+            # Plan navigation path to destination
+            result = self.nav.find_path(
+                start_place,
+                start_building,
+                start_floor,
+                start_xy,
+                target_place,
+                target_building,
+                target_floor,
+                dest_id,
+            )
+
+            if result is None:
+                return {
+                    "status": "error",
+                    "error": "Path planning failed. Could not find route to destination.",
+                }
+
+            print("🗣️ Generating navigation commands")
+
+            # Generate spoken/navigation commands
+            cmds = self.commander(
+                self.nav,
+                result,
+                initial_heading=start_heading,
+                unit=unit,
+                language=language,
+            )
+
+            print(f"✅ Navigation completed successfully with {len(cmds)} commands")
+
+            # Return all relevant info safely serialized for JSON
+            return {
+                "status": "success",
+                "result": self._safe_serialize(result),
+                "cmds": self._safe_serialize(cmds),
+                "best_map_key": self._safe_serialize(source_key),
+                "floorplan_pose": self._safe_serialize(floorplan_pose),
+                "navigation_info": {
+                    "start_location": f"{start_place}/{start_building}/{start_floor}",
+                    "destination": f"{target_place}/{target_building}/{target_floor}",
+                    "dest_id": dest_id,
+                    "unit": unit,
+                    "language": language,
+                },
+            }
+
+        except Exception as e:
+            print(f"❌ Navigation error: {e}")
+            import traceback
+
+            traceback.print_exc()
+            return {"status": "error", "error": str(e), "type": type(e).__name__}
 
     def _safe_serialize(self, obj):
         """Helper method to safely serialize objects for JSON response"""
@@ -151,3 +349,94 @@ class UnavServer:
                 return o
 
         return convert_obj(obj)
+
+    @method()
+    def get_user_session(self, user_id: str):
+        """Get current user session data"""
+        try:
+            session = self.get_session(user_id)
+            return {"status": "success", "session": self._safe_serialize(session)}
+        except Exception as e:
+            return {"status": "error", "message": str(e), "type": type(e).__name__}
+
+    @method()
+    def clear_user_session(self, user_id: str):
+        """Clear user session data"""
+        try:
+            if user_id in self.user_sessions:
+                del self.user_sessions[user_id]
+            return {
+                "status": "success",
+                "message": f"Session cleared for user {user_id}",
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e), "type": type(e).__name__}
+
+    @method()
+    def unav_navigation_simple(self, inputs: dict):
+        """
+        Simplified navigation interface that matches the original function signature.
+
+        Args:
+            inputs (dict): {
+                "user_id": str,
+                "image": np.ndarray (BGR image),
+                "top_k": Optional[int]
+            }
+
+        Returns:
+            dict: {
+                "result": dict (path info),
+                "cmds": list(str) (step-by-step instructions),
+                "best_map_key": tuple(str, str, str) (current floor),
+                "floorplan_pose": dict (current pose)
+            }
+            or dict with "error" key on failure.
+        """
+        try:
+            user_id = inputs["user_id"]
+            image = inputs["image"]
+            top_k = inputs.get("top_k", None)
+
+            session = self.get_session(user_id)
+
+            # Check for required navigation context
+            dest_id = session.get("selected_dest_id")
+            target_place = session.get("target_place")
+            target_building = session.get("target_building")
+            target_floor = session.get("target_floor")
+            unit = session.get("unit", "feet")
+            user_lang = session.get("language", "en")
+
+            if not all([dest_id, target_place, target_building, target_floor]):
+                return {
+                    "error": "Incomplete navigation context. Please select a destination."
+                }
+
+            # Call the main navigation method
+            result = self.unav_navigation(
+                user_id=user_id,
+                image=image,
+                dest_id=dest_id,
+                target_place=target_place,
+                target_building=target_building,
+                target_floor=target_floor,
+                top_k=top_k,
+                unit=unit,
+                language=user_lang,
+                refinement_queue=session.get("refinement_queue"),
+            )
+
+            # Return in the expected format
+            if result.get("status") == "success":
+                return {
+                    "result": result["result"],
+                    "cmds": result["cmds"],
+                    "best_map_key": result["best_map_key"],
+                    "floorplan_pose": result["floorplan_pose"],
+                }
+            else:
+                return {"error": result.get("error", "Navigation failed")}
+
+        except Exception as e:
+            return {"error": str(e)}
