@@ -210,12 +210,19 @@ def unav_navigation(inputs):
     unit = session.get("unit", "feet")
     user_lang = session.get("language", "en")
 
-    if not all([dest_id, target_place, target_building, target_floor]):
+    if any(x is None for x in [dest_id, target_place, target_building, target_floor]):
         return {"error": "Incomplete navigation context. Please select a destination."}
 
-    refinement_queue = session.get("refinement_queue") or {}
     query_img = inputs["image"]
+    key = query_img.shape[:2]
     top_k = inputs.get("top_k", None)
+    refinement_queue = {}
+    if (
+        "refinement_queue" in session
+        and session["refinement_queue"] is not None
+        and key in session["refinement_queue"]
+    ):
+        refinement_queue = session["refinement_queue"][key]
 
     # Perform localization
     output = localizer.localize(query_img, refinement_queue, top_k=top_k)
@@ -245,7 +252,9 @@ def unav_navigation(inputs):
     )
 
     # Update refinement queue for subsequent localization calls
-    session["refinement_queue"] = output["refinement_queue"]
+    if "refinement_queue" not in session or session["refinement_queue"] is None:
+        session["refinement_queue"] = {}
+    session["refinement_queue"][key] = output["refinement_queue"]
 
     # Return all relevant info safely serialized for JSON
     return {
