@@ -22,6 +22,7 @@ class UnavServer:
         self.user_sessions = {}
 
     @build()
+    @enter()
     def initialize_unav_system(self):
         """
         Initialize UNav system components during container startup.
