@@ -13,7 +13,7 @@ from modal_config import app, unav_image, volume
     enable_memory_snapshot=True,
     concurrency_limit=20,
     allow_concurrent_inputs=20,
-    memory=48152,
+    memory=102400,  # Increased from 48152 MB to 100GB (102400 MB)
     container_idle_timeout=120,
 )
 class UnavServer:
