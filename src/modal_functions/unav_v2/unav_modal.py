@@ -167,7 +167,7 @@ class UnavServer:
         self,
         user_id: str,
         image,  # np.ndarray (BGR image)
-        dest_id: str,
+        destination_id: str,
         target_place: str,
         target_building: str,
         target_floor: str,
@@ -211,6 +211,7 @@ class UnavServer:
             or dict with "status": "error", "error": str on failure.
         """
         try:
+            dest_id = destination_id
             print(f"🧭 Starting navigation for user {user_id}")
 
             # Get user session
