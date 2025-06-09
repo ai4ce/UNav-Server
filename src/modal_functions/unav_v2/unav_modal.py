@@ -187,6 +187,19 @@ class UnavServer:
         start_time = time.time()
         timing_data = {}
 
+        # if the image is a base64 string then convert it to a suitable format
+        if isinstance(image, str):
+            import base64
+            from PIL import Image
+            import io
+
+            # Decode base64 string to bytes
+            image_bytes = base64.b64decode(image)
+            # Convert bytes to PIL Image
+            image = Image.open(io.BytesIO(image_bytes))
+            # Convert PIL Image to numpy array (BGR format)
+            image = np.array(image.convert("RGB"))[..., ::-1]
+
         try:
             # Step 1: Setup and session management
             setup_start = time.time()
