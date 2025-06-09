@@ -157,7 +157,6 @@ class UnavServer:
 
             print(f"✅ Found {len(destinations)} destinations")
             return {
-                "status": "success",
                 "destinations": destinations,
             }
 
@@ -166,7 +165,7 @@ class UnavServer:
             return {"status": "error", "message": str(e), "type": type(e).__name__}
 
     @method()
-    def unav_navigation(
+    def planner(
         self,
         session_id: str,
         image,  # np.ndarray (BGR image)

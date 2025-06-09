@@ -23,12 +23,12 @@ def main():
         if image_bgr is None:
             raise ValueError(f"Could not load image from {full_image_path}")
 
-        print("Testing get_destinations...")
-        result = unav_server.get_destinations.remote()
+        print("Testing get_destinations_list...")
+        result = unav_server.get_destinations_list.remote()
         print("Result:", result)
 
         print(
-            unav_server.unav_navigation.remote(
+            unav_server.planner.remote(
                 destination_id=destination_id,
                 image=image_bgr,  # Pass BGR numpy array instead of base64
                 session_id="test_session_id_2",
