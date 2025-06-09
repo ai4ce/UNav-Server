@@ -133,7 +133,7 @@ class UnavServer:
         return json.dumps(response)
 
     @method()
-    def get_destinations(
+    def get_destinations_list(
         self,
         floor="6_floor",
         place="New_York_City",
