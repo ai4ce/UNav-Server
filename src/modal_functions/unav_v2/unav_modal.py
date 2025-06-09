@@ -2,6 +2,8 @@ from modal import method, gpu, build, enter
 import json
 import traceback
 import numpy as np
+import json
+from typing import Dict, List, Any, Optional
 
 from modal_config import app, unav_image, volume
 
@@ -409,7 +411,7 @@ class UnavServer:
             )
 
             # Return all relevant info safely serialized for JSON
-            return {
+            result = {
                 "status": "success",
                 "result": serialized_result,
                 "cmds": serialized_cmds,
@@ -424,6 +426,8 @@ class UnavServer:
                 },
                 "timing": timing_data,  # Include timing data in response
             }
+
+            return self.convert_navigation_to_trajectory(result)
 
         except Exception as e:
             # Calculate partial timing data
@@ -531,7 +535,7 @@ class UnavServer:
                 }
 
             # Call the main navigation method
-            result = self.unav_navigation(
+            result = self.planner(
                 user_id=user_id,
                 image=image,
                 dest_id=dest_id,
@@ -557,3 +561,78 @@ class UnavServer:
 
         except Exception as e:
             return {"error": str(e)}
+
+    def convert_navigation_to_trajectory(
+        self, navigation_result: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Convert navigation result format to trajectory output format.
+
+        Args:
+            navigation_result: Dictionary containing navigation result data
+
+        Returns:
+            Dictionary in trajectory output format
+        """
+
+        # Extract data from navigation result
+        result = navigation_result.get("result", {})
+        cmds = navigation_result.get("cmds", [])
+        best_map_key = navigation_result.get("best_map_key", [])
+        floorplan_pose = navigation_result.get("floorplan_pose", {})
+        navigation_info = navigation_result.get("navigation_info", {})
+
+        # Extract building, place, and floor information
+        place = best_map_key[0] if len(best_map_key) > 0 else ""
+        building = best_map_key[1] if len(best_map_key) > 1 else ""
+        floor = best_map_key[2] if len(best_map_key) > 2 else ""
+
+        # Get path coordinates from result
+        path_coords = result.get("path_coords", [])
+
+        # Add starting pose coordinates if available
+        start_xy = floorplan_pose.get("xy", [])
+        start_ang = floorplan_pose.get("ang", 0)
+
+        # Create paths array - include start position with angle if available
+        paths = []
+        if start_xy and len(start_xy) >= 2:
+            if start_ang:
+                paths.append([start_xy[0], start_xy[1], start_ang])
+            else:
+                paths.append(start_xy)
+
+        # Add all path coordinates
+        for coord in path_coords:
+            if len(coord) >= 2:
+                paths.append(coord)
+
+        # Calculate scale based on total cost and path distance (approximate)
+        # This is an estimation - you may need to adjust based on your specific use case
+        total_cost = result.get("total_cost", 0)
+        scale = (
+            0.02205862195  # Default scale, you might want to calculate this dynamically
+        )
+
+        # Create trajectory structure
+        trajectory_data = {
+            "trajectory": [
+                {
+                    "0": {
+                        "name": "destination",
+                        "building": building,
+                        "floor": floor,
+                        "paths": paths,
+                        "command": {
+                            "instructions": cmds,
+                            "are_instructions_generated": len(cmds) > 0,
+                        },
+                        "scale": scale,
+                    }
+                },
+                None,  # This seems to be a placeholder in the original format
+            ],
+            "scale": scale,
+        }
+
+        return trajectory_data
