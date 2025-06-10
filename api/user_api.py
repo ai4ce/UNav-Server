@@ -1,15 +1,13 @@
-# api/user_api.py
-
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, UploadFile, File, Form, Response
 from sqlalchemy.orm import Session
 from db.db import SessionLocal, User, init_db
-from models.schemas import UserCreate, UserLogin, UserInfo
+from models.schemas import UserRegister, UserLogin, UserInfo
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer
 import jwt
 import datetime
 import os
-import random
+import secrets
 import string
 import time
 import smtplib
@@ -19,29 +17,23 @@ from typing import Dict
 router = APIRouter()
 init_db()
 
-# --- Password hashing context ---
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# --- JWT configuration ---
 JWT_SECRET = os.getenv("JWT_SECRET", "REPLACE_ME_WITH_A_STRONG_KEY")
 JWT_ALGORITHM = "HS256"
 
-# --- OAuth2 scheme for token dependency ---
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-# --- Email verification code cache ---
-VERIFICATION_CODES: Dict[str, tuple] = {}  # {email: (code, expire_time)}
-CODE_EXPIRE_SECONDS = 300  # 5 minutes
+VERIFICATION_CODES: Dict[str, tuple] = {}
+CODE_EXPIRE_SECONDS = 300
 
-# --- SMTP Email config (replace with your real info in production) ---
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 465
 SMTP_USER = "unav.nyu@gmail.com"
-SMTP_PASS = "fpse qert cfil wkhi"  # Use an app password if needed
+SMTP_PASS = "fpse qert cfil wkhi"
 
 
 def get_db():
-    """Dependency to provide a database session."""
     db = SessionLocal()
     try:
         yield db
@@ -50,19 +42,14 @@ def get_db():
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plaintext password against its hash."""
     return pwd_context.verify(plain_password, hashed_password)
 
 
 def hash_password(password: str) -> str:
-    """Hash a plaintext password using bcrypt."""
     return pwd_context.hash(password)
 
 
 def create_access_token(data: dict, expires_minutes: int = 60*24) -> str:
-    """
-    Create a JWT token with the provided data.
-    """
     to_encode = data.copy()
     expire = datetime.datetime.utcnow() + datetime.timedelta(minutes=expires_minutes)
     to_encode.update({"exp": expire})
@@ -70,10 +57,6 @@ def create_access_token(data: dict, expires_minutes: int = 60*24) -> str:
 
 
 def decode_access_token(token: str) -> dict:
-    """
-    Decode and validate a JWT token.
-    Raises HTTPException if token is invalid or expired.
-    """
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         return payload
@@ -84,23 +67,15 @@ def decode_access_token(token: str) -> dict:
 
 
 def get_user_id_from_token(token: str = Depends(oauth2_scheme)) -> str:
-    """
-    Extract the user ID from a valid JWT token.
-    """
     payload = decode_access_token(token)
     return str(payload["id"])
 
 
 def send_email_code(email: str, code: str):
-    """
-    Send a 6-digit verification code to the user's email.
-    This function uses SMTP for actual sending.
-    """
     msg = MIMEText(f"Your UNav verification code is: {code}", "plain", "utf-8")
     msg['Subject'] = "UNav Verification Code"
     msg['From'] = SMTP_USER
     msg['To'] = email
-
     try:
         server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
         server.login(SMTP_USER, SMTP_PASS)
@@ -112,17 +87,11 @@ def send_email_code(email: str, code: str):
 
 
 def generate_code(length=6):
-    """Generate a random 6-digit verification code as string."""
-    return ''.join(random.choices(string.digits, k=length))
+    return ''.join(secrets.choice('0123456789') for _ in range(length))
 
 
 @router.post("/send_verification_code")
 def send_verification_code(data: dict, background_tasks: BackgroundTasks):
-    """
-    Endpoint to send a verification code to the specified email.
-    Input: {"email": "..."}
-    Returns: {"msg": "verification_code_sent"} or {"error": ...}
-    """
     email = data.get("email", "").strip().lower()
     if not email or "@" not in email or len(email) > 60:
         return {"error": "invalid_email"}
@@ -138,54 +107,57 @@ def send_verification_code(data: dict, background_tasks: BackgroundTasks):
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-def register(user: dict, db: Session = Depends(get_db)):
+def register(user: UserRegister, db: Session = Depends(get_db)):
     """
-    Register a new user with email, password, and verification code.
-    Input: {"username": email, "password": "...", "code": "..."}
-    Returns: {"msg": "..."} or {"error": "..."}
+    Register a new user with email, nickname, password, and verification code.
     """
-    username = user.get("username", "").strip().lower()
-    password = user.get("password", "")
-    code = user.get("code", "")
+    email = user.email.strip().lower()
+    nickname = user.nickname.strip()
+    password = user.password
+    code = user.code
 
-    if not username or not password or not code:
+    if not email or not nickname or not password or not code:
         return {"error": "empty_field"}
 
     # Check verification code
-    code_pair = VERIFICATION_CODES.get(username)
+    code_pair = VERIFICATION_CODES.get(email)
     now = time.time()
     if not code_pair or code_pair[0] != code or code_pair[1] < now:
         return {"error": "invalid_or_expired_code"}
 
-    VERIFICATION_CODES.pop(username, None)
+    VERIFICATION_CODES.pop(email, None)
 
-    # Check duplicate
-    existing_user = db.query(User).filter(User.username == username).first()
+    # Check duplicate email
+    existing_user = db.query(User).filter(User.email == email).first()
     if existing_user:
         return {"error": "user_exists"}
 
     hashed_pw = hash_password(password)
-    new_user = User(username=username, hashed_password=hashed_pw)
+    new_user = User(email=email, nickname=nickname, hashed_password=hashed_pw)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
-    return {"msg": "User registered successfully", "id": new_user.id}
+    return {"msg": "User registered successfully", "id": new_user.id, "nickname": nickname}
 
 
 @router.post("/login")
 def login(user: UserLogin, db: Session = Depends(get_db)):
     """
     Authenticate user credentials and return JWT access token.
-    Input: {"username": email, "password": "..."}
-    Returns: {"access_token": "...", "token_type": "bearer"} or {"error": "..."}
     """
-    if not user.username.strip() or not user.password.strip():
+    if not user.email.strip() or not user.password.strip():
         return {"error": "empty_field"}
-    db_user = db.query(User).filter(User.username == user.username.lower()).first()
+    db_user = db.query(User).filter(User.email == user.email.lower()).first()
     if not db_user or not verify_password(user.password, db_user.hashed_password):
         return {"error": "incorrect_credentials"}
-    token = create_access_token(data={"sub": db_user.username, "id": db_user.id})
-    return {"access_token": token, "token_type": "bearer"}
+    token = create_access_token(data={"sub": db_user.email, "id": db_user.id})
+    avatar_url = f"/api/avatar/{db_user.id}" if db_user.avatar_blob else None
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "nickname": db_user.nickname,
+        "avatar_url": avatar_url,
+    }
 
 
 @router.post("/logout")
@@ -202,14 +174,67 @@ def logout(user_id: str = Depends(get_user_id_from_token)):
 def get_me(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """
     Retrieve information about the currently authenticated user.
-    Returns: UserInfo or HTTP_401_UNAUTHORIZED if not found.
+    Returns: {"id": ..., "email": ..., "nickname": ..., "avatar_url": ..., "created_at": ...}
+    avatar_url will be the download endpoint: /api/avatar/{user_id} if avatar exists, else null.
     """
     payload = decode_access_token(token)
-    db_user = db.query(User).filter(User.username == payload["sub"]).first()
+    db_user = db.query(User).filter(User.email == payload["sub"]).first()
     if not db_user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    avatar_url = f"/api/avatar/{db_user.id}" if db_user.avatar_blob else None
     return UserInfo(
         id=db_user.id,
-        username=db_user.username,
+        email=db_user.email,
+        nickname=db_user.nickname,
+        avatar_url=avatar_url,
         created_at=db_user.created_at.strftime("%Y-%m-%d %H:%M:%S")
     )
+
+
+@router.post("/update_profile")
+def update_profile(
+    nickname: str = Form(None),
+    db: Session = Depends(get_db),
+    token: str = Depends(oauth2_scheme)
+):
+    """
+    Update the user's nickname.
+    """
+    payload = decode_access_token(token)
+    db_user = db.query(User).filter(User.email == payload["sub"]).first()
+    if not db_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    if nickname:
+        db_user.nickname = nickname
+        db.commit()
+    return {"msg": "Profile updated", "nickname": db_user.nickname}
+
+
+@router.post("/upload_avatar")
+async def upload_avatar(
+    file: UploadFile = File(...),
+    email: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Upload a new avatar for a user. The image content is stored in the database.
+    """
+    db_user = db.query(User).filter(User.email == email.lower()).first()
+    if not db_user:
+        return {"error": "User not found"}
+    content = await file.read()
+    db_user.avatar_blob = content
+    db.commit()
+    return {"msg": "Avatar uploaded"}
+
+
+@router.get("/avatar/{user_id}")
+def get_avatar(user_id: int, db: Session = Depends(get_db)):
+    """
+    Returns the user's avatar as an image (binary).
+    """
+    db_user = db.query(User).filter(User.id == user_id).first()
+    if not db_user or db_user.avatar_blob is None:
+        raise HTTPException(status_code=404, detail="Avatar not found")
+    # By default, assume JPEG. Optionally add filetype check.
+    return Response(content=db_user.avatar_blob, media_type="image/jpeg")

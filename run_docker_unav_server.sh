@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Path to the local data directory to be mounted inside the container
-DATA_ROOT="/mnt/d/unav/data"
+DATA_ROOT="/mnt/data/UNav-IO/data"
 
 # Docker image name for the UNav server
 IMAGE_NAME="unav-server"

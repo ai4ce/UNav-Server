@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import Optional, Dict
 
 class TaskRequest(BaseModel):
@@ -21,31 +21,39 @@ class TaskResult(BaseModel):
     result: Dict
     error: Optional[str] = None
 
-class UserCreate(BaseModel):
+class UserRegister(BaseModel):
     """
     Request schema for user registration.
-    - username: account name.
+    - email: user's email address (login name).
+    - nickname: display name.
     - password: plaintext password.
+    - code: email verification code.
     """
-    username: str
+    email: EmailStr
+    nickname: str
     password: str
+    code: str
 
 class UserLogin(BaseModel):
     """
     Request schema for user login.
-    - username: account name.
+    - email: user's email address (login name).
     - password: plaintext password.
     """
-    username: str
+    email: EmailStr
     password: str
 
 class UserInfo(BaseModel):
     """
     Response schema for user information.
     - id: unique user ID.
-    - username: account name.
+    - email: user's email address (login name).
+    - nickname: display name.
+    - avatar_url: URL of the user's avatar image.
     - created_at: registration timestamp (ISO format).
     """
     id: int
-    username: str
+    email: EmailStr
+    nickname: str
+    avatar_url: Optional[str] = None
     created_at: str
