@@ -16,12 +16,10 @@ def main():
         )
         destination_id = "42"
         floor = "3_floor"
-        
-        # Load image as BGR numpy array using OpenCV
-        image_bgr = cv2.imread(full_image_path)
-        
-        if image_bgr is None:
-            raise ValueError(f"Could not load image from {full_image_path}")
+        with open(full_image_path, "rb") as image_file:
+            image_data = image_file.read()
+            base64_encoded = base64.b64encode(image_data).decode("utf-8")
+
 
         print("Testing get_destinations_list...")
         result = unav_server.get_destinations_list.remote()
@@ -30,7 +28,7 @@ def main():
         print(
             unav_server.planner.remote(
                 destination_id=destination_id,
-                image=image_bgr,  # Pass BGR numpy array instead of base64
+                base_64_image=base64_encoded,  # Pass BGR numpy array instead of base64
                 session_id="test_session_id_2",
                 building="LightHouse",
                 floor=floor,

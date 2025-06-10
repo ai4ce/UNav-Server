@@ -170,7 +170,7 @@ class UnavServer:
     def planner(
         self,
         session_id: str,
-        image,  # np.ndarray (BGR image)
+        base_64_image,
         destination_id: str,
         place: str,
         building: str,
@@ -188,19 +188,50 @@ class UnavServer:
         # Start total timing
         start_time = time.time()
         timing_data = {}
+        image = None
 
-        # if the image is a base64 string then convert it to a suitable format
-        if isinstance(image, str):
+        # Validate and convert image input
+        if base_64_image is None:
+            return {
+                "status": "error",
+                "error": "No image provided. base_64_image parameter is required.",
+                "timing": {"total": (time.time() - start_time) * 1000},
+            }
+
+        # Convert base64 string to BGR numpy array using OpenCV
+        if isinstance(base_64_image, str):
             import base64
-            from PIL import Image
-            import io
+            import cv2
 
-            # Decode base64 string to bytes
-            image_bytes = base64.b64decode(image)
-            # Convert bytes to PIL Image
-            image = Image.open(io.BytesIO(image_bytes))
-            # Convert PIL Image to numpy array (BGR format)
-            image = np.array(image.convert("RGB"))[..., ::-1]
+            try:
+                # Decode base64 string to bytes
+                image_bytes = base64.b64decode(base_64_image)
+                # Convert bytes to numpy array
+                image_array = np.frombuffer(image_bytes, dtype=np.uint8)
+                # Decode image using OpenCV (automatically in BGR format)
+                image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+
+                if image is None:
+                    return {
+                        "status": "error",
+                        "error": "Failed to decode base64 image. Invalid image format.",
+                        "timing": {"total": (time.time() - start_time) * 1000},
+                    }
+            except Exception as img_error:
+                return {
+                    "status": "error",
+                    "error": f"Error processing base64 image: {str(img_error)}",
+                    "timing": {"total": (time.time() - start_time) * 1000},
+                }
+        elif isinstance(base_64_image, np.ndarray):
+            # If already a numpy array, use it directly (assume BGR format)
+            image = base_64_image
+        else:
+            return {
+                "status": "error",
+                "error": f"Unsupported image format. Expected base64 string or numpy array, got {type(base_64_image)}",
+                "timing": {"total": (time.time() - start_time) * 1000},
+            }
 
         try:
             # Step 1: Setup and session management
