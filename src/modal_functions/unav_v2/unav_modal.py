@@ -218,7 +218,7 @@ class UnavServer:
                 if missing_padding:
                     base64_string += "=" * (4 - missing_padding)
                    
-                print(f"Base64 image: {base64_string}")    
+                
 
                 # Decode base64 string to bytes
                 image_bytes = base64.b64decode(base64_string)
