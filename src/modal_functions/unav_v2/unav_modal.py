@@ -12,7 +12,7 @@ from modal_config import app, unav_image, volume
     image=unav_image,
     volumes={"/root/UNav-IO": volume},
     gpu=gpu.Any(),
-    # enable_memory_snapshot=True,
+    enable_memory_snapshot=True,
     concurrency_limit=20,
     allow_concurrent_inputs=20,
     memory=102400,  # Increased from 48152 MB to 100GB (102400 MB)
