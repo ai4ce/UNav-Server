@@ -42,7 +42,7 @@ app = App(
 github_secret = Secret.from_name("github-read-private")
 
 unav_image = (
-    Image.debian_slim(python_version="3.9")
+    Image.debian_slim(python_version="3.10")
     .run_commands(
         "apt-get update",
         "apt-get install -y cmake git libgl1-mesa-glx libceres-dev libsuitesparse-dev libgoogle-glog-dev libgflags-dev libatlas-base-dev libeigen3-dev",
