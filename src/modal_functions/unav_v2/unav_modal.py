@@ -208,7 +208,7 @@ class UnavServer:
                 base64_string = base_64_image
                 print(f"Received base64 image string of length {len(base64_string)}")
                 ## print the first 50 characers of bas64 string
-                print(f"{base64_string[0:50]}")
+                # print(f"{base64_string[0:50]}")
                 # Remove data URL prefix if present (e.g., "data:image/jpeg;base64,")
                 if "," in base64_string:
                     base64_string = base64_string.split(",")[1]
@@ -223,7 +223,7 @@ class UnavServer:
                 # Decode base64 string to bytes
                 image_bytes = base64.b64decode(base64_string)
                 
-                print(f"Image bytes {image_bytes}")
+                # print(f"Image bytes {image_bytes}")
                 # Convert bytes to numpy array
                 image_array = np.frombuffer(image_bytes, dtype=np.uint8)
                 # Decode image using OpenCV (automatically in BGR format)
