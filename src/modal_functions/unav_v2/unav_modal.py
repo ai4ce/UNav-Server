@@ -94,7 +94,7 @@ class UnavServer:
         target_place: str,
         target_building: str,
         target_floor: str,
-        unit: str = "feet",
+        unit: str = "meter",
         language: str = "en",
     ):
         """Set navigation context for a user session"""
@@ -176,7 +176,7 @@ class UnavServer:
         building: str,
         floor: str,
         top_k: int = None,
-        unit: str = "feet",
+        unit: str = "meter",
         language: str = "en",
         refinement_queue: dict = None,
     ):
@@ -575,7 +575,7 @@ class UnavServer:
             target_place = session.get("target_place")
             target_building = session.get("target_building")
             target_floor = session.get("target_floor")
-            unit = session.get("unit", "feet")
+            unit = session.get("unit", "meter")
             user_lang = session.get("language", "en")
 
             if not all([dest_id, target_place, target_building, target_floor]):
