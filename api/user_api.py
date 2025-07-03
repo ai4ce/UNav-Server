@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, UploadFile, File, Form, Response
 from sqlalchemy.orm import Session
-from db.db import SessionLocal, User, init_db
+from db.db import UserSessionLocal, User, init_user_db
 from models.schemas import UserRegister, UserLogin, UserInfo
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer
@@ -8,14 +8,13 @@ import jwt
 import datetime
 import os
 import secrets
-import string
 import time
 import smtplib
 from email.mime.text import MIMEText
 from typing import Dict
 
 router = APIRouter()
-init_db()
+init_user_db()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -34,7 +33,7 @@ SMTP_PASS = "fpse qert cfil wkhi"
 
 
 def get_db():
-    db = SessionLocal()
+    db = UserSessionLocal()
     try:
         yield db
     finally:

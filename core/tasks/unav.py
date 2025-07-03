@@ -192,17 +192,18 @@ def unav_navigation(inputs):
 
     Returns:
         dict: {
+            "success": True,
             "result": dict (path info),
             "cmds": list(str) (step-by-step instructions),
             "best_map_key": tuple(str, str, str) (current floor),
             "floorplan_pose": dict (current pose)
         }
-        or dict with "error" key on failure.
+        or dict with "success": False, "error", "stage", ... on failure.
     """
     user_id = inputs["user_id"]
     session = get_session(user_id)
 
-    # Check for required navigation context
+    # Validate navigation context
     dest_id = session.get("selected_dest_id")
     target_place = session.get("target_place")
     target_building = session.get("target_building")
@@ -211,11 +212,18 @@ def unav_navigation(inputs):
     user_lang = session.get("language", "en")
 
     if any(x is None for x in [dest_id, target_place, target_building, target_floor]):
-        return {"error": "Incomplete navigation context. Please select a destination."}
+        return {
+            "success": False,
+            "error": "Incomplete navigation context. Please select a destination.",
+            "stage": "context_check"
+        }
 
+    # Prepare input image and context key
     query_img = inputs["image"]
     key = query_img.shape[:2]
     top_k = inputs.get("top_k", None)
+
+    # Retrieve the refinement queue for this key if exists
     refinement_queue = {}
     if (
         "refinement_queue" in session
@@ -224,11 +232,34 @@ def unav_navigation(inputs):
     ):
         refinement_queue = session["refinement_queue"][key]
 
-    # Perform localization
+    # --- Perform localization and structured error handling ---
     output = localizer.localize(query_img, refinement_queue, top_k=top_k)
-    if output is None or "floorplan_pose" not in output:
-        return {"error": "Localization failed, no pose found."}
 
+    def format_localization_error(output):
+        """
+        Formats a standardized error dictionary from localization output.
+        """
+        if output is None:
+            return {
+                "success": False,
+                "error": "Localization failed: No output returned from pipeline.",
+                "stage": "pipeline"
+            }
+        return {
+            "success": False,
+            "error": output.get("reason", "Localization failed for unknown reasons."),
+            "stage": output.get("stage", "unknown"),
+            "timings": output.get("timings"),
+            "top_candidates": output.get("top_candidates"),
+            "results": output.get("results"),
+            "best_map_key": output.get("best_map_key"),
+        }
+
+    # Only proceed if localization succeeded and pose is available (guaranteed by localizer)
+    if output is None or not output.get("success", False):
+        return format_localization_error(output)
+
+    # Unpack pose and context from localization output
     floorplan_pose = output["floorplan_pose"]
     start_xy, start_heading = floorplan_pose["xy"], -floorplan_pose["ang"]
     source_key = output["best_map_key"]
@@ -240,7 +271,7 @@ def unav_navigation(inputs):
     session["current_floor"] = start_floor
     session["floorplan_pose"] = floorplan_pose
 
-    # Plan navigation path to destination
+    # Plan the navigation path to destination
     result = nav.find_path(
         start_place, start_building, start_floor, start_xy,
         target_place, target_building, target_floor, dest_id
@@ -251,13 +282,14 @@ def unav_navigation(inputs):
         nav, result, initial_heading=start_heading, unit=unit, language=user_lang
     )
 
-    # Update refinement queue for subsequent localization calls
+    # Update the refinement queue for future localization calls
     if "refinement_queue" not in session or session["refinement_queue"] is None:
         session["refinement_queue"] = {}
     session["refinement_queue"][key] = output["refinement_queue"]
 
-    # Return all relevant info safely serialized for JSON
+    # Return all navigation information in a standardized format
     return {
+        "success": True,
         "result": safe_serialize(result),
         "cmds": safe_serialize(cmds),
         "best_map_key": safe_serialize(source_key),
