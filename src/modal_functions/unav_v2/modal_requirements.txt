@@ -20,4 +20,4 @@ Flask-SocketIO==5.1.1
 Flask-SQLAlchemy==2.5.1
 SQLAlchemy==1.4.47
 transformers
-psutil
+psutil==7.0.0
