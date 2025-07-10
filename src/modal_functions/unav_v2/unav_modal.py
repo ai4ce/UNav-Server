@@ -12,7 +12,7 @@ from modal_config import app, unav_image, volume
     image=unav_image,
     volumes={"/root/UNav-IO": volume},
     gpu=gpu.Any(),
-    # enable_memory_snapshot=True,
+    enable_memory_snapshot=True,
     concurrency_limit=20,
     allow_concurrent_inputs=20,
     memory=184320,  # Increased from 102400 MB to 202400 MB (200GB)
@@ -23,7 +23,7 @@ class UnavServer:
         # Initialize session storage for user contexts
         self.user_sessions = {}
 
-    @enter()
+    @enter(snap=True)
     def initialize_unav_system(self):
         """
         Initialize UNav system components during container startup.
