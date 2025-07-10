@@ -12,10 +12,10 @@ from modal_config import app, unav_image, volume
     image=unav_image,
     volumes={"/root/UNav-IO": volume},
     gpu=gpu.Any(),
-    enable_memory_snapshot=True,
+    # enable_memory_snapshot=True,
     concurrency_limit=20,
     allow_concurrent_inputs=20,
-    memory=102400,  # Increased from 48152 MB to 100GB (102400 MB)
+    memory=184320,  # Increased from 102400 MB to 202400 MB (200GB)
     container_idle_timeout=300,
 )
 class UnavServer:
@@ -217,12 +217,10 @@ class UnavServer:
                 missing_padding = len(base64_string) % 4
                 if missing_padding:
                     base64_string += "=" * (4 - missing_padding)
-                   
-                
 
                 # Decode base64 string to bytes
                 image_bytes = base64.b64decode(base64_string)
-                
+
                 # print(f"Image bytes {image_bytes}")
                 # Convert bytes to numpy array
                 image_array = np.frombuffer(image_bytes, dtype=np.uint8)
