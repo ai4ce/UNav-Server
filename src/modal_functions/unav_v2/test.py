@@ -37,10 +37,7 @@ def main():
         )
     except Exception as e:
         print(f"Error during Modal class lookup or execution: {e}")
-        print("This might be because:")
-        print("1. The Modal app 'unav-server-v2' is not deployed")
-        print("2. There are import errors in the Modal environment")
-        print("3. The required packages are not installed in the Modal environment")
+
 
 
 if __name__ == "__main__":
