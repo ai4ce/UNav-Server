@@ -70,6 +70,7 @@ unav_image = (
         ". .venv/bin/activate",
         "pip install .",
         "pip freeze",
+        force_build=True,
     )
     .pip_install_private_repos(
         "github.com/ai4ce/unav",
