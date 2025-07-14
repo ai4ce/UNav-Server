@@ -1,4 +1,4 @@
-from modal import App, Image, Mount, NetworkFileSystem, Volume, Secret
+from modal import App, Image, NetworkFileSystem, Volume, Secret
 from pathlib import Path
 
 volume = Volume.from_name("unav_multifloor")
@@ -30,19 +30,13 @@ def download_torch_hub_weights():
 
 app = App(
     name="unav-server-v2",
-    mounts=[
-        # Mount.from_local_dir(local_dir.resolve(), remote_path="/root/app"),
-        Mount.from_local_file(
-            "modal_requirements.txt", remote_path="/root/modal_requirements.txt"
-        )
-    ],
 )
-
 
 github_secret = Secret.from_name("github-read-private")
 
 unav_image = (
     Image.debian_slim(python_version="3.10")
+    .copy_local_file("modal_requirements.txt", "/modal_requirements.txt")
     .run_commands(
         "apt-get update",
         "apt-get install -y cmake git libgl1-mesa-glx libceres-dev libsuitesparse-dev libgoogle-glog-dev libgflags-dev libatlas-base-dev libeigen3-dev",
