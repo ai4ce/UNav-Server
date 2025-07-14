@@ -85,7 +85,7 @@ unav_image = (
         "git branch -a",  # Debug: show available branches
         "git checkout endeleze",
     )
-    .run_commands("pip install -r /modal_requirements.txt")
+    # .run_commands("pip install -r /modal_requirements.txt")
     .run_commands("pip freeze")
     .run_function(download_torch_hub_weights)
     .pip_install("psutil")
