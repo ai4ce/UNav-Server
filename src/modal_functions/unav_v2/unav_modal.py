@@ -16,7 +16,7 @@ from modal_config import app, unav_image, volume
     concurrency_limit=20,
     allow_concurrent_inputs=20,
     memory=184320,  # Increased from 102400 MB to 202400 MB (200GB)
-    container_idle_timeout=300,
+    container_idle_timeout=100,
 )
 class UnavServer:
     def __init__(self):
