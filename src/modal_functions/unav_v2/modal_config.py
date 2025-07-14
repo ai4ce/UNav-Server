@@ -73,7 +73,6 @@ unav_image = (
         ". .venv/bin/activate",
         "pip install . --no-deps",
         "pip freeze",
-        force_build=True,
     )
     .pip_install_private_repos(
         "github.com/ai4ce/unav",
@@ -90,8 +89,10 @@ unav_image = (
         "git branch -a",  # Debug: show available branches
         "git checkout endeleze",
     )
-    # .run_commands("pip install -r /modal_requirements.txt")
+
     .run_commands("pip freeze")
+    .pip_install("torch==2.1.2")
     .run_function(download_torch_hub_weights)
     .pip_install("psutil")
+    .run_commands("pip install -r /modal_requirements.txt",force_build=True)
 )
