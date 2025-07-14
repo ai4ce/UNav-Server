@@ -78,7 +78,7 @@ unav_image = (
         "github.com/ai4ce/unav",
         git_user="surendharpalanisamy",
         secrets=[github_secret],
-        extra_options="--no-deps"
+        extra_options="--no-deps",
     )
     .workdir("/root")
     .run_commands("git clone https://github.com/ai4ce/UNav-Server.git unav_server_v2")
@@ -89,10 +89,9 @@ unav_image = (
         "git branch -a",  # Debug: show available branches
         "git checkout endeleze",
     )
-
     .run_commands("pip freeze")
     .pip_install("torch==2.1.2")
     .run_function(download_torch_hub_weights)
     .pip_install("psutil")
-    .run_commands("pip install -r /modal_requirements.txt",force_build=True)
+    .run_commands("pip install -r /modal_requirements.txt", force_build=True)
 )
