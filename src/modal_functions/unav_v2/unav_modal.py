@@ -331,6 +331,8 @@ class UnavServer:
             # Perform localization
             output = self.localizer.localize(image, refinement_queue, top_k=top_k)
 
+            print(output)
+            
             timing_data["localization"] = (time.time() - localization_start) * 1000
             print(f"⏱️ Localization: {timing_data['localization']:.2f}ms")
 

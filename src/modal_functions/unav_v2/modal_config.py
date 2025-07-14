@@ -83,4 +83,15 @@ unav_image = (
     .run_commands("pip freeze")
     .run_function(download_torch_hub_weights)
     .pip_install("psutil")
+    .pip_install(
+        "torch>=2.4.0",
+        "torchvision>=0.19.0",
+        "xformers>=0.0.28",
+        "einops>=0.8.1",
+        "matplotlib>=3.7.1",
+        "Pillow>=10.0.0",
+    )
+    .pip_install("flask>=3.0.0")
+    .pip_install("ipywidgets>=8.0.4")
+    .pip_install("numpy==1.26.4")
 )
