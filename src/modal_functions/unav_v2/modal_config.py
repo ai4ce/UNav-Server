@@ -63,12 +63,15 @@ unav_image = (
     .run_commands(
         "git clone https://github.com/cvg/implicit_dist.git implicit_dist",
     )
+    .run_commands(
+        "pip install 'numpy<2.0.0'",
+    )
     .workdir("/implicit_dist")
     .run_commands(
         "ls",
         "python3 -m venv .venv",
         ". .venv/bin/activate",
-        "pip install .",
+        "pip install . --no-deps",
         "pip freeze",
         force_build=True,
     )
@@ -76,6 +79,7 @@ unav_image = (
         "github.com/ai4ce/unav",
         git_user="surendharpalanisamy",
         secrets=[github_secret],
+        extra_options="--no-deps"
     )
     .workdir("/root")
     .run_commands("git clone https://github.com/ai4ce/UNav-Server.git unav_server_v2")
