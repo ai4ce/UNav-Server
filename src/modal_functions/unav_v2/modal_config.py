@@ -94,4 +94,4 @@ unav_image = (
     .run_function(download_torch_hub_weights)
     .pip_install("psutil")
     .run_commands("pip install -r /modal_requirements.txt", force_build=True)
-)
+    .pip_install("opencv-python==4.10.0.84"))
