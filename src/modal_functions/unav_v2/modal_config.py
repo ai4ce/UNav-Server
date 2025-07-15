@@ -90,10 +90,40 @@ unav_image = (
         "git checkout endeleze",
     )
     .run_commands("pip freeze")
-    .pip_install("torch==2.1.2")
-    .run_function(download_torch_hub_weights)
-    .pip_install("psutil")
-    # .run_commands("pip install -r /modal_requirements.txt")
-    .pip_install("opencv-python==4.10.0.84")
-    .pip_install("PyYAML")
+    .pip_install(
+        "torch>=2.4.0",
+        "torchvision>=0.19.0",
+        "dataloaders>=0.0.1",
+        "einops>=0.8.1",
+        "faiss-gpu>=1.7.2",
+        "fast-pytorch-kmeans>=0.2.0.1",
+        "h5py>=3.7.0",
+        "joblib>=1.1.1",
+        "kornia>=0.6.12",
+        "lib>=4.0.0",
+        "matplotlib>=3.7.1",
+        "open3d>=0.19.0",
+        "Pillow>=10.0.0",
+        "poselib>=2.0.0",
+        "POT>=0.9.0",
+        "prettytable<=3.11.0",
+        "pytorch-lightning>=2.0.6",
+        "pytorch-metric-learning>=2.3.0",
+        "PyYAML>=6.0",
+        "scikit-image>=0.19.2",
+        "scikit-learn>=1.2.1",
+        "scipy>=1.10.0",
+        "Shapely>=2.0.7",
+        "timm>=0.4.12",
+        "tqdm>=4.65.0",
+        "transformers>=4.45.0",
+        "tyro>=0.9.22",
+        "wandb>=0.19.11",
+        "xformers>=0.0.28",
+        "psutil",
+        "opencv-python==4.10.0.84",
     )
+    .run_function(download_torch_hub_weights)
+    .run_commands("pip install -r /modal_requirements.txt")
+    .pip_install("PyYAML")
+)
