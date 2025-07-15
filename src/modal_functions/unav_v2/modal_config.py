@@ -18,13 +18,15 @@ local_dir = current_dir / ".."
 def download_torch_hub_weights():
     import torch
 
-    model_weights = torch.hub.load_state_dict_from_url(MODEL_URL, progress=True)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    model_weights = torch.hub.load_state_dict_from_url(MODEL_URL, progress=True, map_location=device)
     torch.save(model_weights, "vgg16_weights.pth")
 
-    lightglue_weights = torch.hub.load_state_dict_from_url(LIGHTGLUE_URL, progress=True)
+    lightglue_weights = torch.hub.load_state_dict_from_url(LIGHTGLUE_URL, progress=True, map_location=device)
     torch.save(lightglue_weights, "superpoint_lightglue_v0-1_arxiv-pth")
 
-    dinosalad_weights = torch.hub.load_state_dict_from_url(DINOSALAD_URL, progress=True)
+    dinosalad_weights = torch.hub.load_state_dict_from_url(DINOSALAD_URL, progress=True, map_location=device)
     torch.save(dinosalad_weights, "dinov2_vitb14_weights.pth")
 
 
