@@ -32,6 +32,29 @@ class UnavServer:
         """
         print("🚀 Initializing UNav system during container startup...")
 
+        # --- GPU DEBUG INFO ---
+        try:
+            import torch
+
+            cuda_available = torch.cuda.is_available()
+            print(f"[GPU DEBUG] torch.cuda.is_available(): {cuda_available}")
+            if cuda_available:
+                print(
+                    f"[GPU DEBUG] torch.cuda.device_count(): {torch.cuda.device_count()}"
+                )
+                print(
+                    f"[GPU DEBUG] torch.cuda.current_device(): {torch.cuda.current_device()}"
+                )
+                print(
+                    f"[GPU DEBUG] torch.cuda.get_device_name(0): {torch.cuda.get_device_name(0)}"
+                )
+            # import subprocess
+            # nvidia_smi = subprocess.check_output(["nvidia-smi"]).decode()
+            # print(f"[GPU DEBUG] nvidia-smi output:\n{nvidia_smi}")
+        except Exception as gpu_debug_exc:
+            print(f"[GPU DEBUG] Error printing GPU info: {gpu_debug_exc}")
+        # --- END GPU DEBUG INFO ---
+
         from unav.config import UNavConfig
         from unav.localizer.localizer import UNavLocalizer
         from unav.navigator.multifloor import FacilityNavigator
@@ -252,12 +275,19 @@ class UnavServer:
         # --- GPU DEBUG INFO ---
         try:
             import torch
+
             cuda_available = torch.cuda.is_available()
             print(f"[GPU DEBUG] torch.cuda.is_available(): {cuda_available}")
             if cuda_available:
-                print(f"[GPU DEBUG] torch.cuda.device_count(): {torch.cuda.device_count()}")
-                print(f"[GPU DEBUG] torch.cuda.current_device(): {torch.cuda.current_device()}")
-                print(f"[GPU DEBUG] torch.cuda.get_device_name(0): {torch.cuda.get_device_name(0)}")
+                print(
+                    f"[GPU DEBUG] torch.cuda.device_count(): {torch.cuda.device_count()}"
+                )
+                print(
+                    f"[GPU DEBUG] torch.cuda.current_device(): {torch.cuda.current_device()}"
+                )
+                print(
+                    f"[GPU DEBUG] torch.cuda.get_device_name(0): {torch.cuda.get_device_name(0)}"
+                )
             # import subprocess
             # nvidia_smi = subprocess.check_output(["nvidia-smi"]).decode()
             # print(f"[GPU DEBUG] nvidia-smi output:\n{nvidia_smi}")
