@@ -31,7 +31,7 @@ def download_torch_hub_weights():
 
 
 app = App(
-    name="unav-server-v2",
+    name="unav-server-v21",
     mounts=[
         # Mount.from_local_dir(local_dir.resolve(), remote_path="/root/app"),
         Mount.from_local_file(
