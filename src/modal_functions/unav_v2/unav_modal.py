@@ -11,12 +11,11 @@ from modal_config import app, unav_image, volume
 @app.cls(
     image=unav_image,
     volumes={"/root/UNav-IO": volume},
-    gpu=gpu.Any(),
+    gpu=["T4", "A10G", "A100", "L4"],
     enable_memory_snapshot=True,
-    concurrency_limit=20,
-    allow_concurrent_inputs=20,
+    max_containers=20,  # Updated from concurrency_limit
     memory=184320,  # Increased from 102400 MB to 202400 MB (200GB)
-    container_idle_timeout=300,
+    scaledown_window=300,  # Updated from container_idle_timeout
 )
 class UnavServer:
     def __init__(self):
@@ -38,21 +37,27 @@ class UnavServer:
 
             cuda_available = torch.cuda.is_available()
             print(f"[GPU DEBUG] torch.cuda.is_available(): {cuda_available}")
-            
+
+            if not cuda_available:
+                print("[GPU ERROR] CUDA not available! This will cause model loading to fail.")
+                print("[GPU ERROR] Modal should have allocated a GPU. Raising exception to trigger retry...")
+                raise RuntimeError("GPU not available when required. Modal will retry with GPU allocation.")
+
+            print(f"[GPU DEBUG] torch.cuda.device_count(): {torch.cuda.device_count()}")
             print(
-                    f"[GPU DEBUG] torch.cuda.device_count(): {torch.cuda.device_count()}"
-                )
+                f"[GPU DEBUG] torch.cuda.current_device(): {torch.cuda.current_device()}"
+            )
             print(
-                    f"[GPU DEBUG] torch.cuda.current_device(): {torch.cuda.current_device()}"
-                )
-            print(
-                    f"[GPU DEBUG] torch.cuda.get_device_name(0): {torch.cuda.get_device_name(0)}"
-                )
+                f"[GPU DEBUG] torch.cuda.get_device_name(0): {torch.cuda.get_device_name(0)}"
+            )
             # import subprocess
             # nvidia_smi = subprocess.check_output(["nvidia-smi"]).decode()
             # print(f"[GPU DEBUG] nvidia-smi output:\n{nvidia_smi}")
         except Exception as gpu_debug_exc:
             print(f"[GPU DEBUG] Error printing GPU info: {gpu_debug_exc}")
+            # If it's our intentional GPU check failure, re-raise it
+            if "GPU not available when required" in str(gpu_debug_exc):
+                raise
         # --- END GPU DEBUG INFO ---
 
         from unav.config import UNavConfig
