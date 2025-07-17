@@ -38,14 +38,14 @@ class UnavServer:
 
             cuda_available = torch.cuda.is_available()
             print(f"[GPU DEBUG] torch.cuda.is_available(): {cuda_available}")
-            if cuda_available:
-                print(
+            
+            print(
                     f"[GPU DEBUG] torch.cuda.device_count(): {torch.cuda.device_count()}"
                 )
-                print(
+            print(
                     f"[GPU DEBUG] torch.cuda.current_device(): {torch.cuda.current_device()}"
                 )
-                print(
+            print(
                     f"[GPU DEBUG] torch.cuda.get_device_name(0): {torch.cuda.get_device_name(0)}"
                 )
             # import subprocess
