@@ -11,7 +11,7 @@ from modal_config import app, unav_image, volume
 @app.cls(
     image=unav_image,
     volumes={"/root/UNav-IO": volume},
-    gpu=["T4", "A10G", "A100", "L4"],
+    gpu=["A10G", "L4", "A100", "T4"],
     enable_memory_snapshot=True,
     max_containers=20,  # Updated from concurrency_limit
     memory=184320,  # Increased from 102400 MB to 202400 MB (200GB)
@@ -39,9 +39,15 @@ class UnavServer:
             print(f"[GPU DEBUG] torch.cuda.is_available(): {cuda_available}")
 
             if not cuda_available:
-                print("[GPU ERROR] CUDA not available! This will cause model loading to fail.")
-                print("[GPU ERROR] Modal should have allocated a GPU. Raising exception to trigger retry...")
-                raise RuntimeError("GPU not available when required. Modal will retry with GPU allocation.")
+                print(
+                    "[GPU ERROR] CUDA not available! This will cause model loading to fail."
+                )
+                print(
+                    "[GPU ERROR] Modal should have allocated a GPU. Raising exception to trigger retry..."
+                )
+                raise RuntimeError(
+                    "GPU not available when required. Modal will retry with GPU allocation."
+                )
 
             print(f"[GPU DEBUG] torch.cuda.device_count(): {torch.cuda.device_count()}")
             print(
