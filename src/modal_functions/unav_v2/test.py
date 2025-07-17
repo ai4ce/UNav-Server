@@ -8,7 +8,7 @@ import modal
 
 def main():
     try:
-        UnavServer = modal.Cls.lookup("unav-server-v2", "UnavServer")
+        UnavServer = modal.Cls.lookup("unav-server-v21", "UnavServer")
         unav_server = UnavServer()
         current_directory = os.getcwd()
         full_image_path = os.path.join(
