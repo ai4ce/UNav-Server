@@ -22,55 +22,24 @@ class UnavServer:
         # Initialize session storage for user contexts
         self.user_sessions = {}
 
-    @enter(snap=False)
-    def initialize_unav_system(self):
+    @enter(snap=True)
+    def initialize_cpu_components(self):
         """
-        Initialize UNav system components during container startup.
-        This runs once when the container starts, dramatically improving
-        performance for subsequent method calls.
+        Initialize UNav components that can run on CPU during snapshotting.
+        This loads maps, configs, and data structures without GPU models.
         """
-        print("🚀 Initializing UNav system during container startup...")
-
-        # --- GPU DEBUG INFO ---
-        try:
-            import torch
-
-            cuda_available = torch.cuda.is_available()
-            print(f"[GPU DEBUG] torch.cuda.is_available(): {cuda_available}")
-
-            if not cuda_available:
-                print(
-                    "[GPU ERROR] CUDA not available! This will cause model loading to fail."
-                )
-                print(
-                    "[GPU ERROR] Modal should have allocated a GPU. Raising exception to trigger retry..."
-                )
-                raise RuntimeError(
-                    "GPU not available when required. Modal will retry with GPU allocation."
-                )
-
-            print(f"[GPU DEBUG] torch.cuda.device_count(): {torch.cuda.device_count()}")
-            print(
-                f"[GPU DEBUG] torch.cuda.current_device(): {torch.cuda.current_device()}"
-            )
-            print(
-                f"[GPU DEBUG] torch.cuda.get_device_name(0): {torch.cuda.get_device_name(0)}"
-            )
-            # import subprocess
-            # nvidia_smi = subprocess.check_output(["nvidia-smi"]).decode()
-            # print(f"[GPU DEBUG] nvidia-smi output:\n{nvidia_smi}")
-        except Exception as gpu_debug_exc:
-            print(f"[GPU DEBUG] Error printing GPU info: {gpu_debug_exc}")
-            # If it's our intentional GPU check failure, re-raise it
-            if "GPU not available when required" in str(gpu_debug_exc):
-                raise
-        # --- END GPU DEBUG INFO ---
-
+        print("🚀 Initializing UNav CPU components during snapshotting...")
+        
+        # Force CPU mode by setting environment variable before imports
+        import os
+        os.environ["UNAV_FORCE_CPU"] = "1"
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Hide CUDA devices
+        
         from unav.config import UNavConfig
         from unav.localizer.localizer import UNavLocalizer
         from unav.navigator.multifloor import FacilityNavigator
         from unav.navigator.commander import commands_from_result
-
+        
         # Configuration constants
         self.DATA_ROOT = "/root/UNav-IO/data"
         self.FEATURE_MODEL = "DinoV2Salad"
@@ -78,7 +47,7 @@ class UnavServer:
         self.PLACES = {
             "New_York_City": {"LightHouse": ["3_floor", "4_floor", "6_floor"]}
         }
-
+        
         print("🔧 Initializing UNavConfig...")
         self.config = UNavConfig(
             data_final_root=self.DATA_ROOT,
@@ -87,27 +56,99 @@ class UnavServer:
             local_feature_model=self.LOCAL_FEATURE_MODEL,
         )
         print("✅ UNavConfig initialized successfully")
-
-        # Extract specific sub-configs for localization and navigation modules
+        
+        # Extract configs
         self.localizor_config = self.config.localizer_config
         self.navigator_config = self.config.navigator_config
         print("✅ Config objects extracted successfully")
-
-        print("🤖 Initializing UNavLocalizer...")
-        self.localizer = UNavLocalizer(self.localizor_config)
-
-        print("📊 Loading maps and features...")
-        self.localizer.load_maps_and_features()  # Preload all maps and features
-        print("✅ UNavLocalizer initialized and maps/features loaded successfully")
-
+        
+        # Initialize localizer in CPU-only mode
+        print("🤖 Initializing UNavLocalizer (CPU-only components)...")
+        try:
+            # Temporarily override device settings to force CPU
+            original_device = None
+            if hasattr(self.localizor_config, 'device'):
+                original_device = self.localizor_config.device
+                self.localizor_config.device = 'cpu'
+            
+            self.localizer = UNavLocalizer(self.localizor_config)
+            
+            # Restore original device setting
+            if original_device is not None:
+                self.localizor_config.device = original_device
+                
+            print("✅ UNavLocalizer initialized successfully on CPU")
+        except Exception as e:
+            print(f"❌ Error initializing UNavLocalizer: {e}")
+            print("� Will retry during GPU initialization phase")
+            self.localizer = None
+        
         print("🧭 Initializing FacilityNavigator...")
         self.nav = FacilityNavigator(self.navigator_config)
         print("✅ FacilityNavigator initialized successfully")
-
-        # Store commander function for navigation
+        
+        # Store commander function
         self.commander = commands_from_result
+        
+        # Clean up environment variables
+        if "UNAV_FORCE_CPU" in os.environ:
+            del os.environ["UNAV_FORCE_CPU"]
+        if "CUDA_VISIBLE_DEVICES" in os.environ:
+            del os.environ["CUDA_VISIBLE_DEVICES"]
+        
+        print("✅ CPU components initialized successfully")
 
-        print("🎉 UNav system initialization complete! Ready for fast inference.")
+    @enter(snap=False)
+    def initialize_gpu_components(self):
+        """
+        Initialize GPU models and move components to GPU after container startup.
+        This runs after snapshot restoration when GPU is guaranteed to be available.
+        """
+        print("🚀 Initializing GPU components after snapshot restoration...")
+        
+        # More graceful GPU checking with retry logic
+        import torch
+        import time
+        
+        max_retries = 3
+        for attempt in range(max_retries):
+            if torch.cuda.is_available():
+                print(f"[GPU SUCCESS] CUDA available on attempt {attempt + 1}")
+                break
+            else:
+                print(f"[GPU WARNING] CUDA not available on attempt {attempt + 1}, waiting...")
+                time.sleep(2)  # Wait before retry
+        else:
+            print("[ERROR] CUDA still not available after retries")
+            print("[WARNING] Proceeding without GPU - performance will be degraded")
+            return
+        
+        print(f"[GPU INFO] Device count: {torch.cuda.device_count()}")
+        print(f"[GPU INFO] Current device: {torch.cuda.current_device()}")
+        print(f"[GPU INFO] Device name: {torch.cuda.get_device_name(0)}")
+        
+        # If localizer wasn't initialized during CPU phase, initialize it now
+        if self.localizer is None:
+            print("🔄 Initializing UNavLocalizer with GPU support...")
+            from unav.localizer.localizer import UNavLocalizer
+            try:
+                self.localizer = UNavLocalizer(self.localizor_config)
+                print("✅ UNavLocalizer initialized successfully with GPU")
+            except Exception as e:
+                print(f"❌ Error initializing UNavLocalizer with GPU: {e}")
+                return
+        
+        # Now load GPU-dependent components
+        print("🔥 Loading maps and features with GPU models...")
+        try:
+            # This loads the neural network models and moves them to GPU
+            self.localizer.load_maps_and_features()  # This includes GPU model loading
+            print("✅ Neural network models moved to GPU successfully")
+        except Exception as e:
+            print(f"❌ Error loading GPU models: {e}")
+            print("[WARNING] Some models may be running on CPU")
+        
+        print("🎉 UNav GPU initialization complete! Ready for fast inference.")
 
     def get_session(self, user_id: str) -> dict:
         """Get or create user session"""
