@@ -12,24 +12,68 @@ from modal_config import app, unav_image, volume
     image=unav_image,
     volumes={"/root/UNav-IO": volume},
     gpu=["A10G", "L4", "A100", "T4"],
-    enable_memory_snapshot=False,
+    enable_memory_snapshot=True,  # Enable snapshots for faster cold starts
     max_containers=20,  # Updated from concurrency_limit
     memory=184320,  # Increased from 102400 MB to 202400 MB (200GB)
-    scaledown_window=300,  # Updated from container_idle_timeout
+    scaledown_window=60,  # Updated from container_idle_timeout
 )
 class UnavServer:
     def __init__(self):
         # Initialize session storage for user contexts
         self.user_sessions = {}
 
+    @enter(snap=True)
+    def initialize_cpu_components(self):
+        """
+        Initialize CPU-only components that can be safely snapshotted.
+        This includes configuration, data loading, and navigation setup.
+        """
+        print("🚀 Initializing CPU components for snapshotting...")
+
+        from unav.config import UNavConfig
+        from unav.navigator.multifloor import FacilityNavigator
+        from unav.navigator.commander import commands_from_result
+
+        # Configuration constants
+        self.DATA_ROOT = "/root/UNav-IO/data"
+        self.FEATURE_MODEL = "DinoV2Salad"
+        self.LOCAL_FEATURE_MODEL = "superpoint+lightglue"
+        self.PLACES = {
+            "New_York_City": {"LightHouse": ["3_floor", "4_floor", "6_floor"]}
+        }
+
+        print("🔧 Initializing UNavConfig...")
+        self.config = UNavConfig(
+            data_final_root=self.DATA_ROOT,
+            places=self.PLACES,
+            global_descriptor_model=self.FEATURE_MODEL,
+            local_feature_model=self.LOCAL_FEATURE_MODEL,
+        )
+        print("✅ UNavConfig initialized successfully")
+
+        # Extract specific sub-configs for localization and navigation modules
+        self.localizor_config = self.config.localizer_config
+        self.navigator_config = self.config.navigator_config
+        print("✅ Config objects extracted successfully")
+
+        print("🧭 Initializing FacilityNavigator (CPU-only)...")
+        self.nav = FacilityNavigator(self.navigator_config)
+        print("✅ FacilityNavigator initialized successfully")
+
+        # Store commander function for navigation
+        self.commander = commands_from_result
+
+        # Set flag to indicate CPU components are ready
+        self.cpu_components_initialized = True
+        print("📸 CPU components ready for snapshotting!")
+
     @enter(snap=False)
-    def initialize_unav_system(self):
+    def initialize_gpu_components(self):
         """
-        Initialize UNav system components during container startup.
-        This runs once when the container starts, dramatically improving
-        performance for subsequent method calls.
+        Initialize GPU-dependent components that cannot be snapshotted.
+        This must run after snapshot restoration on GPU-enabled containers.
         """
-        print("🚀 Initializing UNav system during container startup...")
+        print("🚀 Initializing GPU components after snapshot restoration...")
 
         # --- GPU DEBUG INFO ---
         try:
@@ -56,9 +100,6 @@ class UnavServer:
             print(
                 f"[GPU DEBUG] torch.cuda.get_device_name(0): {torch.cuda.get_device_name(0)}"
             )
-            # import subprocess
-            # nvidia_smi = subprocess.check_output(["nvidia-smi"]).decode()
-            # print(f"[GPU DEBUG] nvidia-smi output:\n{nvidia_smi}")
         except Exception as gpu_debug_exc:
             print(f"[GPU DEBUG] Error printing GPU info: {gpu_debug_exc}")
             # If it's our intentional GPU check failure, re-raise it
@@ -66,48 +107,32 @@ class UnavServer:
                 raise
         # --- END GPU DEBUG INFO ---
 
-        from unav.config import UNavConfig
+        # Ensure CPU components are initialized
+        if not hasattr(self, "cpu_components_initialized"):
+            print("⚠️ CPU components not initialized, initializing now...")
+            self.initialize_cpu_components()
+
         from unav.localizer.localizer import UNavLocalizer
-        from unav.navigator.multifloor import FacilityNavigator
-        from unav.navigator.commander import commands_from_result
 
-        # Configuration constants
-        self.DATA_ROOT = "/root/UNav-IO/data"
-        self.FEATURE_MODEL = "DinoV2Salad"
-        self.LOCAL_FEATURE_MODEL = "superpoint+lightglue"
-        self.PLACES = {
-            "New_York_City": {"LightHouse": ["3_floor", "4_floor", "6_floor"]}
-        }
-
-        print("🔧 Initializing UNavConfig...")
-        self.config = UNavConfig(
-            data_final_root=self.DATA_ROOT,
-            places=self.PLACES,
-            global_descriptor_model=self.FEATURE_MODEL,
-            local_feature_model=self.LOCAL_FEATURE_MODEL,
-        )
-        print("✅ UNavConfig initialized successfully")
-
-        # Extract specific sub-configs for localization and navigation modules
-        self.localizor_config = self.config.localizer_config
-        self.navigator_config = self.config.navigator_config
-        print("✅ Config objects extracted successfully")
-
-        print("🤖 Initializing UNavLocalizer...")
+        print("🤖 Initializing UNavLocalizer (GPU-dependent)...")
         self.localizer = UNavLocalizer(self.localizor_config)
 
-        print("📊 Loading maps and features...")
+        print("📊 Loading maps and features (GPU-dependent)...")
         self.localizer.load_maps_and_features()  # Preload all maps and features
         print("✅ UNavLocalizer initialized and maps/features loaded successfully")
 
-        print("🧭 Initializing FacilityNavigator...")
-        self.nav = FacilityNavigator(self.navigator_config)
-        print("✅ FacilityNavigator initialized successfully")
+        # Set flag to indicate full system is ready
+        self.gpu_components_initialized = True
+        print("🎉 Full UNav system initialization complete! Ready for fast inference.")
 
-        # Store commander function for navigation
-        self.commander = commands_from_result
-
-        print("🎉 UNav system initialization complete! Ready for fast inference.")
+    def ensure_gpu_components_ready(self):
+        """
+        Ensure GPU components are initialized before processing requests.
+        This is called by methods that need the localizer.
+        """
+        if not hasattr(self, "gpu_components_initialized"):
+            print("🔧 GPU components not ready, initializing now...")
+            self.initialize_gpu_components()
 
     def get_session(self, user_id: str) -> dict:
         """Get or create user session"""
@@ -307,6 +332,9 @@ class UnavServer:
         # --- END GPU DEBUG INFO ---
 
         try:
+            # Ensure GPU components are ready
+            self.ensure_gpu_components_ready()
+
             # Step 1: Setup and session management
             setup_start = time.time()
 
