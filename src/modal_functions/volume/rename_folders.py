@@ -1,7 +1,7 @@
 import modal
 import os
 
-volume = modal.Volume.from_name("NewVisiondata")
+volume = modal.Volume.from_name("unav_multifloor")
 
 app = modal.App()
 
@@ -46,6 +46,6 @@ def rename_specific_folder(old_folder_name: str, new_folder_name: str):
 def main():
     # Example usage: rename "old_folder" to "new_folder"
     result = rename_specific_folder.remote(
-        "data/New_York_City/MapConnnection_Graph_v1.pkl", "data/New_York_City/MapConnnection_Graph.pkl"
+        "data/New_York_City/LightHouse/17_floor_new", "data/New_York_City/LightHouse/17_floor"
     )
     print(result)
