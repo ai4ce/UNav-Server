@@ -12,7 +12,7 @@ from modal_config import app, unav_image, volume
     image=unav_image,
     volumes={"/root/UNav-IO": volume},
     gpu=["A10G", "L4", "A100", "T4"],
-    enable_memory_snapshot=True,  # Enable snapshots for faster cold starts
+    enable_memory_snapshot=False,  # Enable snapshots for faster cold starts
     max_containers=20,  # Updated from concurrency_limit
     memory=184320,  # Increased from 102400 MB to 202400 MB (200GB)
     scaledown_window=300,  # Updated from container_idle_timeout
@@ -22,7 +22,7 @@ class UnavServer:
         # Initialize session storage for user contexts
         self.user_sessions = {}
 
-    @enter(snap=True)
+    @enter(snap=False)
     def initialize_cpu_components(self):
         """
         Initialize CPU-only components that can be safely snapshotted.
