@@ -22,7 +22,7 @@ def main():
 
 
         print("Testing get_destinations_list...")
-        result = unav_server.get_destinations_list.remote()
+        result = unav_server.get_destinations_list.remote(floor="17_floor")
         print("Result:", result)
 
         print(
