@@ -150,6 +150,7 @@ app = App(
 
 
 github_secret = Secret.from_name("github-read-private")
+gemini_secret = Secret.from_name("gemini-api-key")
 
 unav_image = (
     Image.debian_slim(python_version="3.10")
@@ -232,9 +233,10 @@ unav_image = (
         "xformers>=0.0.28",
         "psutil",
         "opencv-python==4.10.0.84",
+        "requests",
+        "pyYAML",
+        "google-ai-generativelanguage",
+        "google-genai"
     )
-    .pip_install("requests")
     .run_function(download_torch_hub_weights)
-    .run_commands("pip install -r /modal_requirements.txt")
-    .pip_install("PyYAML")
 )
