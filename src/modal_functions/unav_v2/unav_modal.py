@@ -405,6 +405,22 @@ class UnavServer:
             print(f"⏱️ Localization: {timing_data['localization']:.2f}ms")
 
             if output is None or "floorplan_pose" not in output:
+
+                # Add localization fallaback logic
+
+                print("❌ Localization failed, no pose found.")
+
+                # run OCR or VLM to extract text from image
+                try:
+                    pass
+                except Exception as e:
+                    print(f"Error during OCR/VLM fallback: {e}")
+                    return {
+                        "status": "error",
+                        "error": "Localization failed and OCR/VLM fallback also failed.",
+                        "timing": timing_data,
+                    }
+
                 return {
                     "status": "error",
                     "error": "Localization failed, no pose found.",
