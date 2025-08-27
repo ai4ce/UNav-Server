@@ -1,0 +1,86 @@
+{
+  "Mahidol_University": {
+    "Music-College": {
+      "1_floor": 0,
+      "2_floor": 0,
+      "3_floor": 0
+    },
+    "ICT": {
+      "fl1": 0.05895927748,
+      "fl2": 0.05831505734,
+      "fl3": 0.05618118961,
+      "fl4": 0.05815132361
+    },
+    "Mahidol-Hall": {
+      "1_floor": 0.03354523443
+    },
+    "Siree-park": {
+      "Exhibition_Hall": 0,
+      "Meeting_Hall": 0,
+      "Garden": 0
+    },
+    "Ratchasuda": {
+      "fl1": 0.05974460123,
+      "fl2": 0.05520468435,
+      "fl3": 0.05957194524
+    },
+    "Jubilee": {
+      "fl1": 0.1352981299,
+      "fl2": 0.1463295661,
+      "fl3": 0.1455984753
+    },
+    "Outdoor": {
+      "Ratchasuda-Jubilee": 0.4000918064,
+      "MLC-Siree1": 0.3861367808,
+      "Hall-MSD1": 0.3419951291,
+      "MLC-Lib1": 0.2329664674,
+      "MLC-MUSS": 0.3040706066,
+      "MS1": 0.3184700626,
+      "RS-MS1": 0.2724736842
+    }
+  },
+  "New_York_University": {
+    "New_York_University_Hospital": {
+      "17th_floor": 0.02157699999
+    },
+    "Engineering_School_Building_Six": {
+      "4_floor": 0.01209306372,
+      "multifloor_try": 1
+    },
+    "Engineering_School_Building_370": {
+      "9th_floor": 0.02089742634
+    },
+    "LOH": {
+      "Langone10_0": 0,
+      "Langone11_0": 0,
+      "Langone12_0": 0,
+      "Langone1_0": 0,
+      "Langone2_0": 0,
+      "Langone5_0": 0,
+      "Langone6_0": 0,
+      "Langone8_0": 0
+    },
+    "Langone": {
+      "15_floor_dog": 0.02461723311,
+      "15_floor_human": 0.02461723311,
+      "15_floor": 0.02461723311,
+      "16_floor_dog": 0.02285770402,
+      "16_floor_human": 0.02285770402,
+      "16_floor": 0.02285770402,
+      "17_floor_dog": 0.02157699999,
+      "17_floor_human": 0.02157699999,
+      "17_floor": 0.02157699999
+    }
+  },
+  "New_York_City": {
+    "LightHouse": {
+      "1_floor": 0.011935,
+      "3_floor": 0.02205862195,
+      "4_floor": 0.02681116641,
+      "6_floor": 0.01098358101
+    },
+    "NYISE_VC": {
+      "1": 0.1513526317
+    }
+  }
+}
