@@ -41,7 +41,7 @@ class UnavServer:
         self.LOCAL_FEATURE_MODEL = "superpoint+lightglue"
         self.PLACES = {
             "New_York_City": {"LightHouse": ["3_floor", "4_floor", "6_floor"]},
-            # "New_York_University": {"Langone": ["17_floor"]},
+            "New_York_University": {"Langone": ["17_floor"]},
             "Mahidol_University": {"Jubilee": ["fl2"]},
         }
 
