@@ -5,7 +5,7 @@ import numpy as np
 import json
 from typing import Dict, List, Any, Optional
 
-from modal_config import app, unav_image, volume
+from modal_config import app, unav_image, volume, gemini_secret
 
 
 @app.cls(
@@ -15,7 +15,8 @@ from modal_config import app, unav_image, volume
     enable_memory_snapshot=False,  # Enable snapshots for faster cold starts
     max_containers=20,  # Updated from concurrency_limit
     memory=71680,  # Reduced to 70GB
-    scaledown_window=300,  # Updated from container_idle_timeout
+    scaledown_window=600,  # Updated from container_idle_timeout
+    secrets=[gemini_secret],  # Add the Gemini API key secret
 )
 class UnavServer:
     def __init__(self):
@@ -41,6 +42,7 @@ class UnavServer:
         self.PLACES = {
             "New_York_City": {"LightHouse": ["3_floor", "4_floor", "6_floor"]},
             "New_York_University": {"Langone": ["17_floor"]},
+            "Mahidol_University": {"Jubilee": ["fl2"]},
         }
 
         print("🔧 Initializing UNavConfig...")
@@ -405,6 +407,39 @@ class UnavServer:
             print(f"⏱️ Localization: {timing_data['localization']:.2f}ms")
 
             if output is None or "floorplan_pose" not in output:
+
+                # Add localization fallback logic
+                print("❌ Localization failed, no pose found.")
+
+                # Run VLM to extract text from image as fallback
+                try:
+                    print("🔄 Attempting VLM fallback for text extraction...")
+                    extracted_text = self.run_vlm_on_image(image)
+
+                    # Log the extracted text for debugging
+                    print(f"📝 VLM extracted text: {extracted_text[:200]}...")
+
+                    # You can add logic here to process the extracted text
+                    # For example, search for room numbers, building names, etc.
+                    # and use that information to provide approximate location or guidance
+
+                    return {
+                        "status": "error",
+                        "error": "Localization failed, but VLM text extraction completed.",
+                        "extracted_text": extracted_text,
+                        "timing": timing_data,
+                        "fallback_info": "Text was extracted from the image but precise localization failed. Please try taking a clearer photo or move to a different location.",
+                    }
+
+                except Exception as vlm_error:
+                    print(f"❌ Error during VLM fallback: {vlm_error}")
+                    return {
+                        "status": "error",
+                        "error": "Localization failed and VLM fallback also failed.",
+                        "vlm_error": str(vlm_error),
+                        "timing": timing_data,
+                    }
+
                 return {
                     "status": "error",
                     "error": "Localization failed, no pose found.",
@@ -769,3 +804,76 @@ class UnavServer:
         }
 
         return trajectory_data
+
+    def run_vlm_on_image(self, image: np.ndarray) -> str:
+        """
+        Run VLM on the provided image to extract text using Gemini 2.5 Flash.
+
+        Args:
+            image (np.ndarray): BGR image array.
+
+        Returns:
+            str: Extracted text from the image.
+        """
+        try:
+            # 1) Import required libraries
+            from google import genai
+            from google.genai import types
+            import cv2
+            import os
+
+            # 2) Assign API key - get from environment variable (set by Modal Secret)
+            GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+            if not GEMINI_API_KEY:
+                error_msg = "GEMINI_API_KEY environment variable not set. Please set it with your API key in Modal Secrets."
+                print(f"❌ {error_msg}")
+                return error_msg
+
+            # Create client with API key
+            client = genai.Client(api_key=GEMINI_API_KEY)
+
+            # 3) Configure with Gemini 2.5 Flash model
+            GEMINI_MODEL = "gemini-2.5-flash"
+
+            # 4) Run VLM on the image
+            # Convert BGR to RGB for proper processing
+            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+            # Encode image to bytes (JPEG format)
+            _, image_bytes = cv2.imencode(".jpg", image_rgb)
+            image_bytes = image_bytes.tobytes()
+
+            # Create the prompt for text extraction
+            prompt = """Analyze this image and extract all visible text content. 
+            Please provide:
+            1. All readable text, signs, labels, and written content
+            2. Any numbers, codes, or identifiers visible
+            3. Location descriptions or directional information if present
+            
+            Format the response as clear, readable text without extra formatting."""
+
+            # Generate content using the model with proper SDK usage
+            response = client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=[
+                    prompt,
+                    types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+                ],
+            )
+
+            # Extract the text response
+            extracted_text = response.text if response.text else "No text extracted"
+
+            print(
+                f"✅ VLM extraction successful: {len(extracted_text)} characters extracted"
+            )
+            return extracted_text
+
+        except ImportError as e:
+            error_msg = f"Missing required library for VLM: {str(e)}. Please install: pip install google-genai"
+            print(f"❌ {error_msg}")
+            return error_msg
+        except Exception as e:
+            error_msg = f"VLM extraction failed: {str(e)}"
+            print(f"❌ {error_msg}")
+            return error_msg
