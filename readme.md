@@ -4,21 +4,26 @@ UNav Server provides a serverless implementation for indoor navigation using com
 
 ## Prerequisites
 
-- Python 3.8+
+- Python 3.10+
 - Modal CLI
 - A Modal account and token
-- Required Python packages (specified in `modal_requirements.txt`)
+
 
 ## Deployment
 
-Navigate to the `src` folder
+Navigate to the folder
 
 ``` 
-cd src
+cd src/modal_functions/unav_v2
 ```
 
 ```
-modal deploy modal_functions/unav.py
+pip install local_deployment_requirements.txt
+```
+
+
+```
+modal deploy unav_modal.py
 ```
 
 
