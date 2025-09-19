@@ -1,4 +1,4 @@
-from modal import App, Image, Mount, NetworkFileSystem, Volume, Secret
+from modal import App, Image, NetworkFileSystem, Volume, Secret
 from pathlib import Path
 
 volume = Volume.from_name("unav_multifloor")
@@ -140,12 +140,7 @@ def download_torch_hub_weights():
 
 app = App(
     name="unav-server-v21",
-    mounts=[
-        # Mount.from_local_dir(local_dir.resolve(), remote_path="/root/app"),
-        Mount.from_local_file(
-            "modal_requirements.txt", remote_path="/root/modal_requirements.txt"
-        )
-    ],
+    # mounts removed as deprecated
 )
 
 
@@ -190,6 +185,7 @@ unav_image = (
         git_user="surendharpalanisamy",
         secrets=[github_secret],
         extra_options="--no-deps",
+        force_build=True,
     )
     .workdir("/root")
     .run_commands("git clone https://github.com/ai4ce/UNav-Server.git unav_server_v2")

@@ -1,4 +1,4 @@
-from modal import method, gpu, build, enter
+from modal import method, gpu, enter
 import json
 import traceback
 import numpy as np
