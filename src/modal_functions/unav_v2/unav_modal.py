@@ -15,7 +15,7 @@ from modal_config import app, unav_image, volume, gemini_secret
     enable_memory_snapshot=False,
     max_containers=20,
     memory=49152,
-    scaledown_window=600,
+    scaledown_window=60,
     secrets=[gemini_secret],
 )
 class UnavServer:
@@ -39,11 +39,7 @@ class UnavServer:
         self.DATA_ROOT = "/root/UNav-IO/data"
         self.FEATURE_MODEL = "DinoV2Salad"
         self.LOCAL_FEATURE_MODEL = "superpoint+lightglue"
-        self.PLACES = {
-            "New_York_City": {"LightHouse": ["3_floor", "4_floor", "6_floor"]},
-            "New_York_University": {"Langone": ["17_floor"]},
-            "Mahidol_University": {"Jubilee": ["fl1","fl2","fl3"]},
-        }
+        self.PLACES = self.get_places()  # Load all places but defer map loading
 
         print("🔧 Initializing UNavConfig...")
         self.config = UNavConfig(
@@ -65,6 +61,12 @@ class UnavServer:
 
         # Store commander function for navigation
         self.commander = commands_from_result
+
+        # Initialize loaded places tracking (all places are now in config, but maps not loaded)
+        self.maps_loaded = set()
+
+        # Cache for selective localizers (key: (place, building, floor) -> localizer instance)
+        self.selective_localizers = {}
 
         # Set flag to indicate CPU components are ready
         self.cpu_components_initialized = True
@@ -120,13 +122,80 @@ class UnavServer:
         print("🤖 Initializing UNavLocalizer (GPU-dependent)...")
         self.localizer = UNavLocalizer(self.localizor_config)
 
-        print("📊 Loading maps and features (GPU-dependent)...")
-        self.localizer.load_maps_and_features()  # Preload all maps and features
-        print("✅ UNavLocalizer initialized and maps/features loaded successfully")
+        # Skip loading all maps/features at startup - will load on demand
+        print("✅ UNavLocalizer initialized (maps will load on demand)")
 
         # Set flag to indicate full system is ready
         self.gpu_components_initialized = True
         print("🎉 Full UNav system initialization complete! Ready for fast inference.")
+
+    def get_places(self):
+        """Get all available places configuration"""
+        return {
+            "New_York_City": {"LightHouse": ["3_floor", "4_floor", "6_floor"]},
+            "New_York_University": {"Langone": ["17_floor"]},
+            "Mahidol_University": {"Jubilee": ["fl1", "fl2", "fl3"]},
+        }
+
+    def ensure_maps_loaded(self, place: str, building: str = None, floor: str = None):
+        """
+        Ensure that maps for a specific place/building/floor are loaded.
+        Creates selective localizer instances for true lazy loading.
+        """
+        if building and floor:
+            map_key = (place, building, floor)
+        else:
+            map_key = place
+
+        if map_key in self.maps_loaded:
+            return  # Already loaded
+
+        print(f"🔄 Creating selective localizer for: {map_key}")
+
+        # Create selective places config with only the requested location
+        if building and floor:
+            selective_places = {place: {building: [floor]}}
+        elif building:
+            # If only building specified, include all floors for that building
+            all_places = self.get_places()
+            floors = all_places.get(place, {}).get(building, [])
+            selective_places = {place: {building: floors}}
+        else:
+            # If only place specified, include all buildings/floors for that place
+            all_places = self.get_places()
+            selective_places = {place: all_places.get(place, {})}
+
+        try:
+            # Create selective config
+            from unav.config import UNavConfig
+            selective_config = UNavConfig(
+                data_final_root=self.DATA_ROOT,
+                places=selective_places,
+                global_descriptor_model=self.FEATURE_MODEL,
+                local_feature_model=self.LOCAL_FEATURE_MODEL,
+            )
+
+            # Create selective localizer
+            from unav.localizer.localizer import UNavLocalizer
+            selective_localizer = UNavLocalizer(selective_config.localizer_config)
+
+            # Load maps for this specific localizer (only the requested maps)
+            selective_localizer.load_maps_and_features()
+
+            # Cache the selective localizer
+            self.selective_localizers[map_key] = selective_localizer
+
+            self.maps_loaded.add(map_key)
+            print(f"✅ Selective localizer created and maps loaded for: {map_key}")
+
+        except Exception as e:
+            print(f"❌ Error creating selective localizer for {map_key}: {e}")
+            # Fallback to global localizer if selective fails
+            if hasattr(self, "localizer"):
+                print(f"⚠️ Falling back to global localizer for {map_key}")
+                self.maps_loaded.add(map_key)
+            else:
+                raise e
 
     def ensure_gpu_components_ready(self):
         """
@@ -205,12 +274,15 @@ class UnavServer:
     ):
         """
         Get destinations for a specific place, building, and floor.
-        Uses pre-initialized UNav components for fast response.
+        Loads places on demand for fast startup.
         """
         try:
             print(f"🎯 Getting destinations for {place}/{building}/{floor}")
 
-            # Use pre-initialized components from @enter method
+            # Ensure maps are loaded for this location
+            self.ensure_maps_loaded(place, building, floor)
+
+            # Use components with the loaded place
             target_key = (place, building, floor)
             pf_target = self.nav.pf_map[target_key]
 
@@ -336,9 +408,6 @@ class UnavServer:
         # --- END GPU DEBUG INFO ---
 
         try:
-            # Ensure GPU components are ready
-            self.ensure_gpu_components_ready()
-
             # Step 1: Setup and session management
             setup_start = time.time()
 
@@ -347,7 +416,6 @@ class UnavServer:
             target_building = building
             target_floor = floor
             user_id = session_id
-
             # Get user session
             session = self.get_session(user_id)
 
@@ -401,15 +469,25 @@ class UnavServer:
             # Step 2: Localization
             localization_start = time.time()
 
+            # Ensure GPU components are ready (initializes localizer)
+            self.ensure_gpu_components_ready()
+
+            # Ensure maps are loaded for the target location
+            self.ensure_maps_loaded(target_place, target_building, target_floor)
+
+            # Get the selective localizer for this specific location
+            map_key = (target_place, target_building, target_floor)
+            localizer_to_use = self.selective_localizers.get(map_key, self.localizer)
+
             # Perform localization
-            output = self.localizer.localize(image, refinement_queue, top_k=top_k)
+            output = localizer_to_use.localize(image, refinement_queue, top_k=top_k)
 
             timing_data["localization"] = (time.time() - localization_start) * 1000
             print(f"⏱️ Localization: {timing_data['localization']:.2f}ms")
 
             if output is None or "floorplan_pose" not in output:
                 print("❌ Localization failed, no pose found.")
-                
+
                 if is_vlm_extraction_enabled:
                     # Run VLM to extract text from image as fallback
                     try:
@@ -439,7 +517,7 @@ class UnavServer:
                             "vlm_error": str(vlm_error),
                             "timing": timing_data,
                         }
-                
+
                 return {
                     "status": "error",
                     "error": "Localization failed, no pose found.",
