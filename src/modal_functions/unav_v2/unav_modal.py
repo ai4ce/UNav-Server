@@ -11,7 +11,7 @@ from modal_config import app, unav_image, volume, gemini_secret
 @app.cls(
     image=unav_image,
     volumes={"/root/UNav-IO": volume},
-    gpu=["A10G", "L4", "A100", "T4"],
+    gpu=["L4", "A100", "T4"],
     enable_memory_snapshot=False,  # Enable snapshots for faster cold starts
     max_containers=20,  # Updated from concurrency_limit
     memory=71680,  # Reduced to 70GB
