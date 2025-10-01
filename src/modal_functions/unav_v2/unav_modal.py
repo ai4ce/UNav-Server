@@ -42,7 +42,7 @@ class UnavServer:
         self.PLACES = {
             "New_York_City": {"LightHouse": ["3_floor", "4_floor", "6_floor"]},
             "New_York_University": {"Langone": ["17_floor"]},
-            "Mahidol_University": {"Jubilee": ["fl2"]},
+            "Mahidol_University": {"Jubilee": ["fl1","fl2","fl3"]},
         }
 
         print("🔧 Initializing UNavConfig...")
