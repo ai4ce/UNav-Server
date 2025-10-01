@@ -187,29 +187,47 @@ def unav_navigation(inputs):
         inputs (dict): {
             "user_id": str,
             "image": np.ndarray (BGR image),
-            "top_k": Optional[int]
+            "top_k": Optional[int],
+            "turn_mode": Optional[str]  # 'default' | 'deg15'
         }
 
     Returns:
         dict: {
             "success": True,
             "result": dict (path info),
-            "cmds": list(str) (step-by-step instructions),
+            "cmds": list(dict) (step-by-step commands w/ tags & meta),
             "best_map_key": tuple(str, str, str) (current floor),
-            "floorplan_pose": dict (current pose)
+            "floorplan_pose": dict (current pose),
+            "turn_mode": str           # echoed effective turn mode
         }
         or dict with "success": False, "error", "stage", ... on failure.
     """
+    # -------- Session & context --------
     user_id = inputs["user_id"]
     session = get_session(user_id)
 
-    # Validate navigation context
+    # Read navigation context
     dest_id = session.get("selected_dest_id")
     target_place = session.get("target_place")
     target_building = session.get("target_building")
     target_floor = session.get("target_floor")
     unit = session.get("unit", "feet")
     user_lang = session.get("language", "en")
+
+    # --- NEW: resolve turn mode ---
+    # priority: inputs.turn_mode > session.turn_mode > "default"
+    allowed_modes = {"default", "deg15"}
+    if "turn_mode" in inputs and isinstance(inputs["turn_mode"], str):
+        turn_mode = inputs["turn_mode"].strip().lower()
+        if turn_mode not in allowed_modes:
+            turn_mode = "default"
+        # persist into session for subsequent calls
+        session["turn_mode"] = turn_mode
+    else:
+        turn_mode = session.get("turn_mode", "default")
+        if turn_mode not in allowed_modes:
+            turn_mode = "default"
+            session["turn_mode"] = turn_mode
 
     if any(x is None for x in [dest_id, target_place, target_building, target_floor]):
         return {
@@ -218,12 +236,11 @@ def unav_navigation(inputs):
             "stage": "context_check"
         }
 
-    # Prepare input image and context key
+    # -------- Input image & queue --------
     query_img = inputs["image"]
     key = query_img.shape[:2]
     top_k = inputs.get("top_k", None)
 
-    # Retrieve the refinement queue for this key if exists
     refinement_queue = {}
     if (
         "refinement_queue" in session
@@ -232,13 +249,11 @@ def unav_navigation(inputs):
     ):
         refinement_queue = session["refinement_queue"][key]
 
-    # --- Perform localization and structured error handling ---
+    # -------- Localization --------
     output = localizer.localize(query_img, refinement_queue, top_k=top_k)
 
     def format_localization_error(output):
-        """
-        Formats a standardized error dictionary from localization output.
-        """
+        """Format a standardized error dictionary from localization output."""
         if output is None:
             return {
                 "success": False,
@@ -255,45 +270,50 @@ def unav_navigation(inputs):
             "best_map_key": output.get("best_map_key"),
         }
 
-    # Only proceed if localization succeeded and pose is available (guaranteed by localizer)
     if output is None or not output.get("success", False):
         return format_localization_error(output)
 
-    # Unpack pose and context from localization output
+    # -------- Pose & session update --------
     floorplan_pose = output["floorplan_pose"]
     start_xy, start_heading = floorplan_pose["xy"], -floorplan_pose["ang"]
     source_key = output["best_map_key"]
     start_place, start_building, start_floor = source_key
 
-    # Update user's current floor context and pose for real-time tracking
     session["current_place"] = start_place
     session["current_building"] = start_building
     session["current_floor"] = start_floor
     session["floorplan_pose"] = floorplan_pose
 
-    # Plan the navigation path to destination
+    # -------- Path planning --------
     result = nav.find_path(
         start_place, start_building, start_floor, start_xy,
         target_place, target_building, target_floor, dest_id
     )
 
-    # Generate spoken/navigation commands
+    # -------- Command generation --------
+    # commander(...) should internally map to the new commands_from_result(..., turn_mode=...)
     cmds = commander(
-        nav, result, initial_heading=start_heading, unit=unit, language=user_lang
+        nav,
+        result,
+        initial_heading=start_heading,
+        unit=unit,
+        language=user_lang,
+        turn_mode=turn_mode,           # <-- NEW: pass the resolved mode
     )
 
-    # Update the refinement queue for future localization calls
+    # -------- Persist refinement queue --------
     if "refinement_queue" not in session or session["refinement_queue"] is None:
         session["refinement_queue"] = {}
     session["refinement_queue"][key] = output["refinement_queue"]
 
-    # Return all navigation information in a standardized format
+    # -------- Response --------
     return {
         "success": True,
         "result": safe_serialize(result),
         "cmds": safe_serialize(cmds),
         "best_map_key": safe_serialize(source_key),
         "floorplan_pose": safe_serialize(floorplan_pose),
+        "turn_mode": turn_mode,                    # <-- echo effective mode
     }
 
 
