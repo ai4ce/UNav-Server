@@ -11,9 +11,9 @@ def main():
         UnavServer = modal.Cls.lookup("unav-server-v21", "UnavServer")
         unav_server = UnavServer()
         current_directory = os.getcwd()
-        full_image_path = os.path.join(current_directory, "sample_image_20.jpg")
-        destination_id = "32"
-        floor = ("fl2",)
+        full_image_path = os.path.join(current_directory, "sample_image_7.jpg")
+        destination_id = "44"
+        floor = ("6_floor",)
         with open(full_image_path, "rb") as image_file:
             image_data = image_file.read()
             base64_encoded = base64.b64encode(image_data).decode("utf-8")
@@ -31,9 +31,9 @@ def main():
                 destination_id=destination_id,
                 base_64_image=base64_encoded,  # Pass BGR numpy array instead of base64
                 session_id="test_session_id_2",
-                building="Jubilee",
+                building="LightHouse",
                 floor=floor,
-                place="Mahidol_University",
+                place="New_York_City",
             )
         )
     except Exception as e:
