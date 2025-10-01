@@ -241,6 +241,7 @@ class UnavServer:
         unit: str = "meter",
         language: str = "en",
         refinement_queue: dict = None,
+        is_vlm_extraction_enabled: bool = False,
     ):
         """
         Full localization and navigation pipeline with timing tracking.
@@ -407,39 +408,38 @@ class UnavServer:
             print(f"⏱️ Localization: {timing_data['localization']:.2f}ms")
 
             if output is None or "floorplan_pose" not in output:
-
-                # Add localization fallback logic
                 print("❌ Localization failed, no pose found.")
+                
+                if is_vlm_extraction_enabled:
+                    # Run VLM to extract text from image as fallback
+                    try:
+                        print("🔄 Attempting VLM fallback for text extraction...")
+                        extracted_text = self.run_vlm_on_image(image)
 
-                # Run VLM to extract text from image as fallback
-                try:
-                    print("🔄 Attempting VLM fallback for text extraction...")
-                    extracted_text = self.run_vlm_on_image(image)
+                        # Log the extracted text for debugging
+                        print(f"📝 VLM extracted text: {extracted_text[:200]}...")
 
-                    # Log the extracted text for debugging
-                    print(f"📝 VLM extracted text: {extracted_text[:200]}...")
+                        # You can add logic here to process the extracted text
+                        # For example, search for room numbers, building names, etc.
+                        # and use that information to provide approximate location or guidance
 
-                    # You can add logic here to process the extracted text
-                    # For example, search for room numbers, building names, etc.
-                    # and use that information to provide approximate location or guidance
+                        return {
+                            "status": "error",
+                            "error": "Localization failed, but VLM text extraction completed.",
+                            "extracted_text": extracted_text,
+                            "timing": timing_data,
+                            "fallback_info": "Text was extracted from the image but precise localization failed. Please try taking a clearer photo or move to a different location.",
+                        }
 
-                    return {
-                        "status": "error",
-                        "error": "Localization failed, but VLM text extraction completed.",
-                        "extracted_text": extracted_text,
-                        "timing": timing_data,
-                        "fallback_info": "Text was extracted from the image but precise localization failed. Please try taking a clearer photo or move to a different location.",
-                    }
-
-                except Exception as vlm_error:
-                    print(f"❌ Error during VLM fallback: {vlm_error}")
-                    return {
-                        "status": "error",
-                        "error": "Localization failed and VLM fallback also failed.",
-                        "vlm_error": str(vlm_error),
-                        "timing": timing_data,
-                    }
-
+                    except Exception as vlm_error:
+                        print(f"❌ Error during VLM fallback: {vlm_error}")
+                        return {
+                            "status": "error",
+                            "error": "Localization failed and VLM fallback also failed.",
+                            "vlm_error": str(vlm_error),
+                            "timing": timing_data,
+                        }
+                
                 return {
                     "status": "error",
                     "error": "Localization failed, no pose found.",
