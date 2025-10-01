@@ -444,7 +444,6 @@ class UnavServer:
                     "status": "error",
                     "error": "Localization failed, no pose found.",
                     "error_code": "localization_failed",
-                    "localization_output": self._safe_serialize(output) if output is not None else None,
                     "timing": timing_data,
                 }
 
