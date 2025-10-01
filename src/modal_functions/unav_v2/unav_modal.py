@@ -11,12 +11,12 @@ from modal_config import app, unav_image, volume, gemini_secret
 @app.cls(
     image=unav_image,
     volumes={"/root/UNav-IO": volume},
-    gpu=["A10G", "L4", "A100", "T4"],
-    enable_memory_snapshot=False,  # Enable snapshots for faster cold starts
-    max_containers=20,  # Updated from concurrency_limit
-    memory=71680,  # Reduced to 70GB
-    scaledown_window=600,  # Updated from container_idle_timeout
-    secrets=[gemini_secret],  # Add the Gemini API key secret
+    gpu=["L4", "A100", "T4"],
+    enable_memory_snapshot=False,
+    max_containers=20,
+    memory=49152,
+    scaledown_window=600,
+    secrets=[gemini_secret],
 )
 class UnavServer:
     def __init__(self):
@@ -42,7 +42,7 @@ class UnavServer:
         self.PLACES = {
             "New_York_City": {"LightHouse": ["3_floor", "4_floor", "6_floor"]},
             "New_York_University": {"Langone": ["17_floor"]},
-            "Mahidol_University": {"Jubilee": ["fl2"]},
+            "Mahidol_University": {"Jubilee": ["fl1","fl2","fl3"]},
         }
 
         print("🔧 Initializing UNavConfig...")
@@ -241,6 +241,7 @@ class UnavServer:
         unit: str = "meter",
         language: str = "en",
         refinement_queue: dict = None,
+        is_vlm_extraction_enabled: bool = False,
     ):
         """
         Full localization and navigation pipeline with timing tracking.
@@ -407,42 +408,42 @@ class UnavServer:
             print(f"⏱️ Localization: {timing_data['localization']:.2f}ms")
 
             if output is None or "floorplan_pose" not in output:
-
-                # Add localization fallback logic
                 print("❌ Localization failed, no pose found.")
+                
+                if is_vlm_extraction_enabled:
+                    # Run VLM to extract text from image as fallback
+                    try:
+                        print("🔄 Attempting VLM fallback for text extraction...")
+                        extracted_text = self.run_vlm_on_image(image)
 
-                # Run VLM to extract text from image as fallback
-                try:
-                    print("🔄 Attempting VLM fallback for text extraction...")
-                    extracted_text = self.run_vlm_on_image(image)
+                        # Log the extracted text for debugging
+                        print(f"📝 VLM extracted text: {extracted_text[:200]}...")
 
-                    # Log the extracted text for debugging
-                    print(f"📝 VLM extracted text: {extracted_text[:200]}...")
+                        # You can add logic here to process the extracted text
+                        # For example, search for room numbers, building names, etc.
+                        # and use that information to provide approximate location or guidance
 
-                    # You can add logic here to process the extracted text
-                    # For example, search for room numbers, building names, etc.
-                    # and use that information to provide approximate location or guidance
+                        return {
+                            "status": "error",
+                            "error": "Localization failed, but VLM text extraction completed.",
+                            "extracted_text": extracted_text,
+                            "timing": timing_data,
+                            "fallback_info": "Text was extracted from the image but precise localization failed. Please try taking a clearer photo or move to a different location.",
+                        }
 
-                    return {
-                        "status": "error",
-                        "error": "Localization failed, but VLM text extraction completed.",
-                        "extracted_text": extracted_text,
-                        "timing": timing_data,
-                        "fallback_info": "Text was extracted from the image but precise localization failed. Please try taking a clearer photo or move to a different location.",
-                    }
-
-                except Exception as vlm_error:
-                    print(f"❌ Error during VLM fallback: {vlm_error}")
-                    return {
-                        "status": "error",
-                        "error": "Localization failed and VLM fallback also failed.",
-                        "vlm_error": str(vlm_error),
-                        "timing": timing_data,
-                    }
-
+                    except Exception as vlm_error:
+                        print(f"❌ Error during VLM fallback: {vlm_error}")
+                        return {
+                            "status": "error",
+                            "error": "Localization failed and VLM fallback also failed.",
+                            "vlm_error": str(vlm_error),
+                            "timing": timing_data,
+                        }
+                
                 return {
                     "status": "error",
                     "error": "Localization failed, no pose found.",
+                    "error_code": "localization_failed",
                     "timing": timing_data,
                 }
 
