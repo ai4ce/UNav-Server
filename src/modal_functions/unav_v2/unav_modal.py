@@ -165,37 +165,25 @@ class UnavServer:
             all_places = self.get_places()
             selective_places = {place: all_places.get(place, {})}
 
-        try:
-            # Create selective config
-            from unav.config import UNavConfig
-            selective_config = UNavConfig(
-                data_final_root=self.DATA_ROOT,
-                places=selective_places,
-                global_descriptor_model=self.FEATURE_MODEL,
-                local_feature_model=self.LOCAL_FEATURE_MODEL,
-            )
+        # Create selective config and localizer
+        from unav.config import UNavConfig
 
-            # Create selective localizer
-            from unav.localizer.localizer import UNavLocalizer
-            selective_localizer = UNavLocalizer(selective_config.localizer_config)
+        selective_config = UNavConfig(
+            data_final_root=self.DATA_ROOT,
+            places=selective_places,
+            global_descriptor_model=self.FEATURE_MODEL,
+            local_feature_model=self.LOCAL_FEATURE_MODEL,
+        )
 
-            # Load maps for this specific localizer (only the requested maps)
-            selective_localizer.load_maps_and_features()
+        from unav.localizer.localizer import UNavLocalizer
 
-            # Cache the selective localizer
-            self.selective_localizers[map_key] = selective_localizer
+        selective_localizer = UNavLocalizer(selective_config.localizer_config)
+        selective_localizer.load_maps_and_features()
 
-            self.maps_loaded.add(map_key)
-            print(f"✅ Selective localizer created and maps loaded for: {map_key}")
-
-        except Exception as e:
-            print(f"❌ Error creating selective localizer for {map_key}: {e}")
-            # Fallback to global localizer if selective fails
-            if hasattr(self, "localizer"):
-                print(f"⚠️ Falling back to global localizer for {map_key}")
-                self.maps_loaded.add(map_key)
-            else:
-                raise e
+        # Cache the selective localizer
+        self.selective_localizers[map_key] = selective_localizer
+        self.maps_loaded.add(map_key)
+        print(f"✅ Selective localizer created and maps loaded for: {map_key}")
 
     def ensure_gpu_components_ready(self):
         """
