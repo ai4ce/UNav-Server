@@ -14,7 +14,7 @@ from modal_config import app, unav_image, volume, gemini_secret
     gpu=["L4", "A100", "T4"],
     enable_memory_snapshot=False,
     max_containers=20,
-    memory=71680,
+    memory=49152,
     scaledown_window=600,
     secrets=[gemini_secret],
 )
