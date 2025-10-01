@@ -12,11 +12,11 @@ from modal_config import app, unav_image, volume, gemini_secret
     image=unav_image,
     volumes={"/root/UNav-IO": volume},
     gpu=["L4", "A100", "T4"],
-    enable_memory_snapshot=False,  # Enable snapshots for faster cold starts
-    max_containers=20,  # Updated from concurrency_limit
-    memory=71680,  # Reduced to 70GB
-    scaledown_window=600,  # Updated from container_idle_timeout
-    secrets=[gemini_secret],  # Add the Gemini API key secret
+    enable_memory_snapshot=False,
+    max_containers=20,
+    memory=71680,
+    scaledown_window=600,
+    secrets=[gemini_secret],
 )
 class UnavServer:
     def __init__(self):
