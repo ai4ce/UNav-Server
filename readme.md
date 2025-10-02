@@ -39,10 +39,8 @@ cd src/modal_functions/unav_v2
 modal deploy unav_modal.py
 ```
 
-## Test the deployed unav code
-
-Make sure you are inside the `src` folder
+## To test the deployed unav code with a predefined function parameters
 
 ```bash
-python modal_functions/test_modal_functions.py
+python test_modal_functions.py
 ```
