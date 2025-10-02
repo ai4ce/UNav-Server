@@ -13,13 +13,19 @@ UNav Server provides a serverless implementation for indoor navigation using com
 Create a virtual environment:
 
 ```bash
-python3 -m venv .venv
+python -m venv .venv
 ```
 
 Activate the virtual environment:
 
 - On macOS/Linux: `source .venv/bin/activate`
 - On Windows: `.venv\Scripts\activate`
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
 
 ## Deployment
 
