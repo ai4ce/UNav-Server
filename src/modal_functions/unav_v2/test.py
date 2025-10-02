@@ -18,13 +18,13 @@ def main():
             image_data = image_file.read()
             base64_encoded = base64.b64encode(image_data).decode("utf-8")
 
-        # print("Testing get_destinations_list...")
-        # result = unav_server.get_destinations_list.remote(
-        #     floor="fl2",
-        #     place="Mahidol_University",
-        #     building="Jubilee",
-        # )
-        # print("Result:", result)
+        print("Testing get_destinations_list...")
+        result = unav_server.get_destinations_list.remote(
+            floor="fl2",
+            place="Mahidol_University",
+            building="Jubilee",
+        )
+        print("Result:", result)
 
         print(
             unav_server.planner.remote(
