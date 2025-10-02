@@ -8,30 +8,39 @@ UNav Server provides a serverless implementation for indoor navigation using com
 - Modal CLI
 - A Modal account and token
 
+## Setup
+
+Create a virtual environment:
+
+```bash
+python3 -m venv .venv
+```
+
+Activate the virtual environment:
+
+- On macOS/Linux: `source .venv/bin/activate`
+- On Windows: `.venv\Scripts\activate`
 
 ## Deployment
 
 Navigate to the folder
 
-``` 
+```bash
 cd src/modal_functions/unav_v2
 ```
 
-```
+```bash
 pip install local_deployment_requirements.txt
 ```
 
-
-```
+```bash
 modal deploy unav_modal.py
 ```
-
-
 
 ## Test the deployed unav code
 
 Make sure you are inside the `src` folder
 
-``` 
+```bash
 python modal_functions/test_modal_functions.py
 ```
