@@ -1,4 +1,4 @@
-from modal import App, Image, NetworkFileSystem, Volume, Secret
+from modal import App, Image, Volume, Secret
 from pathlib import Path
 
 volume = Volume.from_name("unav_multifloor")
