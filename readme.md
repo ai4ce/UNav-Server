@@ -35,7 +35,6 @@ Navigate to the folder
 cd src/modal_functions/unav_v2
 ```
 
-
 ```bash
 modal deploy unav_modal.py
 ```
