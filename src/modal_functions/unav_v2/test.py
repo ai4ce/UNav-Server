@@ -11,7 +11,7 @@ def main():
         UnavServer = modal.Cls.lookup("unav-server-v21", "UnavServer")
         unav_server = UnavServer()
         current_directory = os.getcwd()
-        full_image_path = os.path.join(current_directory, "sample_image_20.jpg")
+        full_image_path = os.path.join(current_directory, "media/sample_image_20.jpg")
         destination_id = "32"
         floor = ("fl2",)
         with open(full_image_path, "rb") as image_file:
