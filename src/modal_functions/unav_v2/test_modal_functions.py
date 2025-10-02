@@ -10,8 +10,7 @@ def main():
     # Common parameters
     BUILDING = "Jubilee"
     PLACE = "Mahidol_University"
-    FLOOR_STR = "fl2"
-    FLOOR_TUPLE = ("fl2",)
+    FLOOR = "fl2"
     DESTINATION_ID = "32"
     SESSION_ID = "test_session_id_2"
     IMAGE_PATH = "media/sample_image_20.jpg"
@@ -27,7 +26,7 @@ def main():
 
         print("Testing get_destinations_list...")
         result = unav_server.get_destinations_list.remote(
-            floor=FLOOR_STR,
+            floor=FLOOR,
             place=PLACE,
             building=BUILDING,
         )
@@ -39,7 +38,7 @@ def main():
                 base_64_image=base64_encoded,
                 session_id=SESSION_ID,
                 building=BUILDING,
-                floor=FLOOR_TUPLE,
+                floor=FLOOR,
                 place=PLACE,
             )
         )
