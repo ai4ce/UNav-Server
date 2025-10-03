@@ -22,7 +22,12 @@ ENV PATH=$CONDA_DIR/bin:$PATH
 COPY environment.yml /tmp/environment.yml
 
 # 4. Create Conda environment 'unav' and clean up
+# 先接受 Anaconda TOS（defaults/r 渠道）
+RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main && \
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+
 RUN conda env create -f /tmp/environment.yml && conda clean -afy
+
 
 # Set default shell to use 'conda run' for subsequent RUN instructions
 SHELL ["conda", "run", "-n", "unav", "/bin/bash", "-c"]
@@ -34,7 +39,7 @@ RUN rm -f /workspace/config.py
 
 # 6. Install external/private Python packages (no dependency resolution)
 RUN pip install --no-deps git+https://github.com/cvg/implicit_dist.git
-RUN pip install --no-deps git+https://github.com/endeleze/UNav.git
+RUN pip install --no-deps --upgrade git+https://github.com/endeleze/UNav.git
 
 # 7. Expose the API port
 EXPOSE 5001

@@ -10,6 +10,8 @@ from unav.config import UNavConfig
 from unav.localizer.localizer import UNavLocalizer
 from unav.navigator.multifloor import FacilityNavigator
 from unav.navigator.commander import commands_from_result
+from unav.navigator.commander import I18NLabels
+from core.i18n_labels import init_labels, get_all_labels
 
 SESSION_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
 
@@ -29,6 +31,10 @@ config = UNavConfig(
 # Extract specific sub-configs for localization and navigation modules
 localizor_config = config.localizer_config
 navigator_config = config.navigator_config
+
+# Initialize labels.json path for i18n
+init_labels(DATA_ROOT) # labels at <DATA_ROOT>/_i18n/labels.json
+LABELS = I18NLabels(payload=get_all_labels())
 
 # Initialize global singletons for UNav algorithm modules
 places = PLACES  # Global place/building/floor info

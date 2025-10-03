@@ -5,14 +5,16 @@
 # - floorplan retrieval (current floor)
 # - scale retrieval (current floor)
 # - localization + navigation pipeline
+# - turn-mode selection (NEW)
 
-from core.unav_state import localizer, nav, commander, get_session
+from core.unav_state import localizer, nav, commander, get_session, LABELS
+from core.i18n_labels import get_label
 from config import DATA_ROOT, PLACES
+
 import numpy as np
 import cv2
 import os
 import base64
-import math
 
 
 def safe_serialize(obj):
@@ -33,43 +35,73 @@ def safe_serialize(obj):
         # Fallback: convert unknown objects to string
         return str(obj)
 
+def _user_lang(inputs) -> str:
+    """Pick user language from session; fallback to 'en'."""
+    uid = inputs.get("user_id") if isinstance(inputs, dict) else None
+    if uid:
+        try:
+            sess = get_session(uid)
+            return sess.get("language", "en")
+        except Exception:
+            pass
+    return "en"
+
 def get_places(inputs):
     """
-    Returns all available places as [{"id": ..., "name": ...}, ...]
+    Returns available places as [{"id": <canonical_id>, "name": <localized>}, ...]
     """
-    places = [{"id": place, "name": place} for place in PLACES.keys()]
-    return {"places": places}
+    lang = _user_lang(inputs)
+    # PLACES keys are canonical ids, use them for labels lookup
+    rows = []
+    for place in PLACES.keys():
+        name = get_label("places", place, lang, fallback=place)
+        rows.append({"id": place, "name": name})
+    return {"places": rows}
+
 
 def get_buildings(inputs):
     """
     Args:
-        inputs = {"place": "New_York_City"}
+        inputs = {"place": "<place_id>", "user_id": "..."}
     Returns:
         {"buildings": [{"id": ..., "name": ...}, ...]}
     """
     place = inputs["place"]
+    lang = _user_lang(inputs)
     if place not in PLACES:
         return {"buildings": []}
-    buildings = [{"id": bld, "name": bld} for bld in PLACES[place].keys()]
-    return {"buildings": buildings}
+    rows = []
+    for bld in PLACES[place].keys():
+        key = f"{place}/{bld}"
+        name = get_label("buildings", key, lang, fallback=bld)
+        rows.append({"id": bld, "name": name})
+    return {"buildings": rows}
+
 
 def get_floors(inputs):
     """
     Args:
-        inputs = {"place": "New_York_City", "building": "LightHouse"}
+        inputs = {"place": "<place_id>", "building": "<building_id>", "user_id": "..."}
     Returns:
         {"floors": [{"id": ..., "name": ...}, ...]}
     """
     place = inputs["place"]
     building = inputs["building"]
+    lang = _user_lang(inputs)
     if place not in PLACES or building not in PLACES[place]:
         return {"floors": []}
-    floors = [{"id": flr, "name": flr} for flr in PLACES[place][building]]
-    return {"floors": floors}
+    rows = []
+    for flr in PLACES[place][building]:
+        key = f"{place}/{building}/{flr}"
+        name = get_label("floors", key, lang, fallback=flr)
+        rows.append({"id": flr, "name": name})
+    return {"floors": rows}
+
 
 def get_destinations(inputs):
     """
     Retrieve all destination points for the specified floor.
+    Adds localization based on labels.json.
 
     Args:
         inputs (dict): {
@@ -78,26 +110,34 @@ def get_destinations(inputs):
             "floor": str,
             "user_id": str,
         }
-
     Returns:
-        dict: {"destinations": [{"id": int, "name": str}, ...]}
+        dict: {"destinations": [{"id": str, "name": str}, ...]}
     """
     place = inputs["place"]
     building = inputs["building"]
     floor = inputs["floor"]
     user_id = inputs["user_id"]
+    lang = _user_lang(inputs)
+
     target_key = (place, building, floor)
     pf_target = nav.pf_map[target_key]
 
-    destinations = [{"id": str(did), "name": pf_target.labels[did]} for did in pf_target.dest_ids]
+    # pf_target.labels[did] is the fallback (English/id-like)
+    rows = []
+    for did in pf_target.dest_ids:
+        did_str = str(did)
+        key = f"{place}/{building}/{floor}/{did_str}"
+        fallback = pf_target.labels[did]
+        name = get_label("destinations", key, lang, fallback=fallback)
+        rows.append({"id": did_str, "name": name})
 
-    # Cache the user's selected target floor context
+    # Cache target floor context
     session = get_session(user_id)
     session["target_place"] = place
     session["target_building"] = building
     session["target_floor"] = floor
-    
-    return {"destinations": destinations}
+
+    return {"destinations": rows}
 
 
 def select_destination(inputs):
@@ -107,7 +147,7 @@ def select_destination(inputs):
     Args:
         inputs (dict): {
             "user_id": str,
-            "dest_id": int,
+            "dest_id": int | str,
         }
 
     Returns:
@@ -147,7 +187,7 @@ def get_floorplan(inputs):
         return {"error": "Floorplan not found."}
 
     img = cv2.imread(floorplan_path)
-    _, img_encoded = cv2.imencode('.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+    _, img_encoded = cv2.imencode(".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
     img_bytes = img_encoded.tobytes()
     img_b64 = base64.b64encode(img_bytes).decode("utf-8")
     return {"floorplan": img_b64}
@@ -173,6 +213,29 @@ def get_scale(inputs):
     source_key = (session["current_place"], session["current_building"], session["current_floor"])
     scale = nav.scales.get(source_key, 1.0)
     return {"scale": scale}
+
+
+def select_turn_mode(inputs):
+    """
+    Persist user's preferred turn mode in session.
+
+    Args:
+        inputs (dict): {
+            "user_id": str,
+            "turn_mode": str   # 'default' | 'deg15'
+        }
+
+    Returns:
+        dict: {"success": True, "turn_mode": str} or {"error": str}
+    """
+    user_id = inputs["user_id"]
+    turn_mode = str(inputs.get("turn_mode", "")).strip().lower()
+    allowed = {"default", "deg15"}
+    if turn_mode not in allowed:
+        return {"success": False, "error": "Invalid turn_mode. Allowed: 'default' or 'deg15'."}
+    session = get_session(user_id)
+    session["turn_mode"] = turn_mode
+    return {"success": True, "turn_mode": turn_mode}
 
 
 def unav_navigation(inputs):
@@ -214,20 +277,10 @@ def unav_navigation(inputs):
     unit = session.get("unit", "feet")
     user_lang = session.get("language", "en")
 
-    # --- NEW: resolve turn mode ---
-    # priority: inputs.turn_mode > session.turn_mode > "default"
-    allowed_modes = {"default", "deg15"}
-    if "turn_mode" in inputs and isinstance(inputs["turn_mode"], str):
-        turn_mode = inputs["turn_mode"].strip().lower()
-        if turn_mode not in allowed_modes:
-            turn_mode = "default"
-        # persist into session for subsequent calls
+    turn_mode = session.get("turn_mode", "default")
+    if turn_mode not in {"default", "deg15"}:
+        turn_mode = "default"
         session["turn_mode"] = turn_mode
-    else:
-        turn_mode = session.get("turn_mode", "default")
-        if turn_mode not in allowed_modes:
-            turn_mode = "default"
-            session["turn_mode"] = turn_mode
 
     if any(x is None for x in [dest_id, target_place, target_building, target_floor]):
         return {
@@ -291,14 +344,15 @@ def unav_navigation(inputs):
     )
 
     # -------- Command generation --------
-    # commander(...) should internally map to the new commands_from_result(..., turn_mode=...)
     cmds = commander(
         nav,
         result,
         initial_heading=start_heading,
         unit=unit,
         language=user_lang,
-        turn_mode=turn_mode,           # <-- NEW: pass the resolved mode
+        turn_mode=turn_mode,
+        labels=LABELS,
+        data_final_root=DATA_ROOT
     )
 
     # -------- Persist refinement queue --------
@@ -313,7 +367,7 @@ def unav_navigation(inputs):
         "cmds": safe_serialize(cmds),
         "best_map_key": safe_serialize(source_key),
         "floorplan_pose": safe_serialize(floorplan_pose),
-        "turn_mode": turn_mode,                    # <-- echo effective mode
+        "turn_mode": turn_mode,
     }
 
 
@@ -326,5 +380,6 @@ UNAV_TASKS = {
     "select_destination": select_destination,
     "get_floorplan": get_floorplan,
     "get_scale": get_scale,
+    "select_turn_mode": select_turn_mode,
     "unav_navigation": unav_navigation,
 }
