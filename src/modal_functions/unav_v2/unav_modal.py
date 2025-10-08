@@ -11,11 +11,11 @@ from modal_config import app, unav_image, volume, gemini_secret
 @app.cls(
     image=unav_image,
     volumes={"/root/UNav-IO": volume},
-    gpu=["L4", "A100", "T4"],
+    gpu=["L4", "T4"],
     enable_memory_snapshot=False,
     max_containers=20,
-    memory=49152,
-    scaledown_window=600,
+    memory=32768,
+    scaledown_window=500,
     secrets=[gemini_secret],
 )
 class UnavServer:
@@ -139,11 +139,12 @@ class UnavServer:
 
     def ensure_maps_loaded(self, place: str, building: str = None, floor: str = None):
         """
-        Ensure that maps for a specific place/building/floor are loaded.
+        Ensure that maps for a specific place/building are loaded.
+        When building is specified, loads all floors for that building.
         Creates selective localizer instances for true lazy loading.
         """
-        if building and floor:
-            map_key = (place, building, floor)
+        if building:
+            map_key = (place, building)
         else:
             map_key = place
 
@@ -267,8 +268,8 @@ class UnavServer:
         try:
             print(f"🎯 Getting destinations for {place}/{building}/{floor}")
 
-            # Ensure maps are loaded for this location
-            self.ensure_maps_loaded(place, building, floor)
+            # Ensure maps are loaded for this location (load all floors for the building)
+            self.ensure_maps_loaded(place, building)
 
             # Use components with the loaded place
             target_key = (place, building, floor)
@@ -460,11 +461,11 @@ class UnavServer:
             # Ensure GPU components are ready (initializes localizer)
             self.ensure_gpu_components_ready()
 
-            # Ensure maps are loaded for the target location
-            self.ensure_maps_loaded(target_place, target_building, target_floor)
+            # Ensure maps are loaded for the target location (load all floors for the building)
+            self.ensure_maps_loaded(target_place, target_building)
 
-            # Get the selective localizer for this specific location
-            map_key = (target_place, target_building, target_floor)
+            # Get the selective localizer for this building (all floors loaded)
+            map_key = (target_place, target_building)
             localizer_to_use = self.selective_localizers.get(map_key, self.localizer)
 
             # Perform localization
