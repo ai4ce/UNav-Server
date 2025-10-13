@@ -133,7 +133,7 @@ class UnavServer:
         """Get all available places configuration"""
         return {
             "New_York_City": {"LightHouse": ["3_floor", "4_floor", "6_floor"]},
-            "New_York_University": {"Langone": ["17_floor"]},
+            "New_York_University": {"Langone": ["15_floor", "16_floor", "17_floor"]},
             "Mahidol_University": {"Jubilee": ["fl1", "fl2", "fl3"]},
         }
 
