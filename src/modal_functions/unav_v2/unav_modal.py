@@ -3,6 +3,7 @@ import json
 import traceback
 import numpy as np
 import json
+import os
 from typing import Dict, List, Any, Optional
 
 from modal_config import app, unav_image, volume, gemini_secret
@@ -130,7 +131,73 @@ class UnavServer:
         print("🎉 Full UNav system initialization complete! Ready for fast inference.")
 
     def get_places(self):
-        """Get all available places configuration"""
+        """Get all available places configuration by dynamically scanning the data directory"""
+        try:
+            print("📁 Fetching places from data directory...")
+
+            # Define folders to skip at all levels
+            SKIP_FOLDERS = {
+                "features",
+                "colmap_map",
+                ".ipynb_checkpoints",
+                "parameters",
+            }
+
+            def should_skip_folder(folder_name):
+                """Check if folder should be skipped based on name patterns"""
+                return (
+                    folder_name in SKIP_FOLDERS
+                    or "_old" in folder_name.lower()
+                    or folder_name.endswith("_old")
+                )
+
+            places = {}
+
+            # Get all place directories (depth 1 under data/)
+            if os.path.exists(self.DATA_ROOT):
+                for place_name in os.listdir(self.DATA_ROOT):
+                    place_path = os.path.join(self.DATA_ROOT, place_name)
+                    if os.path.isdir(place_path) and not should_skip_folder(place_name):
+                        places[place_name] = {}
+                        print(f"  ✓ Found place: {place_name}")
+
+                        # Get buildings for this place (depth 2)
+                        for building_name in os.listdir(place_path):
+                            building_path = os.path.join(place_path, building_name)
+                            if os.path.isdir(building_path) and not should_skip_folder(
+                                building_name
+                            ):
+                                floors = []
+
+                                # Get floors for this building (depth 3)
+                                for floor_name in os.listdir(building_path):
+                                    floor_path = os.path.join(building_path, floor_name)
+                                    if os.path.isdir(
+                                        floor_path
+                                    ) and not should_skip_folder(floor_name):
+                                        floors.append(floor_name)
+
+                                if floors:  # Only add building if it has floors
+                                    places[place_name][building_name] = floors
+                                    print(
+                                        f"    ✓ Building: {building_name} with floors: {floors}"
+                                    )
+
+                # Remove places that have no buildings
+                places = {k: v for k, v in places.items() if v}
+
+                print(f"✅ Found {len(places)} places with buildings and floors")
+                return places
+            else:
+                print(f"⚠️ Data root {self.DATA_ROOT} does not exist, using fallback")
+                return self._get_fallback_places()
+
+        except Exception as e:
+            print(f"❌ Error fetching places: {e}, using fallback")
+            return self._get_fallback_places()
+
+    def _get_fallback_places(self):
+        """Fallback hardcoded places configuration"""
         return {
             "New_York_City": {"LightHouse": ["3_floor", "4_floor", "6_floor"]},
             "New_York_University": {"Langone": ["15_floor", "16_floor", "17_floor"]},
