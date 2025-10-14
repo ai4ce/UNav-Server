@@ -3,6 +3,7 @@ import json
 import traceback
 import numpy as np
 import json
+import os
 from typing import Dict, List, Any, Optional
 
 from modal_config import app, unav_image, volume, gemini_secret
@@ -29,7 +30,7 @@ class UnavServer:
         Initialize CPU-only components that can be safely snapshotted.
         This includes configuration, data loading, and navigation setup.
         """
-        print("🚀 Initializing CPU components for snapshotting...")
+        print("🚀 [Phase 1] Initializing CPU components for snapshotting...")
 
         from unav.config import UNavConfig
         from unav.navigator.multifloor import FacilityNavigator
@@ -78,7 +79,7 @@ class UnavServer:
         Initialize GPU-dependent components that cannot be snapshotted.
         This must run after snapshot restoration on GPU-enabled containers.
         """
-        print("🚀 Initializing GPU components after snapshot restoration...")
+        print("🚀 [Phase 2] Initializing GPU components after snapshot restoration...")
 
         # --- GPU DEBUG INFO ---
         try:
@@ -129,42 +130,156 @@ class UnavServer:
         self.gpu_components_initialized = True
         print("🎉 Full UNav system initialization complete! Ready for fast inference.")
 
-    def get_places(self):
-        """Get all available places configuration"""
+    def get_places(
+        self,
+        target_place: Optional[str] = None,
+        target_building: Optional[str] = None,
+        target_floor: Optional[str] = None,
+        enable_multifloor: bool = False,
+    ):
+        """Get available places configuration, optionally filtering to a specific floor"""
+        try:
+            print("📁 Fetching places from data directory...")
+
+            # Define folders to skip at all levels
+            SKIP_FOLDERS = {
+                "features",
+                "colmap_map",
+                ".ipynb_checkpoints",
+                "parameters",
+            }
+
+            def should_skip_folder(folder_name):
+                """Check if folder should be skipped based on name patterns"""
+                return (
+                    folder_name in SKIP_FOLDERS
+                    or "_old" in folder_name.lower()
+                    or folder_name.endswith("_old")
+                )
+
+            places: Dict[str, Dict[str, List[str]]] = {}
+
+            data_root = getattr(self, "DATA_ROOT", "/root/UNav-IO/data")
+
+            # Get all place directories (depth 1 under data/)
+            if os.path.exists(data_root):
+                for place_name in os.listdir(data_root):
+                    place_path = os.path.join(data_root, place_name)
+                    if os.path.isdir(place_path) and not should_skip_folder(place_name):
+                        if target_place and place_name != target_place:
+                            continue
+                        places[place_name] = {}
+                        print(f"  ✓ Found place: {place_name}")
+
+                        # Get buildings for this place (depth 2)
+                        for building_name in os.listdir(place_path):
+                            building_path = os.path.join(place_path, building_name)
+                            if os.path.isdir(building_path) and not should_skip_folder(
+                                building_name
+                            ):
+                                if target_building and building_name != target_building:
+                                    continue
+                                floors = []
+
+                                # Get floors for this building (depth 3)
+                                for floor_name in os.listdir(building_path):
+                                    floor_path = os.path.join(building_path, floor_name)
+                                    if os.path.isdir(
+                                        floor_path
+                                    ) and not should_skip_folder(floor_name):
+                                        if (
+                                            not enable_multifloor
+                                            and target_floor
+                                            and floor_name != target_floor
+                                        ):
+                                            continue
+                                        floors.append(floor_name)
+
+                                if floors:  # Only add building if it has floors
+                                    places[place_name][building_name] = floors
+                                    print(
+                                        f"    ✓ Building: {building_name} with floors: {floors}"
+                                    )
+
+                # Remove places that have no buildings
+                places = {k: v for k, v in places.items() if v}
+
+                if not enable_multifloor and target_floor:
+                    # Ensure we only return the specific floor requested
+                    for p_name in list(places.keys()):
+                        buildings = places[p_name]
+                        for b_name in list(buildings.keys()):
+                            filtered_floors = [
+                                f_name
+                                for f_name in buildings[b_name]
+                                if f_name == target_floor
+                            ]
+                            if filtered_floors:
+                                buildings[b_name] = filtered_floors
+                            else:
+                                del buildings[b_name]
+                        if not buildings:
+                            del places[p_name]
+
+                print(f"✅ Found {len(places)} places with buildings and floors")
+                return places
+            else:
+                print(f"⚠️ Data root {data_root} does not exist, using fallback")
+                return self._get_fallback_places()
+
+        except Exception as e:
+            print(f"❌ Error fetching places: {e}, using fallback")
+            return self._get_fallback_places()
+
+    def _get_fallback_places(self):
+        """Fallback hardcoded places configuration"""
         return {
             "New_York_City": {"LightHouse": ["3_floor", "4_floor", "6_floor"]},
             "New_York_University": {"Langone": ["15_floor", "16_floor", "17_floor"]},
             "Mahidol_University": {"Jubilee": ["fl1", "fl2", "fl3"]},
         }
 
-    def ensure_maps_loaded(self, place: str, building: str = None, floor: str = None):
+    def ensure_maps_loaded(
+        self,
+        place: str,
+        building: str = None,
+        floor: str = None,
+        enable_multifloor: bool = False,
+    ):
         """
         Ensure that maps for a specific place/building are loaded.
         When building is specified, loads all floors for that building.
         Creates selective localizer instances for true lazy loading.
         """
         if building:
-            map_key = (place, building)
+            if enable_multifloor or not floor:
+                map_key = (place, building)
+            else:
+                map_key = (place, building, floor)
         else:
             map_key = place
 
         if map_key in self.maps_loaded:
             return  # Already loaded
 
-        print(f"🔄 Creating selective localizer for: {map_key}")
+        print(f"🔄 [Phase 4] Creating selective localizer for: {map_key}")
 
         # Create selective places config with only the requested location
-        if building and floor:
-            selective_places = {place: {building: [floor]}}
-        elif building:
-            # If only building specified, include all floors for that building
-            all_places = self.get_places()
-            floors = all_places.get(place, {}).get(building, [])
-            selective_places = {place: {building: floors}}
+        if building:
+            selective_places = self.get_places(
+                target_place=place,
+                target_building=building,
+                target_floor=floor,
+                enable_multifloor=enable_multifloor,
+            )
         else:
-            # If only place specified, include all buildings/floors for that place
-            all_places = self.get_places()
-            selective_places = {place: all_places.get(place, {})}
+            selective_places = self.get_places(target_place=place)
+
+        if not selective_places:
+            print(
+                "⚠️ No matching places found for selective load; skipping localizer creation"
+            )
+            return
 
         # Create selective config and localizer
         from unav.config import UNavConfig
@@ -260,16 +375,22 @@ class UnavServer:
         floor="6_floor",
         place="New_York_City",
         building="LightHouse",
+        enable_multifloor: bool = False,
     ):
         """
         Get destinations for a specific place, building, and floor.
         Loads places on demand for fast startup.
         """
         try:
-            print(f"🎯 Getting destinations for {place}/{building}/{floor}")
+            print(f"🎯 [Phase 3] Getting destinations for {place}/{building}/{floor}")
 
             # Ensure maps are loaded for this location (load all floors for the building)
-            self.ensure_maps_loaded(place, building)
+            self.ensure_maps_loaded(
+                place,
+                building,
+                floor=floor,
+                enable_multifloor=enable_multifloor,
+            )
 
             # Use components with the loaded place
             target_key = (place, building, floor)
@@ -303,6 +424,7 @@ class UnavServer:
         language: str = "en",
         refinement_queue: dict = None,
         is_vlm_extraction_enabled: bool = False,
+        enable_multifloor: bool = False,
     ):
         """
         Full localization and navigation pipeline with timing tracking.
@@ -461,12 +583,24 @@ class UnavServer:
             # Ensure GPU components are ready (initializes localizer)
             self.ensure_gpu_components_ready()
 
-            # Ensure maps are loaded for the target location (load all floors for the building)
-            self.ensure_maps_loaded(target_place, target_building)
+            # Ensure maps are loaded for the target location
+            self.ensure_maps_loaded(
+                target_place,
+                target_building,
+                floor=target_floor,
+                enable_multifloor=enable_multifloor,
+            )
 
             # Get the selective localizer for this building (all floors loaded)
             map_key = (target_place, target_building)
-            localizer_to_use = self.selective_localizers.get(map_key, self.localizer)
+            localizer_to_use = self.selective_localizers.get(map_key)
+            if not localizer_to_use and target_floor:
+                floor_key = (target_place, target_building, target_floor)
+                localizer_to_use = self.selective_localizers.get(
+                    floor_key, self.localizer
+                )
+            else:
+                localizer_to_use = localizer_to_use or self.localizer
 
             # Perform localization
             output = localizer_to_use.localize(image, refinement_queue, top_k=top_k)
