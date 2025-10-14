@@ -30,7 +30,7 @@ class UnavServer:
         Initialize CPU-only components that can be safely snapshotted.
         This includes configuration, data loading, and navigation setup.
         """
-        print("🚀 Initializing CPU components for snapshotting...")
+        print("🚀 [Phase 1] Initializing CPU components for snapshotting...")
 
         from unav.config import UNavConfig
         from unav.navigator.multifloor import FacilityNavigator
@@ -79,7 +79,7 @@ class UnavServer:
         Initialize GPU-dependent components that cannot be snapshotted.
         This must run after snapshot restoration on GPU-enabled containers.
         """
-        print("🚀 Initializing GPU components after snapshot restoration...")
+        print("🚀 [Phase 2] Initializing GPU components after snapshot restoration...")
 
         # --- GPU DEBUG INFO ---
         try:
@@ -183,9 +183,7 @@ class UnavServer:
 
                                 # Get floors for this building (depth 3)
                                 for floor_name in os.listdir(building_path):
-                                    floor_path = os.path.join(
-                                        building_path, floor_name
-                                    )
+                                    floor_path = os.path.join(building_path, floor_name)
                                     if os.path.isdir(
                                         floor_path
                                     ) and not should_skip_folder(floor_name):
@@ -265,7 +263,7 @@ class UnavServer:
         if map_key in self.maps_loaded:
             return  # Already loaded
 
-        print(f"🔄 Creating selective localizer for: {map_key}")
+        print(f"🔄 [Phase 4] Creating selective localizer for: {map_key}")
 
         # Create selective places config with only the requested location
         if building:
@@ -385,7 +383,7 @@ class UnavServer:
         Loads places on demand for fast startup.
         """
         try:
-            print(f"🎯 Getting destinations for {place}/{building}/{floor}")
+            print(f"🎯 [Phase 3] Getting destinations for {place}/{building}/{floor}")
 
             # Ensure maps are loaded for this location (load all floors for the building)
             self.ensure_maps_loaded(
