@@ -233,7 +233,6 @@ class UnavServer:
 
     def _get_fallback_places(self):
         """Fallback hardcoded places configuration"""
-        return {}
         return {
             "New_York_City": {"LightHouse": ["3_floor", "4_floor", "6_floor"]},
             "New_York_University": {"Langone": ["15_floor", "16_floor", "17_floor"]},
@@ -385,7 +384,7 @@ class UnavServer:
         try:
             print(f"🎯 [Phase 3] Getting destinations for {place}/{building}/{floor}")
 
-            # Ensure mPhaaps are loaded for this location (load all floors for the building)
+            # Ensure maps are loaded for this location (load all floors for the building)
             self.ensure_maps_loaded(
                 place,
                 building,
