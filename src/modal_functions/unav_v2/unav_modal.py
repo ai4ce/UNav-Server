@@ -328,6 +328,7 @@ class UnavServer:
         floor="6_floor",
         place="New_York_City",
         building="LightHouse",
+        enable_multifloor: bool = False,
     ):
         """
         Get destinations for a specific place, building, and floor.
