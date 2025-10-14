@@ -370,6 +370,7 @@ class UnavServer:
         language: str = "en",
         refinement_queue: dict = None,
         is_vlm_extraction_enabled: bool = False,
+        enable_multifloor: bool = False,
     ):
         """
         Full localization and navigation pipeline with timing tracking.
