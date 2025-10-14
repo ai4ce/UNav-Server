@@ -385,7 +385,7 @@ class UnavServer:
         try:
             print(f"🎯 [Phase 3] Getting destinations for {place}/{building}/{floor}")
 
-            # Ensure maps are loaded for this location (load all floors for the building)
+            # Ensure mPhaaps are loaded for this location (load all floors for the building)
             self.ensure_maps_loaded(
                 place,
                 building,
