@@ -32,16 +32,16 @@ def main():
         )
         print("Result:", result)
 
-        # print(
-        #     unav_server.planner.remote(
-        #         destination_id=DESTINATION_ID,
-        #         base_64_image=base64_encoded,
-        #         session_id=SESSION_ID,
-        #         building=BUILDING,
-        #         floor=FLOOR,
-        #         place=PLACE,
-        #     )
-        # )
+        print(
+            unav_server.planner.remote(
+                destination_id=DESTINATION_ID,
+                base_64_image=base64_encoded,
+                session_id=SESSION_ID,
+                building=BUILDING,
+                floor=FLOOR,
+                place=PLACE,
+            )
+        )
     except Exception as e:
         print(f"Error during Modal class lookup or execution: {e}")
 
