@@ -12,6 +12,8 @@ image = (
     )
     .run_commands("middleware-bootstrap -a install")
     .run_commands("export MW_TRACKER=True")
+    .run_commands("export MW_APM_COLLECT_PROFILING=True")
+    .run_commands("export MW_SERVICE_NAME='MyPythonApp'")
 )
 
 app = modal.App("hello-world-app", image=image)
@@ -58,6 +60,7 @@ def hello():
             detectors=[DETECT_AWS_EC2],
             console_exporter=True,  # add to console log telemetry data
             log_level="DEBUG",
+            
         )
     )
 
