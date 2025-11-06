@@ -11,6 +11,7 @@ image = (
         "middleware-io", "middleware-io[profiling]"  # For continuous profiling
     )
     .run_commands("middleware-bootstrap -a install")
+    .run_commands("export MW_TRACKER=True")
 )
 
 app = modal.App("hello-world-app", image=image)
@@ -28,21 +29,44 @@ def hello():
     target = os.environ.get("MW_TARGET")
 
     print(f"Initializing Middleware with target: {target}")
+    print(f"API Key present: {bool(api_key)}")
+    print(f"API Key length: {api_key}")
 
-    # Initialize tracker with serverless configuration
+    # # Initialize tracker with serverless configuration
+    # mw_tracker(
+    #     MWOptions(
+    #         access_token=api_key,  # Required for serverless
+    #         target=target,  # Use the environment variable value
+    #         service_name="hello-world-app",
+    #         console_exporter=True,  # For debugging
+    #         log_level="DEBUG",
+    #         collect_traces=True,
+    #         collect_metrics=True,
+    #         collect_logs=True,
+    #         collect_profiling=True,
+    #     )
+    # )
+
+    # Import the mw_tracker from middleware to your app
+    from middleware import mw_tracker, MWOptions, record_exception, DETECT_AWS_EC2
+
     mw_tracker(
         MWOptions(
-            access_token=api_key,  # Required for serverless
-            target=target,  # Required for serverless
-            service_name="hello-world-app",
-            console_exporter=True,  # For debugging
+            access_token=api_key,
+            target=target,
+            otel_propagators="b3,tracecontext",
+            detectors=[DETECT_AWS_EC2],
+            console_exporter=True,  # add to console log telemetry data
             log_level="DEBUG",
-            collect_traces=True,
-            collect_metrics=True,
-            collect_logs=True,
-            collect_profiling=True,
         )
     )
+
+    # Test basic telemetry
+    print("Testing basic telemetry...")
+    tracer = get_tracer("test_tracer")
+    with tracer.start_as_current_span("test_span") as span:
+        span.set_attribute("test.attribute", "middleware_integration_test")
+        print("Test span created")
 
     # Create custom tracer for tracking
     tracer = get_tracer("hello_world_tracer")
