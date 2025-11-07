@@ -30,6 +30,16 @@ def hello():
     api_key = os.environ.get("MW_API_KEY")
     target = os.environ.get("MW_TARGET")
 
+    # Verify configuration
+    print("=" * 60)
+    print("MIDDLEWARE CONFIGURATION VERIFICATION")
+    print("=" * 60)
+    print(f"MW_API_KEY: {api_key}")
+    print(f"MW_TARGET: {target}")
+    print(f"API Key Length: {len(api_key) if api_key else 0}")
+    print(f"Target is HTTPS: {target.startswith('https://') if target else False}")
+    print("=" * 60)
+
     # Import the mw_tracker from middleware to your app
     from middleware import mw_tracker, MWOptions, record_exception, DETECT_AWS_EC2
 
@@ -78,18 +88,21 @@ def hello():
     # Force flush telemetry data before function exits
     from opentelemetry import trace, metrics
 
-    # Flush trace provider
+    print("Flushing telemetry...")
+
+    # Force flush trace provider
     trace_provider = trace.get_tracer_provider()
     if hasattr(trace_provider, "force_flush"):
-        trace_provider.force_flush(timeout_millis=5000)
+        result = trace_provider.force_flush(timeout_millis=10000)
+        print(f"Trace flush result: {result}")
 
-    # Flush metric provider
+    # Force flush metric provider
     metric_provider = metrics.get_meter_provider()
     if hasattr(metric_provider, "force_flush"):
-        metric_provider.force_flush(timeout_millis=5000)
+        result = metric_provider.force_flush(timeout_millis=10000)
+        print(f"Metric flush result: {result}")
 
-    # Small delay to ensure all data is sent
-    time.sleep(2)
+    print("Telemetry flushed")
 
     return {"status": "success", "message": "hello world"}
 
