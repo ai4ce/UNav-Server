@@ -1,2 +1,2 @@
-#!/bin/bash
-exec middleware-run python -m modal_app
+#!/bin/sh
+exec middleware-run "$@"
