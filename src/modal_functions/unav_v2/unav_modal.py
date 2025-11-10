@@ -527,7 +527,7 @@ class UnavServer:
         # Create parent span for the entire planner operation if tracer is available
         if hasattr(self, "tracer") and self.tracer:
             with self.tracer.start_as_current_span(
-                "planner_full_pipeline"
+                "planner"
             ) as parent_span:
                 # Start total timing
                 start_time = time.time()
