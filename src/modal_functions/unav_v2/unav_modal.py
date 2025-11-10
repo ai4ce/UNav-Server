@@ -412,7 +412,6 @@ class UnavServer:
         # Create span for server start if tracer available
         if hasattr(self, "tracer") and self.tracer:
             with self.tracer.start_as_current_span("start_server") as span:
-                span.set_attribute("operation", "server_warmup")
                 response = {"status": "success", "message": "Server started."}
                 logging.info("Server warmup completed successfully")
                 return json.dumps(response)
@@ -435,10 +434,6 @@ class UnavServer:
         # Create span for getting destinations if tracer available
         if hasattr(self, "tracer") and self.tracer:
             with self.tracer.start_as_current_span("get_destinations_list") as span:
-                span.set_attribute("place", place)
-                span.set_attribute("building", building)
-                span.set_attribute("floor", floor)
-                span.set_attribute("enable_multifloor", enable_multifloor)
                 return self._get_destinations_impl(
                     floor, place, building, enable_multifloor, span
                 )
@@ -471,17 +466,12 @@ class UnavServer:
 
             print(f"✅ Found {len(destinations)} destinations")
 
-            if span:
-                span.set_attribute("num_destinations", len(destinations))
-
             return {
                 "destinations": destinations,
             }
 
         except Exception as e:
             print(f"❌ Error getting destinations: {e}")
-            if span:
-                span.set_attribute("error", str(e))
             return {"status": "error", "message": str(e), "type": type(e).__name__}
 
     @method()
@@ -511,11 +501,6 @@ class UnavServer:
             with self.tracer.start_as_current_span(
                 "planner_full_pipeline"
             ) as parent_span:
-                parent_span.set_attribute("session_id", session_id)
-                parent_span.set_attribute("destination_id", destination_id)
-                parent_span.set_attribute("place", place)
-                parent_span.set_attribute("building", building)
-                parent_span.set_attribute("floor", floor)
                 return self._planner_impl(
                     session_id,
                     base_64_image,
@@ -716,30 +701,32 @@ class UnavServer:
             # Step 2: Localization
             localization_start = time.time()
 
-            # Ensure GPU components are ready (initializes localizer)
-            self.ensure_gpu_components_ready()
+            # Create child span for localization
+            with self.tracer.start_as_current_span("localization") as localization_span:
+                # Ensure GPU components are ready (initializes localizer)
+                self.ensure_gpu_components_ready()
 
-            # Ensure maps are loaded for the target location
-            self.ensure_maps_loaded(
-                target_place,
-                target_building,
-                floor=target_floor,
-                enable_multifloor=enable_multifloor,
-            )
-
-            # Get the selective localizer for this building (all floors loaded)
-            map_key = (target_place, target_building)
-            localizer_to_use = self.selective_localizers.get(map_key)
-            if not localizer_to_use and target_floor:
-                floor_key = (target_place, target_building, target_floor)
-                localizer_to_use = self.selective_localizers.get(
-                    floor_key, self.localizer
+                # Ensure maps are loaded for the target location
+                self.ensure_maps_loaded(
+                    target_place,
+                    target_building,
+                    floor=target_floor,
+                    enable_multifloor=enable_multifloor,
                 )
-            else:
-                localizer_to_use = localizer_to_use or self.localizer
 
-            # Perform localization
-            output = localizer_to_use.localize(image, refinement_queue, top_k=top_k)
+                # Get the selective localizer for this building (all floors loaded)
+                map_key = (target_place, target_building)
+                localizer_to_use = self.selective_localizers.get(map_key)
+                if not localizer_to_use and target_floor:
+                    floor_key = (target_place, target_building, target_floor)
+                    localizer_to_use = self.selective_localizers.get(
+                        floor_key, self.localizer
+                    )
+                else:
+                    localizer_to_use = localizer_to_use or self.localizer
+
+                # Perform localization
+                output = localizer_to_use.localize(image, refinement_queue, top_k=top_k)
 
             timing_data["localization"] = (time.time() - localization_start) * 1000
             print(f"⏱️ Localization: {timing_data['localization']:.2f}ms")
@@ -833,17 +820,19 @@ class UnavServer:
             # Step 4: Path planning
             path_planning_start = time.time()
 
-            # Plan navigation path to destination
-            result = self.nav.find_path(
-                start_place,
-                start_building,
-                start_floor,
-                start_xy,
-                target_place,
-                target_building,
-                target_floor,
-                dest_id_for_path,
-            )
+            # Create child span for path planning
+            with self.tracer.start_as_current_span("path_planning") as path_planning_span:
+                # Plan navigation path to destination
+                result = self.nav.find_path(
+                    start_place,
+                    start_building,
+                    start_floor,
+                    start_xy,
+                    target_place,
+                    target_building,
+                    target_floor,
+                    dest_id_for_path,
+                )
 
             timing_data["path_planning"] = (time.time() - path_planning_start) * 1000
             print(f"⏱️ Path Planning: {timing_data['path_planning']:.2f}ms")
@@ -866,14 +855,16 @@ class UnavServer:
             # Step 5: Command generation
             command_generation_start = time.time()
 
-            # Generate spoken/navigation commands
-            cmds = self.commander(
-                self.nav,
-                result,
-                initial_heading=start_heading,
-                unit=unit,
-                language=language,
-            )
+            # Create child span for command generation
+            with self.tracer.start_as_current_span("command_generation") as command_span:
+                # Generate spoken/navigation commands
+                cmds = self.commander(
+                    self.nav,
+                    result,
+                    initial_heading=start_heading,
+                    unit=unit,
+                    language=language,
+                )
 
             timing_data["command_generation"] = (
                 time.time() - command_generation_start
@@ -1225,23 +1216,13 @@ class UnavServer:
                 f"✅ VLM extraction successful: {len(extracted_text)} characters extracted"
             )
 
-            if vlm_span:
-                vlm_span.set_attribute("extracted_text_length", len(extracted_text))
-                vlm_span.set_attribute("extraction_successful", True)
-
             return extracted_text
 
         except ImportError as e:
             error_msg = f"Missing required library for VLM: {str(e)}. Please install: pip install google-genai"
             print(f"❌ {error_msg}")
-            if vlm_span:
-                vlm_span.set_attribute("error", error_msg)
-                vlm_span.set_attribute("extraction_successful", False)
             return error_msg
         except Exception as e:
             error_msg = f"VLM extraction failed: {str(e)}"
             print(f"❌ {error_msg}")
-            if vlm_span:
-                vlm_span.set_attribute("error", error_msg)
-                vlm_span.set_attribute("extraction_successful", False)
             return error_msg
