@@ -469,7 +469,7 @@ class UnavServer:
 
         # Create span for server start if tracer available
         if hasattr(self, "tracer") and self.tracer:
-            with self.tracer.start_as_current_span("start_server") as span:
+            with self.tracer.start_as_current_span("start_server_span") as span:
                 response = {"status": "success", "message": "Server started."}
                 logging.info("Server warmup completed successfully")
                 return json.dumps(response)
@@ -585,7 +585,7 @@ class UnavServer:
         # Create parent span for the entire planner operation if tracer is available
         if hasattr(self, "tracer") and self.tracer:
             with self.tracer.start_as_current_span(
-                "planner"
+                "planner_span"
             ) as parent_span:
                 # Start total timing
                 start_time = time.time()
@@ -742,7 +742,7 @@ class UnavServer:
 
                     # Create child span for localization
                     with self.tracer.start_as_current_span(
-                        "localization"
+                        "localization_span"
                     ) as localization_span:
                         # Ensure GPU components are ready (initializes localizer)
                         self.ensure_gpu_components_ready()
@@ -874,7 +874,7 @@ class UnavServer:
 
                     # Create child span for path planning
                     with self.tracer.start_as_current_span(
-                        "path_planning"
+                        "path_planning_span"
                     ) as path_planning_span:
                         # Plan navigation path to destination
                         result = self.nav.find_path(
@@ -913,7 +913,7 @@ class UnavServer:
 
                     # Create child span for command generation
                     with self.tracer.start_as_current_span(
-                        "command_generation"
+                        "command_generation_span"
                     ) as command_span:
                         # Generate spoken/navigation commands
                         cmds = self.commander(
@@ -1623,7 +1623,7 @@ class UnavServer:
         """
         # Create span for VLM extraction if tracer available
         if hasattr(self, "tracer") and self.tracer:
-            with self.tracer.start_as_current_span("vlm_text_extraction") as vlm_span:
+            with self.tracer.start_as_current_span("vlm_text_extraction_span") as vlm_span:
                 try:
                     # 1) Import required libraries
                     from google import genai
