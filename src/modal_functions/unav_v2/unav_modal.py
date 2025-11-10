@@ -305,7 +305,7 @@ class UnavServer:
 
         # Create span for map loading if tracer available
         if hasattr(self, "tracer") and self.tracer:
-            with self.tracer.start_as_current_span("ensure_maps_loaded") as map_load_span:
+            with self.tracer.start_as_current_span("load_maps") as map_load_span:
                 map_load_span.set_attribute("map_key", str(map_key))
                 map_load_span.set_attribute("place", place)
                 if building:
