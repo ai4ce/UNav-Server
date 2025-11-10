@@ -348,7 +348,10 @@ class UnavServer:
                 from unav.localizer.localizer import UNavLocalizer
 
                 selective_localizer = UNavLocalizer(selective_config.localizer_config)
-                selective_localizer.load_maps_and_features()
+
+                # Child span for loading maps and features (this is the most time-consuming part)
+                with self.tracer.start_as_current_span("load_maps_and_features_span") as load_span:
+                    selective_localizer.load_maps_and_features()
 
                 # Cache the selective localizer
                 self.selective_localizers[map_key] = selective_localizer
