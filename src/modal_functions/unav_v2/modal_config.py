@@ -146,6 +146,7 @@ app = App(
 
 github_secret = Secret.from_name("github-read-private")
 gemini_secret = Secret.from_name("gemini-api-key")
+middleware_secret = Secret.from_name("middleware")
 
 unav_image = (
     Image.debian_slim(python_version="3.10")
@@ -231,7 +232,25 @@ unav_image = (
         "requests",
         "pyYAML",
         "google-ai-generativelanguage",
-        "google-genai"
+        "google-genai",
+        "middleware-io",
+        "middleware-io[profiling]",
     )
     .run_function(download_torch_hub_weights)
+    .env(
+        {
+            "MW_SERVICE_NAME": "UNav-Server",
+            "MW_APM_COLLECT_PROFILING": "true",
+            "MW_TRACKER": "true",
+            "MW_CONSOLE_EXPORTER": "false",
+            "OTEL_SERVICE_NAME": "modal-unav-server",
+        }
+    )
+    .run_commands(
+        "middleware-bootstrap -a install",
+        "echo '#!/bin/sh' > /root/run.sh",
+        "echo 'exec middleware-run \"$@\"' >> /root/run.sh",
+        "chmod +x /root/run.sh",
+    )
+    .dockerfile_commands('ENTRYPOINT ["/root/run.sh"]')
 )

@@ -6,7 +6,7 @@ import json
 import os
 from typing import Dict, List, Any, Optional
 
-from modal_config import app, unav_image, volume, gemini_secret
+from modal_config import app, unav_image, volume, gemini_secret, middleware_secret
 
 
 @app.cls(
@@ -17,12 +17,53 @@ from modal_config import app, unav_image, volume, gemini_secret
     max_containers=20,
     memory=73728,
     scaledown_window=500,
-    secrets=[gemini_secret],
+    secrets=[gemini_secret, middleware_secret],
 )
 class UnavServer:
     def __init__(self):
         # Initialize session storage for user contexts
         self.user_sessions = {}
+
+    @enter(snap=False)
+    def initialize_middleware(self):
+        """
+        Initialize Middleware.io tracking for profiling and telemetry.
+        """
+        print("🔧 [Phase 0] Initializing Middleware.io...")
+
+        from middleware import mw_tracker, MWOptions
+        from opentelemetry import trace
+        import os
+
+        api_key = os.environ.get("MW_API_KEY")
+        target = os.environ.get("MW_TARGET")
+
+        if not api_key or not target:
+            print(
+                "⚠️ Warning: MW_API_KEY and MW_TARGET not set. Skipping middleware initialization."
+            )
+            self.tracer = None
+            return
+
+        try:
+            mw_tracker(
+                MWOptions(
+                    access_token=api_key,
+                    target=target,
+                    service_name="UNav-Server",
+                    console_exporter=False,
+                    log_level="INFO",
+                    collect_profiling=True,
+                    collect_traces=True,
+                    collect_metrics=True,
+                )
+            )
+
+            self.tracer = trace.get_tracer(__name__)
+            print("✅ Middleware.io initialized successfully")
+        except Exception as e:
+            print(f"⚠️ Warning: Failed to initialize Middleware.io: {e}")
+            self.tracer = None
 
     @enter(snap=False)
     def initialize_cpu_components(self):
@@ -356,6 +397,7 @@ class UnavServer:
     @method()
     def start_server(self):
         import json
+        import logging
 
         """
         Initializes and starts the serverless instance.
@@ -365,9 +407,18 @@ class UnavServer:
         thus avoiding the latency associated with a cold start.
         """
         print("UNAV Container started...")
+        logging.info("UNav server initialization requested")
 
-        response = {"status": "success", "message": "Server started."}
-        return json.dumps(response)
+        # Create span for server start if tracer available
+        if hasattr(self, "tracer") and self.tracer:
+            with self.tracer.start_as_current_span("start_server") as span:
+                span.set_attribute("operation", "server_warmup")
+                response = {"status": "success", "message": "Server started."}
+                logging.info("Server warmup completed successfully")
+                return json.dumps(response)
+        else:
+            response = {"status": "success", "message": "Server started."}
+            return json.dumps(response)
 
     @method()
     def get_destinations_list(
@@ -381,6 +432,23 @@ class UnavServer:
         Get destinations for a specific place, building, and floor.
         Loads places on demand for fast startup.
         """
+        # Create span for getting destinations if tracer available
+        if hasattr(self, "tracer") and self.tracer:
+            with self.tracer.start_as_current_span("get_destinations_list") as span:
+                span.set_attribute("place", place)
+                span.set_attribute("building", building)
+                span.set_attribute("floor", floor)
+                span.set_attribute("enable_multifloor", enable_multifloor)
+                return self._get_destinations_impl(
+                    floor, place, building, enable_multifloor, span
+                )
+        else:
+            return self._get_destinations_impl(
+                floor, place, building, enable_multifloor, None
+            )
+
+    def _get_destinations_impl(self, floor, place, building, enable_multifloor, span):
+        """Internal implementation of get_destinations_list"""
         try:
             print(f"🎯 [Phase 3] Getting destinations for {place}/{building}/{floor}")
 
@@ -402,12 +470,18 @@ class UnavServer:
             ]
 
             print(f"✅ Found {len(destinations)} destinations")
+
+            if span:
+                span.set_attribute("num_destinations", len(destinations))
+
             return {
                 "destinations": destinations,
             }
 
         except Exception as e:
             print(f"❌ Error getting destinations: {e}")
+            if span:
+                span.set_attribute("error", str(e))
             return {"status": "error", "message": str(e), "type": type(e).__name__}
 
     @method()
@@ -427,9 +501,71 @@ class UnavServer:
         enable_multifloor: bool = False,
     ):
         """
-        Full localization and navigation pipeline with timing tracking.
+        Full localization and navigation pipeline with timing tracking and middleware tracing.
         """
         import time
+        import logging
+
+        # Create parent span for the entire planner operation if tracer is available
+        if hasattr(self, "tracer") and self.tracer:
+            with self.tracer.start_as_current_span(
+                "planner_full_pipeline"
+            ) as parent_span:
+                parent_span.set_attribute("session_id", session_id)
+                parent_span.set_attribute("destination_id", destination_id)
+                parent_span.set_attribute("place", place)
+                parent_span.set_attribute("building", building)
+                parent_span.set_attribute("floor", floor)
+                return self._planner_impl(
+                    session_id,
+                    base_64_image,
+                    destination_id,
+                    place,
+                    building,
+                    floor,
+                    top_k,
+                    unit,
+                    language,
+                    refinement_queue,
+                    is_vlm_extraction_enabled,
+                    enable_multifloor,
+                )
+        else:
+            return self._planner_impl(
+                session_id,
+                base_64_image,
+                destination_id,
+                place,
+                building,
+                floor,
+                top_k,
+                unit,
+                language,
+                refinement_queue,
+                is_vlm_extraction_enabled,
+                enable_multifloor,
+            )
+
+    def _planner_impl(
+        self,
+        session_id: str,
+        base_64_image,
+        destination_id: str,
+        place: str,
+        building: str,
+        floor: str,
+        top_k: int = None,
+        unit: str = "meter",
+        language: str = "en",
+        refinement_queue: dict = None,
+        is_vlm_extraction_enabled: bool = False,
+        enable_multifloor: bool = False,
+    ):
+        """
+        Internal implementation of the planner with detailed timing and tracing.
+        """
+        import time
+        import logging
 
         # Start total timing
         start_time = time.time()
@@ -522,6 +658,14 @@ class UnavServer:
             # Step 1: Setup and session management
             setup_start = time.time()
 
+            # Create span for setup if tracer available
+            if hasattr(self, "tracer") and self.tracer:
+                setup_span = self.tracer.start_as_current_span(
+                    "setup_and_session_management"
+                )
+            else:
+                setup_span = None
+
             dest_id = destination_id
             target_place = place
             target_building = building
@@ -577,8 +721,20 @@ class UnavServer:
             timing_data["setup"] = (time.time() - setup_start) * 1000  # Convert to ms
             print(f"⏱️ Setup: {timing_data['setup']:.2f}ms")
 
+            if setup_span:
+                setup_span.end()
+
             # Step 2: Localization
             localization_start = time.time()
+
+            # Create span for localization if tracer available
+            if hasattr(self, "tracer") and self.tracer:
+                localization_span = self.tracer.start_as_current_span("localization")
+                localization_span.set_attribute("target_place", target_place)
+                localization_span.set_attribute("target_building", target_building)
+                localization_span.set_attribute("target_floor", target_floor)
+            else:
+                localization_span = None
 
             # Ensure GPU components are ready (initializes localizer)
             self.ensure_gpu_components_ready()
@@ -608,8 +764,17 @@ class UnavServer:
             timing_data["localization"] = (time.time() - localization_start) * 1000
             print(f"⏱️ Localization: {timing_data['localization']:.2f}ms")
 
+            if localization_span:
+                localization_span.set_attribute(
+                    "localization_time_ms", timing_data["localization"]
+                )
+                localization_span.end()
+
             if output is None or "floorplan_pose" not in output:
                 print("❌ Localization failed, no pose found.")
+
+                if localization_span:
+                    localization_span.set_attribute("localization_failed", True)
 
                 if is_vlm_extraction_enabled:
                     # Run VLM to extract text from image as fallback
@@ -650,6 +815,14 @@ class UnavServer:
 
             # Step 3: Process localization results
             processing_start = time.time()
+
+            # Create span for processing if tracer available
+            if hasattr(self, "tracer") and self.tracer:
+                processing_span = self.tracer.start_as_current_span(
+                    "process_localization_results"
+                )
+            else:
+                processing_span = None
 
             floorplan_pose = output["floorplan_pose"]
             start_xy, start_heading = floorplan_pose["xy"], -floorplan_pose["ang"]
@@ -694,8 +867,20 @@ class UnavServer:
             timing_data["processing"] = (time.time() - processing_start) * 1000
             print(f"⏱️ Processing: {timing_data['processing']:.2f}ms")
 
+            if processing_span:
+                processing_span.end()
+
             # Step 4: Path planning
             path_planning_start = time.time()
+
+            # Create span for path planning if tracer available
+            if hasattr(self, "tracer") and self.tracer:
+                path_planning_span = self.tracer.start_as_current_span("path_planning")
+                path_planning_span.set_attribute("start_floor", start_floor)
+                path_planning_span.set_attribute("target_floor", target_floor)
+                path_planning_span.set_attribute("dest_id", str(dest_id_for_path))
+            else:
+                path_planning_span = None
 
             # Plan navigation path to destination
             result = self.nav.find_path(
@@ -711,6 +896,12 @@ class UnavServer:
 
             timing_data["path_planning"] = (time.time() - path_planning_start) * 1000
             print(f"⏱️ Path Planning: {timing_data['path_planning']:.2f}ms")
+
+            if path_planning_span:
+                path_planning_span.set_attribute(
+                    "path_planning_time_ms", timing_data["path_planning"]
+                )
+                path_planning_span.end()
 
             if result is None:
                 return {
@@ -730,6 +921,14 @@ class UnavServer:
             # Step 5: Command generation
             command_generation_start = time.time()
 
+            # Create span for command generation if tracer available
+            if hasattr(self, "tracer") and self.tracer:
+                command_span = self.tracer.start_as_current_span("command_generation")
+                command_span.set_attribute("unit", unit)
+                command_span.set_attribute("language", language)
+            else:
+                command_span = None
+
             # Generate spoken/navigation commands
             cmds = self.commander(
                 self.nav,
@@ -743,6 +942,12 @@ class UnavServer:
                 time.time() - command_generation_start
             ) * 1000
             print(f"⏱️ Command Generation: {timing_data['command_generation']:.2f}ms")
+
+            if command_span:
+                command_span.set_attribute(
+                    "num_commands", len(cmds) if isinstance(cmds, list) else 0
+                )
+                command_span.end()
 
             # Step 6: Serialization
             serialization_start = time.time()
@@ -758,6 +963,14 @@ class UnavServer:
             # Calculate total time
             timing_data["total"] = (time.time() - start_time) * 1000
             print(f"⏱️ Total Navigation Time: {timing_data['total']:.2f}ms")
+
+            # Log summary
+            logging.info(
+                f"Navigation pipeline completed successfully. "
+                f"Total time: {timing_data['total']:.0f}ms, "
+                f"Localization: {timing_data['localization']:.0f}ms, "
+                f"Path planning: {timing_data['path_planning']:.0f}ms"
+            )
 
             # Print summary
             print(f"📊 Timing Breakdown:")
@@ -1017,6 +1230,17 @@ class UnavServer:
         Returns:
             str: Extracted text from the image.
         """
+        # Create span for VLM extraction if tracer available
+        if hasattr(self, "tracer") and self.tracer:
+            with self.tracer.start_as_current_span("vlm_text_extraction") as vlm_span:
+                return self._run_vlm_impl(image, vlm_span)
+        else:
+            return self._run_vlm_impl(image, None)
+
+    def _run_vlm_impl(self, image: np.ndarray, vlm_span) -> str:
+        """
+        Internal implementation of VLM extraction.
+        """
         try:
             # 1) Import required libraries
             from google import genai
@@ -1069,13 +1293,24 @@ class UnavServer:
             print(
                 f"✅ VLM extraction successful: {len(extracted_text)} characters extracted"
             )
+
+            if vlm_span:
+                vlm_span.set_attribute("extracted_text_length", len(extracted_text))
+                vlm_span.set_attribute("extraction_successful", True)
+
             return extracted_text
 
         except ImportError as e:
             error_msg = f"Missing required library for VLM: {str(e)}. Please install: pip install google-genai"
             print(f"❌ {error_msg}")
+            if vlm_span:
+                vlm_span.set_attribute("error", error_msg)
+                vlm_span.set_attribute("extraction_successful", False)
             return error_msg
         except Exception as e:
             error_msg = f"VLM extraction failed: {str(e)}"
             print(f"❌ {error_msg}")
+            if vlm_span:
+                vlm_span.set_attribute("error", error_msg)
+                vlm_span.set_attribute("extraction_successful", False)
             return error_msg
