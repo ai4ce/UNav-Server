@@ -303,44 +303,99 @@ class UnavServer:
         if map_key in self.maps_loaded:
             return  # Already loaded
 
-        print(f"🔄 [Phase 4] Creating selective localizer for: {map_key}")
+        # Create span for map loading if tracer available
+        if hasattr(self, "tracer") and self.tracer:
+            with self.tracer.start_as_current_span("ensure_maps_loaded") as map_load_span:
+                map_load_span.set_attribute("map_key", str(map_key))
+                map_load_span.set_attribute("place", place)
+                if building:
+                    map_load_span.set_attribute("building", building)
+                if floor:
+                    map_load_span.set_attribute("floor", floor)
+                map_load_span.set_attribute("enable_multifloor", enable_multifloor)
 
-        # Create selective places config with only the requested location
-        if building:
-            selective_places = self.get_places(
-                target_place=place,
-                target_building=building,
-                target_floor=floor,
-                enable_multifloor=enable_multifloor,
-            )
+                print(f"🔄 [Phase 4] Creating selective localizer for: {map_key}")
+
+                # Create selective places config with only the requested location
+                if building:
+                    selective_places = self.get_places(
+                        target_place=place,
+                        target_building=building,
+                        target_floor=floor,
+                        enable_multifloor=enable_multifloor,
+                    )
+                else:
+                    selective_places = self.get_places(target_place=place)
+
+                if not selective_places:
+                    print(
+                        "⚠️ No matching places found for selective load; skipping localizer creation"
+                    )
+                    map_load_span.set_attribute("maps_loaded", False)
+                    map_load_span.set_attribute("reason", "no_matching_places")
+                    return
+
+                # Create selective config and localizer
+                from unav.config import UNavConfig
+
+                selective_config = UNavConfig(
+                    data_final_root=self.DATA_ROOT,
+                    places=selective_places,
+                    global_descriptor_model=self.FEATURE_MODEL,
+                    local_feature_model=self.LOCAL_FEATURE_MODEL,
+                )
+
+                from unav.localizer.localizer import UNavLocalizer
+
+                selective_localizer = UNavLocalizer(selective_config.localizer_config)
+                selective_localizer.load_maps_and_features()
+
+                # Cache the selective localizer
+                self.selective_localizers[map_key] = selective_localizer
+                self.maps_loaded.add(map_key)
+                print(f"✅ Selective localizer created and maps loaded for: {map_key}")
+
+                map_load_span.set_attribute("maps_loaded", True)
+                map_load_span.set_attribute("places_count", len(selective_places))
         else:
-            selective_places = self.get_places(target_place=place)
+            print(f"🔄 [Phase 4] Creating selective localizer for: {map_key}")
 
-        if not selective_places:
-            print(
-                "⚠️ No matching places found for selective load; skipping localizer creation"
+            # Create selective places config with only the requested location
+            if building:
+                selective_places = self.get_places(
+                    target_place=place,
+                    target_building=building,
+                    target_floor=floor,
+                    enable_multifloor=enable_multifloor,
+                )
+            else:
+                selective_places = self.get_places(target_place=place)
+
+            if not selective_places:
+                print(
+                    "⚠️ No matching places found for selective load; skipping localizer creation"
+                )
+                return
+
+            # Create selective config and localizer
+            from unav.config import UNavConfig
+
+            selective_config = UNavConfig(
+                data_final_root=self.DATA_ROOT,
+                places=selective_places,
+                global_descriptor_model=self.FEATURE_MODEL,
+                local_feature_model=self.LOCAL_FEATURE_MODEL,
             )
-            return
 
-        # Create selective config and localizer
-        from unav.config import UNavConfig
+            from unav.localizer.localizer import UNavLocalizer
 
-        selective_config = UNavConfig(
-            data_final_root=self.DATA_ROOT,
-            places=selective_places,
-            global_descriptor_model=self.FEATURE_MODEL,
-            local_feature_model=self.LOCAL_FEATURE_MODEL,
-        )
+            selective_localizer = UNavLocalizer(selective_config.localizer_config)
+            selective_localizer.load_maps_and_features()
 
-        from unav.localizer.localizer import UNavLocalizer
-
-        selective_localizer = UNavLocalizer(selective_config.localizer_config)
-        selective_localizer.load_maps_and_features()
-
-        # Cache the selective localizer
-        self.selective_localizers[map_key] = selective_localizer
-        self.maps_loaded.add(map_key)
-        print(f"✅ Selective localizer created and maps loaded for: {map_key}")
+            # Cache the selective localizer
+            self.selective_localizers[map_key] = selective_localizer
+            self.maps_loaded.add(map_key)
+            print(f"✅ Selective localizer created and maps loaded for: {map_key}")
 
     def ensure_gpu_components_ready(self):
         """
