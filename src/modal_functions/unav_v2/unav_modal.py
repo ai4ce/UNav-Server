@@ -658,14 +658,6 @@ class UnavServer:
             # Step 1: Setup and session management
             setup_start = time.time()
 
-            # Create span for setup if tracer available
-            if hasattr(self, "tracer") and self.tracer:
-                setup_span = self.tracer.start_as_current_span(
-                    "setup_and_session_management"
-                )
-            else:
-                setup_span = None
-
             dest_id = destination_id
             target_place = place
             target_building = building
@@ -721,20 +713,8 @@ class UnavServer:
             timing_data["setup"] = (time.time() - setup_start) * 1000  # Convert to ms
             print(f"⏱️ Setup: {timing_data['setup']:.2f}ms")
 
-            if setup_span:
-                setup_span.end()
-
             # Step 2: Localization
             localization_start = time.time()
-
-            # Create span for localization if tracer available
-            if hasattr(self, "tracer") and self.tracer:
-                localization_span = self.tracer.start_as_current_span("localization")
-                localization_span.set_attribute("target_place", target_place)
-                localization_span.set_attribute("target_building", target_building)
-                localization_span.set_attribute("target_floor", target_floor)
-            else:
-                localization_span = None
 
             # Ensure GPU components are ready (initializes localizer)
             self.ensure_gpu_components_ready()
@@ -764,17 +744,8 @@ class UnavServer:
             timing_data["localization"] = (time.time() - localization_start) * 1000
             print(f"⏱️ Localization: {timing_data['localization']:.2f}ms")
 
-            if localization_span:
-                localization_span.set_attribute(
-                    "localization_time_ms", timing_data["localization"]
-                )
-                localization_span.end()
-
             if output is None or "floorplan_pose" not in output:
                 print("❌ Localization failed, no pose found.")
-
-                if localization_span:
-                    localization_span.set_attribute("localization_failed", True)
 
                 if is_vlm_extraction_enabled:
                     # Run VLM to extract text from image as fallback
@@ -815,14 +786,6 @@ class UnavServer:
 
             # Step 3: Process localization results
             processing_start = time.time()
-
-            # Create span for processing if tracer available
-            if hasattr(self, "tracer") and self.tracer:
-                processing_span = self.tracer.start_as_current_span(
-                    "process_localization_results"
-                )
-            else:
-                processing_span = None
 
             floorplan_pose = output["floorplan_pose"]
             start_xy, start_heading = floorplan_pose["xy"], -floorplan_pose["ang"]
@@ -867,20 +830,8 @@ class UnavServer:
             timing_data["processing"] = (time.time() - processing_start) * 1000
             print(f"⏱️ Processing: {timing_data['processing']:.2f}ms")
 
-            if processing_span:
-                processing_span.end()
-
             # Step 4: Path planning
             path_planning_start = time.time()
-
-            # Create span for path planning if tracer available
-            if hasattr(self, "tracer") and self.tracer:
-                path_planning_span = self.tracer.start_as_current_span("path_planning")
-                path_planning_span.set_attribute("start_floor", start_floor)
-                path_planning_span.set_attribute("target_floor", target_floor)
-                path_planning_span.set_attribute("dest_id", str(dest_id_for_path))
-            else:
-                path_planning_span = None
 
             # Plan navigation path to destination
             result = self.nav.find_path(
@@ -896,12 +847,6 @@ class UnavServer:
 
             timing_data["path_planning"] = (time.time() - path_planning_start) * 1000
             print(f"⏱️ Path Planning: {timing_data['path_planning']:.2f}ms")
-
-            if path_planning_span:
-                path_planning_span.set_attribute(
-                    "path_planning_time_ms", timing_data["path_planning"]
-                )
-                path_planning_span.end()
 
             if result is None:
                 return {
@@ -921,14 +866,6 @@ class UnavServer:
             # Step 5: Command generation
             command_generation_start = time.time()
 
-            # Create span for command generation if tracer available
-            if hasattr(self, "tracer") and self.tracer:
-                command_span = self.tracer.start_as_current_span("command_generation")
-                command_span.set_attribute("unit", unit)
-                command_span.set_attribute("language", language)
-            else:
-                command_span = None
-
             # Generate spoken/navigation commands
             cmds = self.commander(
                 self.nav,
@@ -942,12 +879,6 @@ class UnavServer:
                 time.time() - command_generation_start
             ) * 1000
             print(f"⏱️ Command Generation: {timing_data['command_generation']:.2f}ms")
-
-            if command_span:
-                command_span.set_attribute(
-                    "num_commands", len(cmds) if isinstance(cmds, list) else 0
-                )
-                command_span.end()
 
             # Step 6: Serialization
             serialization_start = time.time()
