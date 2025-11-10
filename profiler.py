@@ -1,5 +1,3 @@
-this is a sample file with middleware.io integration
-
 import modal
 import time
 import logging
