@@ -459,13 +459,14 @@ class UnavServer:
                         f"🎯 [Phase 3] Getting destinations for {place}/{building}/{floor}"
                     )
 
-                    # Ensure maps are loaded for this location (load all floors for the building)
-                    self.ensure_maps_loaded(
-                        place,
-                        building,
-                        floor=floor,
-                        enable_multifloor=enable_multifloor,
-                    )
+                    with self.tracer.start_as_current_span("ensure_maps_loaded") as load_span:
+                        # Ensure maps are loaded for this location (load all floors for the building)
+                        self.ensure_maps_loaded(
+                            place,
+                            building,
+                            floor=floor,
+                            enable_multifloor=enable_multifloor,
+                        )
 
                     # Use components with the loaded place
                     target_key = (place, building, floor)
