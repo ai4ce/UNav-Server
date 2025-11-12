@@ -730,6 +730,7 @@ class UnavServer:
                         else:
                             localizer_to_use = localizer_to_use or self.localizer
 
+                        
                         # Perform localization
                         with self.tracer.start_as_current_span("pose_generation_span") as pose_span:
                             output = localizer_to_use.localize(
