@@ -303,118 +303,64 @@ class UnavServer:
         if map_key in self.maps_loaded:
             return  # Already loaded
 
-        # Create span for map loading if tracer available
-        if hasattr(self, "tracer") and self.tracer:
-            with self.tracer.start_as_current_span("load_maps_span") as map_load_span:
-                map_load_span.set_attribute("map_key", str(map_key))
-                map_load_span.set_attribute("place", place)
-                if building:
-                    map_load_span.set_attribute("building", building)
-                if floor:
-                    map_load_span.set_attribute("floor", floor)
-                map_load_span.set_attribute("enable_multifloor", enable_multifloor)
+        print(f"🔄 [Phase 4] Creating selective localizer for: {map_key}")
 
-                print(f"🔄 [Phase 4] Creating selective localizer for: {map_key}")
-
-                # Create selective places config with only the requested location
-                if building:
-                    selective_places = self.get_places(
-                        target_place=place,
-                        target_building=building,
-                        target_floor=floor,
-                        enable_multifloor=enable_multifloor,
-                    )
-                else:
-                    selective_places = self.get_places(target_place=place)
-
-                if not selective_places:
-                    print(
-                        "⚠️ No matching places found for selective load; skipping localizer creation"
-                    )
-                    map_load_span.set_attribute("maps_loaded", False)
-                    map_load_span.set_attribute("reason", "no_matching_places")
-                    return
-
-                # Create selective config and localizer
-                from unav.config import UNavConfig
-
-                selective_config = UNavConfig(
-                    data_final_root=self.DATA_ROOT,
-                    places=selective_places,
-                    global_descriptor_model=self.FEATURE_MODEL,
-                    local_feature_model=self.LOCAL_FEATURE_MODEL,
-                )
-
-                from unav.localizer.localizer import UNavLocalizer
-                import time
-
-                selective_localizer = UNavLocalizer(selective_config.localizer_config)
-
-                # Child span for loading maps and features (this is the most time-consuming part)
-                with self.tracer.start_as_current_span("load_maps_and_features_span") as load_span:
-                    load_span.add_event("Starting map and feature loading")
-                    load_span.set_attribute("map_key", str(map_key))
-                    load_span.set_attribute("selective_places", str(selective_places))
-                    
-                    start_load_time = time.time()
-                    selective_localizer.load_maps_and_features()
-                    load_duration = time.time() - start_load_time
-                    
-                    load_span.set_attribute("load_duration_seconds", load_duration)
-                    load_span.add_event("Map and feature loading completed")
-
-                # Cache the selective localizer
-                self.selective_localizers[map_key] = selective_localizer
-                self.maps_loaded.add(map_key)
-                print(f"✅ Selective localizer created and maps loaded for: {map_key}")
-
-                map_load_span.set_attribute("maps_loaded", True)
-                map_load_span.set_attribute("places_count", len(selective_places))
-        else:
-            print(f"🔄 [Phase 4] Creating selective localizer for: {map_key}")
-
-            # Create selective places config with only the requested location
-            if building:
-                selective_places = self.get_places(
-                    target_place=place,
-                    target_building=building,
-                    target_floor=floor,
-                    enable_multifloor=enable_multifloor,
-                )
-            else:
-                selective_places = self.get_places(target_place=place)
-
-            if not selective_places:
-                print(
-                    "⚠️ No matching places found for selective load; skipping localizer creation"
-                )
-                return
-
-            # Create selective config and localizer
-            from unav.config import UNavConfig
-
-            selective_config = UNavConfig(
-                data_final_root=self.DATA_ROOT,
-                places=selective_places,
-                global_descriptor_model=self.FEATURE_MODEL,
-                local_feature_model=self.LOCAL_FEATURE_MODEL,
+        # Create selective places config with only the requested location
+        if building:
+            selective_places = self.get_places(
+                target_place=place,
+                target_building=building,
+                target_floor=floor,
+                enable_multifloor=enable_multifloor,
             )
+        else:
+            selective_places = self.get_places(target_place=place)
 
-            from unav.localizer.localizer import UNavLocalizer
-            import time
+        if not selective_places:
+            print(
+                "⚠️ No matching places found for selective load; skipping localizer creation"
+            )
+            return
 
-            selective_localizer = UNavLocalizer(selective_config.localizer_config)
-            
+        # Create selective config and localizer
+        from unav.config import UNavConfig
+
+        selective_config = UNavConfig(
+            data_final_root=self.DATA_ROOT,
+            places=selective_places,
+            global_descriptor_model=self.FEATURE_MODEL,
+            local_feature_model=self.LOCAL_FEATURE_MODEL,
+        )
+
+        from unav.localizer.localizer import UNavLocalizer
+        import time
+
+        selective_localizer = UNavLocalizer(selective_config.localizer_config)
+
+        # Load maps and features with tracing if available
+        if hasattr(self, "tracer") and self.tracer:
+            with self.tracer.start_as_current_span("load_maps_and_features_span") as load_span:
+                load_span.add_event("Starting map and feature loading")
+                load_span.set_attribute("map_key", str(map_key))
+                load_span.set_attribute("selective_places", str(selective_places))
+                
+                start_load_time = time.time()
+                selective_localizer.load_maps_and_features()
+                load_duration = time.time() - start_load_time
+                
+                load_span.set_attribute("load_duration_seconds", load_duration)
+                load_span.add_event("Map and feature loading completed")
+        else:
             print(f"⏱️ Starting load_maps_and_features for: {map_key}")
             start_load_time = time.time()
             selective_localizer.load_maps_and_features()
             load_duration = time.time() - start_load_time
             print(f"⏱️ Completed load_maps_and_features in {load_duration:.2f} seconds")
 
-            # Cache the selective localizer
-            self.selective_localizers[map_key] = selective_localizer
-            self.maps_loaded.add(map_key)
-            print(f"✅ Selective localizer created and maps loaded for: {map_key}")
+        # Cache the selective localizer
+        self.selective_localizers[map_key] = selective_localizer
+        self.maps_loaded.add(map_key)
+        print(f"✅ Selective localizer created and maps loaded for: {map_key}")
 
     def ensure_gpu_components_ready(self):
         """
@@ -763,13 +709,14 @@ class UnavServer:
                         # Ensure GPU components are ready (initializes localizer)
                         self.ensure_gpu_components_ready()
 
-                        # Ensure maps are loaded for the target location
-                        self.ensure_maps_loaded(
-                            target_place,
-                            target_building,
-                            floor=target_floor,
-                            enable_multifloor=enable_multifloor,
-                        )
+                        with self.tracer.start_as_current_span("load_maps_span") as load_maps_span:
+                            # Ensure maps are loaded for the target location
+                            self.ensure_maps_loaded(
+                                target_place,
+                                target_building,
+                                floor=target_floor,
+                                enable_multifloor=enable_multifloor,
+                            )
 
                         # Get the selective localizer for this building (all floors loaded)
                         map_key = (target_place, target_building)
