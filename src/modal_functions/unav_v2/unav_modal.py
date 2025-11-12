@@ -783,9 +783,10 @@ class UnavServer:
                             localizer_to_use = localizer_to_use or self.localizer
 
                         # Perform localization
-                        output = localizer_to_use.localize(
-                            image, refinement_queue, top_k=top_k
-                        )
+                        with self.tracer.start_as_current_span("pose_generation_span") as pose_span:
+                            output = localizer_to_use.localize(
+                                image, refinement_queue, top_k=top_k
+                            )
 
                     timing_data["localization"] = (
                         time.time() - localization_start
