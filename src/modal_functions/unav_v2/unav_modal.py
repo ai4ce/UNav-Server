@@ -16,7 +16,7 @@ from modal_config import app, unav_image, volume, gemini_secret, middleware_secr
     enable_memory_snapshot=False,
     max_containers=20,
     memory=73728,
-    scaledown_window=500,
+    scaledown_window=120,
     secrets=[gemini_secret, middleware_secret],
 )
 class UnavServer:
@@ -346,12 +346,22 @@ class UnavServer:
                 )
 
                 from unav.localizer.localizer import UNavLocalizer
+                import time
 
                 selective_localizer = UNavLocalizer(selective_config.localizer_config)
 
                 # Child span for loading maps and features (this is the most time-consuming part)
                 with self.tracer.start_as_current_span("load_maps_and_features_span") as load_span:
+                    load_span.add_event("Starting map and feature loading")
+                    load_span.set_attribute("map_key", str(map_key))
+                    load_span.set_attribute("selective_places", str(selective_places))
+                    
+                    start_load_time = time.time()
                     selective_localizer.load_maps_and_features()
+                    load_duration = time.time() - start_load_time
+                    
+                    load_span.set_attribute("load_duration_seconds", load_duration)
+                    load_span.add_event("Map and feature loading completed")
 
                 # Cache the selective localizer
                 self.selective_localizers[map_key] = selective_localizer
@@ -391,9 +401,15 @@ class UnavServer:
             )
 
             from unav.localizer.localizer import UNavLocalizer
+            import time
 
             selective_localizer = UNavLocalizer(selective_config.localizer_config)
+            
+            print(f"⏱️ Starting load_maps_and_features for: {map_key}")
+            start_load_time = time.time()
             selective_localizer.load_maps_and_features()
+            load_duration = time.time() - start_load_time
+            print(f"⏱️ Completed load_maps_and_features in {load_duration:.2f} seconds")
 
             # Cache the selective localizer
             self.selective_localizers[map_key] = selective_localizer
