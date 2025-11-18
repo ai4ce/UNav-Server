@@ -198,20 +198,17 @@ class UnavServer:
 
         tracer = self.tracer
 
-        # Default candidate methods — these are common names but may vary by version
+        # Target the ACTUAL UNavLocalizer methods from the localize() pipeline
         default_candidates = [
-            "extract_global_descriptors",
-            "compute_global_descriptors",
-            "extract_local_features",
-            "match_features",
-            "match_descriptors",
-            "estimate_pose",
-            "refine_pose",
-            "find_candidate_maps",
-            "score_maps",
+            "extract_query_features",
+            "vpr_retrieve",
+            "get_candidates_data",
+            "batch_local_matching_and_ransac",
+            "multi_frame_pose_refine",
+            "transform_pose_to_floorplan",
         ]
 
-        # Allow overriding the names via env var, e.g. MW_UNAV_TRACE_METHODS=extract_local_features,match_features
+        # Allow overriding the names via env var, e.g. MW_UNAV_TRACE_METHODS=extract_query_features,vpr_retrieve
         override = os.getenv("MW_UNAV_TRACE_METHODS")
         if override:
             method_names = [m.strip() for m in override.split(",") if m.strip()]
@@ -249,7 +246,7 @@ class UnavServer:
 
         patched = []
 
-        # Patch all methods explicitly listed
+        # Patch all methods explicitly listed (these are the exact UNavLocalizer methods)
         for mname in method_names:
             if hasattr(localizer, mname):
                 try:
@@ -257,26 +254,14 @@ class UnavServer:
                     wrapped = _wrap(orig, mname)
                     setattr(localizer, mname, wrapped)
                     patched.append(mname)
-                except Exception:
-                    continue
-
-        # Also discover candidate methods by simple keyword match
-        candidate_keywords = ["extract", "match", "pose", "refine", "find", "score"]
-        for attr in dir(localizer):
-            if attr in patched or attr.startswith("__"):
-                continue
-            if any(k in attr.lower() for k in candidate_keywords):
-                try:
-                    orig = getattr(localizer, attr)
-                    if callable(orig) and not getattr(orig, "__mw_wrapped__", False):
-                        wrapped = _wrap(orig, attr)
-                        setattr(localizer, attr, wrapped)
-                        patched.append(attr)
-                except Exception:
+                except Exception as e:
+                    print(f"⚠️ Failed to patch {mname}: {e}")
                     continue
 
         if patched:
             print(f"🔧 Patched localizer methods for tracing: {patched}")
+        else:
+            print(f"⚠️ Warning: No methods were patched. Available methods: {[m for m in dir(localizer) if not m.startswith('_')]}")
 
     def get_places(
         self,
