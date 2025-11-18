@@ -199,6 +199,7 @@ class UnavServer:
         tracer = self.tracer
 
         # Target the ACTUAL UNavLocalizer methods from the localize() pipeline
+        # Main pipeline methods
         default_candidates = [
             "extract_query_features",
             "vpr_retrieve",
@@ -207,13 +208,22 @@ class UnavServer:
             "multi_frame_pose_refine",
             "transform_pose_to_floorplan",
         ]
+        
+        # Additional internal components that are called by the pipeline methods
+        # These will show as child spans under their parent methods
+        internal_components = [
+            "global_extractor",  # Called by extract_query_features
+            "local_extractor",   # Called by extract_query_features
+            "local_matcher",     # Called by batch_local_matching_and_ransac
+        ]
 
         # Allow overriding the names via env var, e.g. MW_UNAV_TRACE_METHODS=extract_query_features,vpr_retrieve
         override = os.getenv("MW_UNAV_TRACE_METHODS")
         if override:
             method_names = [m.strip() for m in override.split(",") if m.strip()]
         else:
-            method_names = method_names or default_candidates
+            # Combine both pipeline methods and internal components
+            method_names = method_names or (default_candidates + internal_components)
 
         def _wrap(orig, name):
             # don't double-wrap
