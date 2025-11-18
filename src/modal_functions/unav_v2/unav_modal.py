@@ -14,23 +14,29 @@ from modal_config import app, unav_image, volume, gemini_secret, middleware_secr
     volumes={"/root/UNav-IO": volume},
     gpu=["T4"],
     enable_memory_snapshot=False,
-    max_containers=20,
     memory=73728,
-    scaledown_window=60,
     secrets=[gemini_secret, middleware_secret],
 )
 class UnavServer:
-    def __init__(self):
-        # Initialize session storage for user contexts
-        self.user_sessions = {}
+    # Initialize session storage for user contexts
+    user_sessions: Dict[str, Any] = {}
+    tracer: Optional[Any] = None
+    _middleware_init_pending: bool = False
 
-    @enter(snap=False)
-    def initialize_middleware(self):
-        """
-        Initialize Middleware.io tracking for profiling and telemetry.
-        """
-        print("🔧 [Phase 0] Initializing Middleware.io...")
+    def _gpu_available(self) -> bool:
+        """Utility to detect whether CUDA GPUs are currently accessible."""
+        try:
+            import torch
 
+            available = torch.cuda.is_available()
+            print(f"[GPU CHECK] torch.cuda.is_available(): {available}")
+            return available
+        except Exception as exc:
+            print(f"[GPU CHECK] Unable to determine GPU availability: {exc}")
+            return False
+
+    def _configure_middleware_tracing(self):
+        print("🔧 [CONFIGURE] Starting Middleware.io configuration...")
         from middleware import mw_tracker, MWOptions
         from opentelemetry import trace
         import os
@@ -61,9 +67,37 @@ class UnavServer:
 
             self.tracer = trace.get_tracer(__name__)
             print("✅ Middleware.io initialized successfully")
+            print(f"✅ [CONFIGURE] Tracer created: {type(self.tracer).__name__}")
         except Exception as e:
             print(f"⚠️ Warning: Failed to initialize Middleware.io: {e}")
             self.tracer = None
+            print(f"⚠️ [CONFIGURE] Tracer set to None due to error")
+
+    @enter(snap=False)
+    def initialize_middleware(self):
+        """
+        Initialize Middleware.io tracking for profiling and telemetry.
+        """
+        print("🔧 [Phase 0] Initializing Middleware.io...")
+        print(
+            f"🔧 [Phase 0] Current tracer state: {getattr(self, 'tracer', 'NOT_SET')}"
+        )
+        print(
+            f"🔧 [Phase 0] Middleware init pending: {getattr(self, '_middleware_init_pending', 'NOT_SET')}"
+        )
+
+        if not self._gpu_available():
+            print(
+                "⏸️ GPU not yet available; deferring Middleware.io initialization until a GPU-backed container is ready."
+            )
+            self._middleware_init_pending = True
+            self.tracer = None
+            print(f"🔧 [Phase 0] Set _middleware_init_pending=True, tracer=None")
+            return
+
+        self._middleware_init_pending = False
+        print("✅ GPU available; proceeding with Middleware.io initialization")
+        self._configure_middleware_tracing()
 
     @enter(snap=False)
     def initialize_cpu_components(self):
@@ -177,6 +211,24 @@ class UnavServer:
         # Set flag to indicate full system is ready
         self.gpu_components_initialized = True
         print("🎉 Full UNav system initialization complete! Ready for fast inference.")
+        print(
+            f"🎉 [Phase 2] Checking for deferred middleware init: _middleware_init_pending={getattr(self, '_middleware_init_pending', 'NOT_SET')}"
+        )
+
+        if getattr(self, "_middleware_init_pending", False):
+            print(
+                "🔁 GPU acquired; completing deferred Middleware.io initialization..."
+            )
+            print(
+                f"🔁 [Phase 2] Before deferred init: tracer={getattr(self, 'tracer', 'NOT_SET')}"
+            )
+            self._middleware_init_pending = False
+            self._configure_middleware_tracing()
+            print(
+                f"🔁 [Phase 2] After deferred init: tracer={getattr(self, 'tracer', 'NOT_SET')}, _middleware_init_pending={getattr(self, '_middleware_init_pending', 'NOT_SET')}"
+            )
+        else:
+            print("✅ [Phase 2] No deferred middleware initialization needed")
 
     def _monkey_patch_localizer_methods(
         self, localizer, method_names: Optional[list] = None
@@ -666,8 +718,15 @@ class UnavServer:
         import time
         import logging
 
+        # Check tracing availability
+        has_tracer = hasattr(self, "tracer") and self.tracer is not None
+        print(
+            f"📋 [PLANNER] Called with session_id={session_id}, has_tracer={has_tracer}, tracer_type={type(getattr(self, 'tracer', None)).__name__}"
+        )
+
         # Create parent span for the entire planner operation if tracer is available
-        if hasattr(self, "tracer") and self.tracer:
+        if has_tracer:
+            print("📋 [PLANNER] Using TRACED execution path")
             with self.tracer.start_as_current_span("planner_span") as parent_span:
                 # Start total timing
                 start_time = time.time()
@@ -1104,6 +1163,7 @@ class UnavServer:
                         "timing": timing_data,
                     }
         else:
+            print("📋 [PLANNER] Using NON-TRACED execution path")
             # Same logic without tracing
             start_time = time.time()
             timing_data = {}
