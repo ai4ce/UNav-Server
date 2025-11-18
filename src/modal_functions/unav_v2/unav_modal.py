@@ -16,7 +16,7 @@ from modal_config import app, unav_image, volume, gemini_secret, middleware_secr
     enable_memory_snapshot=False,
     max_containers=20,
     memory=73728,
-    scaledown_window=500,
+    scaledown_window=200,
     secrets=[gemini_secret, middleware_secret],
 )
 class UnavServer:
@@ -178,7 +178,9 @@ class UnavServer:
         self.gpu_components_initialized = True
         print("🎉 Full UNav system initialization complete! Ready for fast inference.")
 
-    def _monkey_patch_localizer_methods(self, localizer, method_names: Optional[list] = None):
+    def _monkey_patch_localizer_methods(
+        self, localizer, method_names: Optional[list] = None
+    ):
         """
         Add spans to a set of internal UNavLocalizer methods by monkey-patching them.
 
@@ -208,13 +210,13 @@ class UnavServer:
             "multi_frame_pose_refine",
             "transform_pose_to_floorplan",
         ]
-        
+
         # Additional internal components that are called by the pipeline methods
         # These will show as child spans under their parent methods
         internal_components = [
             "global_extractor",  # Called by extract_query_features
-            "local_extractor",   # Called by extract_query_features
-            "local_matcher",     # Called by batch_local_matching_and_ransac
+            "local_extractor",  # Called by extract_query_features
+            "local_matcher",  # Called by batch_local_matching_and_ransac
         ]
 
         # Allow overriding the names via env var, e.g. MW_UNAV_TRACE_METHODS=extract_query_features,vpr_retrieve
@@ -231,6 +233,7 @@ class UnavServer:
                 return orig
 
             if inspect.iscoroutinefunction(orig):
+
                 async def _async_wrapper(*args, **kwargs):
                     with tracer.start_as_current_span(f"unav.{name}") as span:
                         try:
@@ -243,6 +246,7 @@ class UnavServer:
                 return functools.wraps(orig)(_async_wrapper)
 
             else:
+
                 def _sync_wrapper(*args, **kwargs):
                     with tracer.start_as_current_span(f"unav.{name}") as span:
                         try:
@@ -271,7 +275,9 @@ class UnavServer:
         if patched:
             print(f"🔧 Patched localizer methods for tracing: {patched}")
         else:
-            print(f"⚠️ Warning: No methods were patched. Available methods: {[m for m in dir(localizer) if not m.startswith('_')]}")
+            print(
+                f"⚠️ Warning: No methods were patched. Available methods: {[m for m in dir(localizer) if not m.startswith('_')]}"
+            )
 
     def get_places(
         self,
@@ -448,15 +454,17 @@ class UnavServer:
 
         # Load maps and features with tracing if available
         if hasattr(self, "tracer") and self.tracer:
-            with self.tracer.start_as_current_span("load_maps_and_features_span") as load_span:
+            with self.tracer.start_as_current_span(
+                "load_maps_and_features_span"
+            ) as load_span:
                 load_span.add_event("Starting map and feature loading")
                 load_span.set_attribute("map_key", str(map_key))
                 load_span.set_attribute("selective_places", str(selective_places))
-                
+
                 start_load_time = time.time()
                 selective_localizer.load_maps_and_features()
                 load_duration = time.time() - start_load_time
-                
+
                 load_span.set_attribute("load_duration_seconds", load_duration)
                 load_span.add_event("Map and feature loading completed")
         else:
@@ -562,13 +570,17 @@ class UnavServer:
         """
         # Create span for getting destinations if tracer available
         if hasattr(self, "tracer") and self.tracer:
-            with self.tracer.start_as_current_span("get_destinations_list_span") as span:
+            with self.tracer.start_as_current_span(
+                "get_destinations_list_span"
+            ) as span:
                 try:
                     print(
                         f"🎯 [Phase 3] Getting destinations for {place}/{building}/{floor}"
                     )
 
-                    with self.tracer.start_as_current_span("ensure_maps_loaded") as load_span:
+                    with self.tracer.start_as_current_span(
+                        "ensure_maps_loaded"
+                    ) as load_span:
                         # Ensure maps are loaded for this location (load all floors for the building)
                         self.ensure_maps_loaded(
                             place,
@@ -656,9 +668,7 @@ class UnavServer:
 
         # Create parent span for the entire planner operation if tracer is available
         if hasattr(self, "tracer") and self.tracer:
-            with self.tracer.start_as_current_span(
-                "planner_span"
-            ) as parent_span:
+            with self.tracer.start_as_current_span("planner_span") as parent_span:
                 # Start total timing
                 start_time = time.time()
                 timing_data = {}
@@ -819,7 +829,9 @@ class UnavServer:
                         # Ensure GPU components are ready (initializes localizer)
                         self.ensure_gpu_components_ready()
 
-                        with self.tracer.start_as_current_span("load_maps_span") as load_maps_span:
+                        with self.tracer.start_as_current_span(
+                            "load_maps_span"
+                        ) as load_maps_span:
                             # Ensure maps are loaded for the target location
                             self.ensure_maps_loaded(
                                 target_place,
@@ -839,16 +851,12 @@ class UnavServer:
                         else:
                             localizer_to_use = localizer_to_use or self.localizer
 
-                        # Ensure we have internal method tracing on the chosen localizer
-                        try:
-                            self._monkey_patch_localizer_methods(localizer_to_use)
-                        except Exception:
-                            pass
+                        # Localizer already patched in ensure_maps_loaded() or initialize_gpu_components()
+                        # No need to patch again here to avoid double-wrapping spans
 
-                    
                         output = localizer_to_use.localize(
-                                image, refinement_queue, top_k=top_k
-                            )
+                            image, refinement_queue, top_k=top_k
+                        )
 
                     timing_data["localization"] = (
                         time.time() - localization_start
@@ -1702,7 +1710,9 @@ class UnavServer:
         """
         # Create span for VLM extraction if tracer available
         if hasattr(self, "tracer") and self.tracer:
-            with self.tracer.start_as_current_span("vlm_text_extraction_span") as vlm_span:
+            with self.tracer.start_as_current_span(
+                "vlm_text_extraction_span"
+            ) as vlm_span:
                 try:
                     # 1) Import required libraries
                     from google import genai
