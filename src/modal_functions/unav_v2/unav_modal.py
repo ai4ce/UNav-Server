@@ -164,12 +164,119 @@ class UnavServer:
         print("🤖 Initializing UNavLocalizer (GPU-dependent)...")
         self.localizer = UNavLocalizer(self.localizor_config)
 
+        # Add fine-grained tracing to internal localizer steps without editing the package
+        # (monkey-patch key methods if available)
+        try:
+            self._monkey_patch_localizer_methods(self.localizer)
+        except Exception as e:
+            print(f"⚠️ Failed to monkey-patch UNavLocalizer methods: {e}")
+
         # Skip loading all maps/features at startup - will load on demand
         print("✅ UNavLocalizer initialized (maps will load on demand)")
 
         # Set flag to indicate full system is ready
         self.gpu_components_initialized = True
         print("🎉 Full UNav system initialization complete! Ready for fast inference.")
+
+    def _monkey_patch_localizer_methods(self, localizer, method_names: Optional[list] = None):
+        """
+        Add spans to a set of internal UNavLocalizer methods by monkey-patching them.
+
+        Args:
+            localizer: the UNavLocalizer instance to patch
+            method_names: optional list of method names to patch; if None, a conservative
+                default list is used and we also try to discover other candidates.
+        """
+        import os
+
+        if not hasattr(self, "tracer") or not self.tracer:
+            return
+
+        import functools
+        import inspect
+        import asyncio
+
+        tracer = self.tracer
+
+        # Default candidate methods — these are common names but may vary by version
+        default_candidates = [
+            "extract_global_descriptors",
+            "compute_global_descriptors",
+            "extract_local_features",
+            "match_features",
+            "match_descriptors",
+            "estimate_pose",
+            "refine_pose",
+            "find_candidate_maps",
+            "score_maps",
+        ]
+
+        # Allow overriding the names via env var, e.g. MW_UNAV_TRACE_METHODS=extract_local_features,match_features
+        override = os.getenv("MW_UNAV_TRACE_METHODS")
+        if override:
+            method_names = [m.strip() for m in override.split(",") if m.strip()]
+        else:
+            method_names = method_names or default_candidates
+
+        def _wrap(orig, name):
+            # don't double-wrap
+            if getattr(orig, "__mw_wrapped__", False):
+                return orig
+
+            if inspect.iscoroutinefunction(orig):
+                async def _async_wrapper(*args, **kwargs):
+                    with tracer.start_as_current_span(f"unav.{name}") as span:
+                        try:
+                            return await orig(*args, **kwargs)
+                        except Exception as exc:
+                            span.record_exception(exc)
+                            raise
+
+                _async_wrapper.__mw_wrapped__ = True
+                return functools.wraps(orig)(_async_wrapper)
+
+            else:
+                def _sync_wrapper(*args, **kwargs):
+                    with tracer.start_as_current_span(f"unav.{name}") as span:
+                        try:
+                            return orig(*args, **kwargs)
+                        except Exception as exc:
+                            span.record_exception(exc)
+                            raise
+
+                _sync_wrapper.__mw_wrapped__ = True
+                return functools.wraps(orig)(_sync_wrapper)
+
+        patched = []
+
+        # Patch all methods explicitly listed
+        for mname in method_names:
+            if hasattr(localizer, mname):
+                try:
+                    orig = getattr(localizer, mname)
+                    wrapped = _wrap(orig, mname)
+                    setattr(localizer, mname, wrapped)
+                    patched.append(mname)
+                except Exception:
+                    continue
+
+        # Also discover candidate methods by simple keyword match
+        candidate_keywords = ["extract", "match", "pose", "refine", "find", "score"]
+        for attr in dir(localizer):
+            if attr in patched or attr.startswith("__"):
+                continue
+            if any(k in attr.lower() for k in candidate_keywords):
+                try:
+                    orig = getattr(localizer, attr)
+                    if callable(orig) and not getattr(orig, "__mw_wrapped__", False):
+                        wrapped = _wrap(orig, attr)
+                        setattr(localizer, attr, wrapped)
+                        patched.append(attr)
+                except Exception:
+                    continue
+
+        if patched:
+            print(f"🔧 Patched localizer methods for tracing: {patched}")
 
     def get_places(
         self,
@@ -336,6 +443,13 @@ class UnavServer:
         import time
 
         selective_localizer = UNavLocalizer(selective_config.localizer_config)
+
+        # Optionally patch the selective localizer too
+        if hasattr(self, "tracer") and self.tracer:
+            try:
+                self._monkey_patch_localizer_methods(selective_localizer)
+            except Exception as e:
+                print(f"⚠️ Failed to patch selective localizer: {e}")
 
         # Load maps and features with tracing if available
         if hasattr(self, "tracer") and self.tracer:
@@ -729,6 +843,12 @@ class UnavServer:
                             )
                         else:
                             localizer_to_use = localizer_to_use or self.localizer
+
+                        # Ensure we have internal method tracing on the chosen localizer
+                        try:
+                            self._monkey_patch_localizer_methods(localizer_to_use)
+                        except Exception:
+                            pass
 
                     
                         output = localizer_to_use.localize(
