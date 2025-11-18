@@ -717,17 +717,23 @@ class UnavServer:
         """
         import time
         import logging
+        import uuid
+
+        # Generate a unique ID for this specific call to planner
+        call_id = str(uuid.uuid4())
 
         # Check tracing availability
         has_tracer = hasattr(self, "tracer") and self.tracer is not None
         print(
-            f"📋 [PLANNER] Called with session_id={session_id}, has_tracer={has_tracer}, tracer_type={type(getattr(self, 'tracer', None)).__name__}"
+            f"📋 [PLANNER] Called with session_id={session_id}, call_id={call_id}, has_tracer={has_tracer}, tracer_type={type(getattr(self, 'tracer', None)).__name__}"
         )
 
         # Create parent span for the entire planner operation if tracer is available
         if has_tracer:
-            print("📋 [PLANNER] Using TRACED execution path")
+            print(f"📋 [PLANNER] Using TRACED execution path for call_id={call_id}")
             with self.tracer.start_as_current_span("planner_span") as parent_span:
+                parent_span.set_attribute("unav.call_id", call_id)
+                parent_span.set_attribute("unav.session_id", session_id)
                 # Start total timing
                 start_time = time.time()
                 timing_data = {}
