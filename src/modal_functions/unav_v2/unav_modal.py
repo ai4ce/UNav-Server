@@ -203,6 +203,7 @@ class UnavServer:
         # (monkey-patch key methods if available)
         try:
             self._monkey_patch_localizer_methods(self.localizer)
+            self._monkey_patch_pose_refinement()
         except Exception as e:
             print(f"⚠️ Failed to monkey-patch UNavLocalizer methods: {e}")
 
@@ -331,6 +332,88 @@ class UnavServer:
             print(
                 f"⚠️ Warning: No methods were patched. Available methods: {[m for m in dir(localizer) if not m.startswith('_')]}"
             )
+
+    def _monkey_patch_pose_refinement(self):
+        """
+        Patch the child libraries (poselib, pyimplicitdist) that refine_pose_from_queue calls.
+        This is cleaner than rewriting the entire function and traces the actual bottlenecks.
+        """
+        if not hasattr(self, "tracer") or not self.tracer:
+            return
+
+        import functools
+
+        tracer = self.tracer
+
+        # Patch poselib functions
+        try:
+            import poselib
+
+            # Check if already patched
+            if not getattr(poselib, "__mw_patched__", False):
+                original_estimate = poselib.estimate_1D_radial_absolute_pose
+
+                @functools.wraps(original_estimate)
+                def traced_estimate(*args, **kwargs):
+                    with tracer.start_as_current_span(
+                        "unav.poselib.estimate_1D_radial"
+                    ):
+                        return original_estimate(*args, **kwargs)
+
+                poselib.estimate_1D_radial_absolute_pose = traced_estimate
+                poselib.__mw_patched__ = True
+                print("🔧 Patched poselib.estimate_1D_radial_absolute_pose")
+        except Exception as e:
+            print(f"⚠️ Failed to patch poselib: {e}")
+
+        # Patch pyimplicitdist functions
+        try:
+            import pyimplicitdist
+
+            # Check if already patched
+            if not getattr(pyimplicitdist, "__mw_patched__", False):
+                # Patch pose_refinement_1D_radial
+                original_refine_1d = pyimplicitdist.pose_refinement_1D_radial
+
+                @functools.wraps(original_refine_1d)
+                def traced_refine_1d(*args, **kwargs):
+                    with tracer.start_as_current_span(
+                        "unav.pyimplicitdist.pose_refinement_1D_radial"
+                    ):
+                        return original_refine_1d(*args, **kwargs)
+
+                pyimplicitdist.pose_refinement_1D_radial = traced_refine_1d
+
+                # Patch build_cost_matrix_multi
+                original_build_cm = pyimplicitdist.build_cost_matrix_multi
+
+                @functools.wraps(original_build_cm)
+                def traced_build_cm(*args, **kwargs):
+                    with tracer.start_as_current_span(
+                        "unav.pyimplicitdist.build_cost_matrix_multi"
+                    ):
+                        return original_build_cm(*args, **kwargs)
+
+                pyimplicitdist.build_cost_matrix_multi = traced_build_cm
+
+                # Patch pose_refinement_multi
+                original_refine_multi = pyimplicitdist.pose_refinement_multi
+
+                @functools.wraps(original_refine_multi)
+                def traced_refine_multi(*args, **kwargs):
+                    with tracer.start_as_current_span(
+                        "unav.pyimplicitdist.pose_refinement_multi"
+                    ):
+                        return original_refine_multi(*args, **kwargs)
+
+                pyimplicitdist.pose_refinement_multi = traced_refine_multi
+
+                pyimplicitdist.__mw_patched__ = True
+                print(
+                    "🔧 Patched pyimplicitdist functions (pose_refinement_1D_radial, build_cost_matrix_multi, pose_refinement_multi)"
+                )
+        except Exception as e:
+            print(f"⚠️ Failed to patch pyimplicitdist: {e}")
 
     def get_places(
         self,
