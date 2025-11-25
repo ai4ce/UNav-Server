@@ -199,11 +199,11 @@ class UnavServer:
         self.localizer = UNavLocalizer(self.localizor_config)
 
         # Add fine-grained tracing to internal localizer steps without editing the package
-        # (monkey-patch key methods if available)
+        #(monkey-patch key methods if available)
         try:
             self._monkey_patch_localizer_methods(self.localizer)
             self._monkey_patch_pose_refinement()
-            self._monkey_patch_matching_and_ransac()
+            #self._monkey_patch_matching_and_ransac()
             self._monkey_patch_feature_extractors()
         except Exception as e:
             print(f"⚠️ Failed to monkey-patch UNavLocalizer methods: {e}")
@@ -965,7 +965,7 @@ class UnavServer:
 
         selective_localizer = UNavLocalizer(selective_config.localizer_config)
 
-        # Optionally patch the selective localizer too
+        # # Optionally patch the selective localizer too
         if hasattr(self, "tracer") and self.tracer:
             try:
                 self._monkey_patch_localizer_methods(selective_localizer)
