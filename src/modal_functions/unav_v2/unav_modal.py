@@ -454,57 +454,19 @@ class UnavServer:
                     global_model_name,
                     device,
                 ):
-                    import torch
-                    from torch.nn.functional import normalize
-
-                    # Preprocessing for global features
-                    with tracer.start_as_current_span(
-                        "unav.global_extractor.preprocess"
-                    ):
-                        if query_img.dtype != np.float32:
-                            img = query_img.astype(np.float32)
-                        else:
-                            img = query_img.copy()
-                        tensor_img = (
-                            torch.from_numpy(img)
-                            .permute(2, 0, 1)
-                            .unsqueeze(0)
-                            .float()
-                            .to(device)
-                            / 255.0
+                    # Simply wrap the original function - no code rewriting
+                    with tracer.start_as_current_span("unav.extract_query_features"):
+                        return original_extract(
+                            query_img,
+                            global_extractor,
+                            local_extractor,
+                            global_model_name,
+                            device,
                         )
-
-                    # Global model inference (wrapped below)
-                    with tracer.start_as_current_span(
-                        f"unav.global_extractor.{global_model_name}.inference"
-                    ):
-                        global_feat = global_extractor(global_model_name, tensor_img)
-
-                    # Postprocessing for global features
-                    with tracer.start_as_current_span(
-                        "unav.global_extractor.postprocess"
-                    ):
-                        if isinstance(global_feat, tuple):
-                            global_feat = global_feat[1]
-                        global_feat = (
-                            normalize(global_feat, dim=-1)
-                            .squeeze(0)
-                            .detach()
-                            .cpu()
-                            .numpy()
-                        )
-
-                    # Local feature extraction (wrapped below)
-                    with tracer.start_as_current_span(
-                        "unav.local_extractor.extract_features"
-                    ):
-                        local_feat_dict = local_extractor(query_img)
-
-                    return global_feat, local_feat_dict
 
                 feature_extractor.extract_query_features = traced_extract_query_features
                 feature_extractor.__mw_patched__ = True
-                print("🔧 Patched extract_query_features with detailed tracing")
+                print("🔧 Patched extract_query_features with tracing wrapper")
         except Exception as e:
             print(f"⚠️ Failed to patch extract_query_features: {e}")
             import traceback
@@ -569,41 +531,11 @@ class UnavServer:
 
                         @functools.wraps(original_extract_local)
                         def traced_extract_local(self, image0):
-                            # Trace data preparation
+                            # Simply wrap the original method - no code rewriting
                             with tracer.start_as_current_span(
-                                "unav.local_extractor.prepare_data"
+                                "unav.local_extractor.extract_local_features"
                             ):
-                                data0 = self.prepare_data(image0)
-
-                            # Trace model inference
-                            with tracer.start_as_current_span(
-                                "unav.local_extractor.model_forward"
-                            ):
-                                pred0 = self.local_feature_extractor(
-                                    data0.to(self.device)
-                                )
-
-                            # Trace postprocessing
-                            with tracer.start_as_current_span(
-                                "unav.local_extractor.postprocess"
-                            ):
-                                import torch
-
-                                del data0
-                                torch.cuda.empty_cache()
-                                pred0 = {
-                                    k: v[0].cpu().detach().numpy()
-                                    for k, v in pred0.items()
-                                }
-                                if "keypoints" in pred0:
-                                    pred0["keypoints"] = (
-                                        pred0["keypoints"] + 0.5
-                                    ) - 0.5
-                                pred0["image_size"] = np.array(
-                                    [image0.shape[1], image0.shape[0]]
-                                )
-
-                            return pred0
+                                return original_extract_local(self, image0)
 
                         Superpoint.extract_local_features = traced_extract_local
                         Superpoint.__mw_patched__ = True
