@@ -539,55 +539,81 @@ class UnavServer:
             traceback.print_exc()
 
         # Patch Superpoint.extract_local_features to trace preprocessing and model inference
-        try:
-            from unav.core.third_party.SuperPoint_SuperGlue.base_model import Superpoint
+        # Try multiple import paths since the module structure may vary
+        superpoint_patched = False
+        import_paths_to_try = [
+            ("unav.core.feature.local_extractor", "Superpoint"),
+            ("unav.core.third_party.SuperPoint_SuperGlue.base_model", "Superpoint"),
+        ]
+        
+        for module_path, class_name in import_paths_to_try:
+            if superpoint_patched:
+                break
+            try:
+                import importlib
+                module = importlib.import_module(module_path)
+                if hasattr(module, class_name):
+                    Superpoint = getattr(module, class_name)
+                    print(f"🔍 [DEBUG] Found {class_name} in {module_path}: {Superpoint}")
+                    print(f"🔍 [DEBUG] Superpoint has extract_local_features: {hasattr(Superpoint, 'extract_local_features')}")
+                    print(f"🔍 [DEBUG] Superpoint already patched: {getattr(Superpoint, '__mw_patched__', False)}")
 
-            if not getattr(Superpoint, "__mw_patched__", False):
-                original_extract_local = Superpoint.extract_local_features
+                    if not getattr(Superpoint, "__mw_patched__", False):
+                        original_extract_local = Superpoint.extract_local_features
 
-                @functools.wraps(original_extract_local)
-                def traced_extract_local(self, image0):
-                    # Trace data preparation
-                    with tracer.start_as_current_span(
-                        "unav.local_extractor.prepare_data"
-                    ):
-                        data0 = self.prepare_data(image0)
+                        @functools.wraps(original_extract_local)
+                        def traced_extract_local(self, image0):
+                            # Trace data preparation
+                            with tracer.start_as_current_span(
+                                "unav.local_extractor.prepare_data"
+                            ):
+                                data0 = self.prepare_data(image0)
 
-                    # Trace model inference
-                    with tracer.start_as_current_span(
-                        "unav.local_extractor.model_forward"
-                    ):
-                        pred0 = self.local_feature_extractor(data0.to(self.device))
+                            # Trace model inference
+                            with tracer.start_as_current_span(
+                                "unav.local_extractor.model_forward"
+                            ):
+                                pred0 = self.local_feature_extractor(data0.to(self.device))
 
-                    # Trace postprocessing
-                    with tracer.start_as_current_span(
-                        "unav.local_extractor.postprocess"
-                    ):
-                        import torch
+                            # Trace postprocessing
+                            with tracer.start_as_current_span(
+                                "unav.local_extractor.postprocess"
+                            ):
+                                import torch
 
-                        del data0
-                        torch.cuda.empty_cache()
-                        pred0 = {
-                            k: v[0].cpu().detach().numpy() for k, v in pred0.items()
-                        }
-                        if "keypoints" in pred0:
-                            pred0["keypoints"] = (pred0["keypoints"] + 0.5) - 0.5
-                        pred0["image_size"] = np.array(
-                            [image0.shape[1], image0.shape[0]]
+                                del data0
+                                torch.cuda.empty_cache()
+                                pred0 = {
+                                    k: v[0].cpu().detach().numpy() for k, v in pred0.items()
+                                }
+                                if "keypoints" in pred0:
+                                    pred0["keypoints"] = (pred0["keypoints"] + 0.5) - 0.5
+                                pred0["image_size"] = np.array(
+                                    [image0.shape[1], image0.shape[0]]
+                                )
+
+                            return pred0
+
+                        Superpoint.extract_local_features = traced_extract_local
+                        Superpoint.__mw_patched__ = True
+                        superpoint_patched = True
+                        print(
+                            f"🔧 ✅ Patched Superpoint.extract_local_features from {module_path}"
                         )
-
-                    return pred0
-
-                Superpoint.extract_local_features = traced_extract_local
-                Superpoint.__mw_patched__ = True
-                print(
-                    "🔧 Patched Superpoint.extract_local_features for detailed local extraction tracing"
-                )
-        except Exception as e:
-            print(f"⚠️ Failed to patch Superpoint: {e}")
-            import traceback
-
-            traceback.print_exc()
+                    else:
+                        print("⚠️ Superpoint already patched, skipping")
+                        superpoint_patched = True
+                else:
+                    print(f"🔍 [DEBUG] {class_name} not found in {module_path}")
+            except ImportError as e:
+                print(f"🔍 [DEBUG] Could not import {module_path}: {e}")
+            except Exception as e:
+                print(f"⚠️ Error patching Superpoint from {module_path}: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        if not superpoint_patched:
+            print("⚠️ Could not find Superpoint class to patch in any known location")
 
     def _monkey_patch_matching_and_ransac(self):
         """
