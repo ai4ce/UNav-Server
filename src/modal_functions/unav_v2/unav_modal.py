@@ -15,7 +15,6 @@ from modal_config import app, unav_image, volume, gemini_secret, middleware_secr
     gpu=["T4"],
     enable_memory_snapshot=False,
     memory=73728,
-    scaledown_window=60,
     secrets=[gemini_secret, middleware_secret],
 )
 class UnavServer:
@@ -545,18 +544,25 @@ class UnavServer:
             ("unav.core.feature.local_extractor", "Superpoint"),
             ("unav.core.third_party.SuperPoint_SuperGlue.base_model", "Superpoint"),
         ]
-        
+
         for module_path, class_name in import_paths_to_try:
             if superpoint_patched:
                 break
             try:
                 import importlib
+
                 module = importlib.import_module(module_path)
                 if hasattr(module, class_name):
                     Superpoint = getattr(module, class_name)
-                    print(f"🔍 [DEBUG] Found {class_name} in {module_path}: {Superpoint}")
-                    print(f"🔍 [DEBUG] Superpoint has extract_local_features: {hasattr(Superpoint, 'extract_local_features')}")
-                    print(f"🔍 [DEBUG] Superpoint already patched: {getattr(Superpoint, '__mw_patched__', False)}")
+                    print(
+                        f"🔍 [DEBUG] Found {class_name} in {module_path}: {Superpoint}"
+                    )
+                    print(
+                        f"🔍 [DEBUG] Superpoint has extract_local_features: {hasattr(Superpoint, 'extract_local_features')}"
+                    )
+                    print(
+                        f"🔍 [DEBUG] Superpoint already patched: {getattr(Superpoint, '__mw_patched__', False)}"
+                    )
 
                     if not getattr(Superpoint, "__mw_patched__", False):
                         original_extract_local = Superpoint.extract_local_features
@@ -573,7 +579,9 @@ class UnavServer:
                             with tracer.start_as_current_span(
                                 "unav.local_extractor.model_forward"
                             ):
-                                pred0 = self.local_feature_extractor(data0.to(self.device))
+                                pred0 = self.local_feature_extractor(
+                                    data0.to(self.device)
+                                )
 
                             # Trace postprocessing
                             with tracer.start_as_current_span(
@@ -584,10 +592,13 @@ class UnavServer:
                                 del data0
                                 torch.cuda.empty_cache()
                                 pred0 = {
-                                    k: v[0].cpu().detach().numpy() for k, v in pred0.items()
+                                    k: v[0].cpu().detach().numpy()
+                                    for k, v in pred0.items()
                                 }
                                 if "keypoints" in pred0:
-                                    pred0["keypoints"] = (pred0["keypoints"] + 0.5) - 0.5
+                                    pred0["keypoints"] = (
+                                        pred0["keypoints"] + 0.5
+                                    ) - 0.5
                                 pred0["image_size"] = np.array(
                                     [image0.shape[1], image0.shape[0]]
                                 )
@@ -610,10 +621,169 @@ class UnavServer:
             except Exception as e:
                 print(f"⚠️ Error patching Superpoint from {module_path}: {e}")
                 import traceback
+
                 traceback.print_exc()
-        
+
         if not superpoint_patched:
             print("⚠️ Could not find Superpoint class to patch in any known location")
+
+        # Patch LightGlue._forward to trace internal matching operations
+        self._monkey_patch_lightglue(tracer)
+
+    def _monkey_patch_lightglue(self, tracer):
+        """
+        Patch LightGlue's internal modules to add granular tracing.
+        We patch the forward methods of:
+        - Transformer (self-attention)
+        - CrossTransformer (cross-attention)
+        - MatchAssignment (match scoring)
+        - LearnableFourierPositionalEncoding (position encoding)
+        And wrap the main _forward method.
+        """
+        import functools
+
+        lightglue_patched = False
+        import_paths_to_try = [
+            "unav.core.third_party.LightGlue.lightglue",
+            "unav.core.feature.lightglue",
+        ]
+
+        for module_path in import_paths_to_try:
+            if lightglue_patched:
+                break
+            try:
+                import importlib
+
+                module = importlib.import_module(module_path)
+
+                # Check if LightGlue class exists
+                if not hasattr(module, "LightGlue"):
+                    print(f"🔍 [DEBUG] LightGlue not found in {module_path}")
+                    continue
+
+                LightGlue = getattr(module, "LightGlue")
+                print(f"🔍 [DEBUG] Found LightGlue in {module_path}")
+
+                if getattr(LightGlue, "__mw_patched__", False):
+                    print("⚠️ LightGlue already patched, skipping")
+                    lightglue_patched = True
+                    continue
+
+                # 1. Patch Transformer.forward (self-attention)
+                if hasattr(module, "Transformer"):
+                    Transformer = getattr(module, "Transformer")
+                    if not getattr(Transformer, "__mw_patched__", False):
+                        original_transformer_forward = Transformer.forward
+
+                        @functools.wraps(original_transformer_forward)
+                        def traced_transformer_forward(
+                            self, x0, x1, encoding0=None, encoding1=None
+                        ):
+                            with tracer.start_as_current_span(
+                                "unav.local_matcher.self_attention"
+                            ):
+                                return original_transformer_forward(
+                                    self, x0, x1, encoding0, encoding1
+                                )
+
+                        Transformer.forward = traced_transformer_forward
+                        Transformer.__mw_patched__ = True
+                        print("🔧 ✅ Patched Transformer.forward (self-attention)")
+
+                # 2. Patch CrossTransformer.forward (cross-attention)
+                if hasattr(module, "CrossTransformer"):
+                    CrossTransformer = getattr(module, "CrossTransformer")
+                    if not getattr(CrossTransformer, "__mw_patched__", False):
+                        original_cross_forward = CrossTransformer.forward
+
+                        @functools.wraps(original_cross_forward)
+                        def traced_cross_forward(self, x0, x1):
+                            with tracer.start_as_current_span(
+                                "unav.local_matcher.cross_attention"
+                            ):
+                                return original_cross_forward(self, x0, x1)
+
+                        CrossTransformer.forward = traced_cross_forward
+                        CrossTransformer.__mw_patched__ = True
+                        print(
+                            "🔧 ✅ Patched CrossTransformer.forward (cross-attention)"
+                        )
+
+                # 3. Patch MatchAssignment.forward (match scoring)
+                if hasattr(module, "MatchAssignment"):
+                    MatchAssignment = getattr(module, "MatchAssignment")
+                    if not getattr(MatchAssignment, "__mw_patched__", False):
+                        original_match_forward = MatchAssignment.forward
+
+                        @functools.wraps(original_match_forward)
+                        def traced_match_forward(self, desc0, desc1):
+                            with tracer.start_as_current_span(
+                                "unav.local_matcher.match_assignment"
+                            ):
+                                return original_match_forward(self, desc0, desc1)
+
+                        MatchAssignment.forward = traced_match_forward
+                        MatchAssignment.__mw_patched__ = True
+                        print("🔧 ✅ Patched MatchAssignment.forward")
+
+                # 4. Patch LearnableFourierPositionalEncoding.forward (position encoding)
+                if hasattr(module, "LearnableFourierPositionalEncoding"):
+                    PosEnc = getattr(module, "LearnableFourierPositionalEncoding")
+                    if not getattr(PosEnc, "__mw_patched__", False):
+                        original_posenc_forward = PosEnc.forward
+
+                        @functools.wraps(original_posenc_forward)
+                        def traced_posenc_forward(self, x):
+                            with tracer.start_as_current_span(
+                                "unav.local_matcher.position_encoding"
+                            ):
+                                return original_posenc_forward(self, x)
+
+                        PosEnc.forward = traced_posenc_forward
+                        PosEnc.__mw_patched__ = True
+                        print(
+                            "🔧 ✅ Patched LearnableFourierPositionalEncoding.forward"
+                        )
+
+                # 5. Patch filter_matches function
+                if hasattr(module, "filter_matches"):
+                    original_filter = getattr(module, "filter_matches")
+                    if not getattr(original_filter, "__mw_patched__", False):
+
+                        @functools.wraps(original_filter)
+                        def traced_filter_matches(scores, th):
+                            with tracer.start_as_current_span(
+                                "unav.local_matcher.filter_matches"
+                            ):
+                                return original_filter(scores, th)
+
+                        traced_filter_matches.__mw_patched__ = True
+                        setattr(module, "filter_matches", traced_filter_matches)
+                        print("🔧 ✅ Patched filter_matches")
+
+                # 6. Wrap the main LightGlue._forward method
+                original_lightglue_forward = LightGlue._forward
+
+                @functools.wraps(original_lightglue_forward)
+                def traced_lightglue_forward(self, data):
+                    with tracer.start_as_current_span("unav.local_matcher._forward"):
+                        return original_lightglue_forward(self, data)
+
+                LightGlue._forward = traced_lightglue_forward
+                LightGlue.__mw_patched__ = True
+                lightglue_patched = True
+                print(f"🔧 ✅ Patched LightGlue._forward from {module_path}")
+
+            except ImportError as e:
+                print(f"🔍 [DEBUG] Could not import {module_path}: {e}")
+            except Exception as e:
+                print(f"⚠️ Error patching LightGlue from {module_path}: {e}")
+                import traceback
+
+                traceback.print_exc()
+
+        if not lightglue_patched:
+            print("⚠️ Could not find LightGlue class to patch in any known location")
 
     def _monkey_patch_matching_and_ransac(self):
         """
