@@ -204,6 +204,7 @@ class UnavServer:
         try:
             self._monkey_patch_localizer_methods(self.localizer)
             self._monkey_patch_pose_refinement()
+            self._monkey_patch_matching_and_ransac()
         except Exception as e:
             print(f"⚠️ Failed to monkey-patch UNavLocalizer methods: {e}")
 
@@ -414,6 +415,88 @@ class UnavServer:
                 )
         except Exception as e:
             print(f"⚠️ Failed to patch pyimplicitdist: {e}")
+
+    def _monkey_patch_matching_and_ransac(self):
+        """
+        Patch the child functions of batch_local_matching_and_ransac.
+        The function is in unav.localizer.tools.matcher, and internally calls
+        match_query_to_database and ransac_filter from unav.core.feature_filter.
+        """
+        if not hasattr(self, "tracer") or not self.tracer:
+            return
+
+        import functools
+
+        tracer = self.tracer
+
+        # Patch unav.core.feature_filter functions at MODULE level
+        # These are called by the matcher module's batch_local_matching_and_ransac
+        try:
+            from unav.core import feature_filter
+
+            print(f"🔍 [DEBUG] Attempting to patch unav.core.feature_filter")
+            print(f"🔍 [DEBUG] feature_filter module: {feature_filter}")
+            print(
+                f"🔍 [DEBUG] match_query_to_database: {hasattr(feature_filter, 'match_query_to_database')}"
+            )
+            print(
+                f"🔍 [DEBUG] ransac_filter: {hasattr(feature_filter, 'ransac_filter')}"
+            )
+
+            # Check if already patched
+            if not getattr(feature_filter, "__mw_patched__", False):
+                # Patch match_query_to_database
+                if hasattr(feature_filter, "match_query_to_database"):
+                    original_match = feature_filter.match_query_to_database
+
+                    @functools.wraps(original_match)
+                    def traced_match(*args, **kwargs):
+                        print("🔍 [TRACE] ✅ Entering match_query_to_database")
+                        with tracer.start_as_current_span(
+                            "unav.match_query_to_database"
+                        ):
+                            result = original_match(*args, **kwargs)
+                            print(
+                                f"🔍 [TRACE] ✅ Exiting match_query_to_database, returned {len(result[0]) if result[0] else 0} matches"
+                            )
+                            return result
+
+                    feature_filter.match_query_to_database = traced_match
+                    print("🔧 ✅ Patched match_query_to_database")
+                else:
+                    print("⚠️ match_query_to_database not found in feature_filter")
+
+                # Patch ransac_filter
+                if hasattr(feature_filter, "ransac_filter"):
+                    original_ransac = feature_filter.ransac_filter
+
+                    @functools.wraps(original_ransac)
+                    def traced_ransac(*args, **kwargs):
+                        print("🔍 [TRACE] ✅ Entering ransac_filter")
+                        with tracer.start_as_current_span("unav.ransac_filter"):
+                            result = original_ransac(*args, **kwargs)
+                            print("🔍 [TRACE] ✅ Exiting ransac_filter")
+                            return result
+
+                    feature_filter.ransac_filter = traced_ransac
+                    print("🔧 ✅ Patched ransac_filter")
+                else:
+                    print("⚠️ ransac_filter not found in feature_filter")
+
+                feature_filter.__mw_patched__ = True
+                print("🔧 Patched feature_filter module successfully")
+            else:
+                print("⚠️ feature_filter already patched, skipping")
+        except ImportError as e:
+            print(f"⚠️ Could not import unav.core.feature_filter: {e}")
+            import traceback
+
+            traceback.print_exc()
+        except Exception as e:
+            print(f"⚠️ Failed to patch feature_filter: {e}")
+            import traceback
+
+            traceback.print_exc()
 
     def get_places(
         self,
