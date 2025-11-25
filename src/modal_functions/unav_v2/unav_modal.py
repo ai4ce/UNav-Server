@@ -205,6 +205,7 @@ class UnavServer:
             self._monkey_patch_localizer_methods(self.localizer)
             self._monkey_patch_pose_refinement()
             self._monkey_patch_matching_and_ransac()
+            self._monkey_patch_feature_extractors()
         except Exception as e:
             print(f"⚠️ Failed to monkey-patch UNavLocalizer methods: {e}")
 
@@ -227,6 +228,14 @@ class UnavServer:
             )
             self._middleware_init_pending = False
             self._configure_middleware_tracing()
+            # Re-apply patches with the new tracer
+            try:
+                self._monkey_patch_localizer_methods(self.localizer)
+                self._monkey_patch_pose_refinement()
+                self._monkey_patch_matching_and_ransac()
+                self._monkey_patch_feature_extractors()
+            except Exception as e:
+                print(f"⚠️ Failed to re-patch after deferred init: {e}")
             print(
                 f"🔁 [Phase 2] After deferred init: tracer={getattr(self, 'tracer', 'NOT_SET')}, _middleware_init_pending={getattr(self, '_middleware_init_pending', 'NOT_SET')}"
             )
@@ -415,6 +424,170 @@ class UnavServer:
                 )
         except Exception as e:
             print(f"⚠️ Failed to patch pyimplicitdist: {e}")
+
+    def _monkey_patch_feature_extractors(self):
+        """
+        Patch the feature extraction pipeline to add granular tracing.
+        Patches:
+        1. extract_query_features function to trace preprocessing/postprocessing
+        2. GlobalExtractors.__call__ to trace model inference
+        3. Superpoint.extract_local_features to trace local extraction
+        """
+        if not hasattr(self, "tracer") or not self.tracer:
+            return
+
+        import functools
+
+        tracer = self.tracer
+
+        # Patch the extract_query_features function from unav.localizer.tools.feature_extractor
+        try:
+            from unav.localizer.tools import feature_extractor
+
+            if not getattr(feature_extractor, "__mw_patched__", False):
+                original_extract = feature_extractor.extract_query_features
+
+                @functools.wraps(original_extract)
+                def traced_extract_query_features(
+                    query_img,
+                    global_extractor,
+                    local_extractor,
+                    global_model_name,
+                    device,
+                ):
+                    import torch
+                    from torch.nn.functional import normalize
+
+                    # Preprocessing for global features
+                    with tracer.start_as_current_span(
+                        "unav.global_extractor.preprocess"
+                    ):
+                        if query_img.dtype != np.float32:
+                            img = query_img.astype(np.float32)
+                        else:
+                            img = query_img.copy()
+                        tensor_img = (
+                            torch.from_numpy(img)
+                            .permute(2, 0, 1)
+                            .unsqueeze(0)
+                            .float()
+                            .to(device)
+                            / 255.0
+                        )
+
+                    # Global model inference (wrapped below)
+                    with tracer.start_as_current_span(
+                        f"unav.global_extractor.{global_model_name}.inference"
+                    ):
+                        global_feat = global_extractor(global_model_name, tensor_img)
+
+                    # Postprocessing for global features
+                    with tracer.start_as_current_span(
+                        "unav.global_extractor.postprocess"
+                    ):
+                        if isinstance(global_feat, tuple):
+                            global_feat = global_feat[1]
+                        global_feat = (
+                            normalize(global_feat, dim=-1)
+                            .squeeze(0)
+                            .detach()
+                            .cpu()
+                            .numpy()
+                        )
+
+                    # Local feature extraction (wrapped below)
+                    with tracer.start_as_current_span(
+                        "unav.local_extractor.extract_features"
+                    ):
+                        local_feat_dict = local_extractor(query_img)
+
+                    return global_feat, local_feat_dict
+
+                feature_extractor.extract_query_features = traced_extract_query_features
+                feature_extractor.__mw_patched__ = True
+                print("🔧 Patched extract_query_features with detailed tracing")
+        except Exception as e:
+            print(f"⚠️ Failed to patch extract_query_features: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+        # Patch GlobalExtractors.__call__ to trace the actual model forward pass
+        try:
+            from unav.core.feature.Global_Extractors import GlobalExtractors
+
+            if not getattr(GlobalExtractors, "__mw_patched__", False):
+                original_call = GlobalExtractors.__call__
+
+                @functools.wraps(original_call)
+                def traced_global_call(self, request_model, images):
+                    with tracer.start_as_current_span(
+                        f"unav.global_extractor.{request_model}.model_forward"
+                    ):
+                        result = original_call(self, request_model, images)
+                    return result
+
+                GlobalExtractors.__call__ = traced_global_call
+                GlobalExtractors.__mw_patched__ = True
+                print(
+                    "🔧 Patched GlobalExtractors.__call__ for model inference tracing"
+                )
+        except Exception as e:
+            print(f"⚠️ Failed to patch GlobalExtractors: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+        # Patch Superpoint.extract_local_features to trace preprocessing and model inference
+        try:
+            from unav.core.third_party.SuperPoint_SuperGlue.base_model import Superpoint
+
+            if not getattr(Superpoint, "__mw_patched__", False):
+                original_extract_local = Superpoint.extract_local_features
+
+                @functools.wraps(original_extract_local)
+                def traced_extract_local(self, image0):
+                    # Trace data preparation
+                    with tracer.start_as_current_span(
+                        "unav.local_extractor.prepare_data"
+                    ):
+                        data0 = self.prepare_data(image0)
+
+                    # Trace model inference
+                    with tracer.start_as_current_span(
+                        "unav.local_extractor.model_forward"
+                    ):
+                        pred0 = self.local_feature_extractor(data0.to(self.device))
+
+                    # Trace postprocessing
+                    with tracer.start_as_current_span(
+                        "unav.local_extractor.postprocess"
+                    ):
+                        import torch
+
+                        del data0
+                        torch.cuda.empty_cache()
+                        pred0 = {
+                            k: v[0].cpu().detach().numpy() for k, v in pred0.items()
+                        }
+                        if "keypoints" in pred0:
+                            pred0["keypoints"] = (pred0["keypoints"] + 0.5) - 0.5
+                        pred0["image_size"] = np.array(
+                            [image0.shape[1], image0.shape[0]]
+                        )
+
+                    return pred0
+
+                Superpoint.extract_local_features = traced_extract_local
+                Superpoint.__mw_patched__ = True
+                print(
+                    "🔧 Patched Superpoint.extract_local_features for detailed local extraction tracing"
+                )
+        except Exception as e:
+            print(f"⚠️ Failed to patch Superpoint: {e}")
+            import traceback
+
+            traceback.print_exc()
 
     def _monkey_patch_matching_and_ransac(self):
         """
@@ -668,6 +841,7 @@ class UnavServer:
         if hasattr(self, "tracer") and self.tracer:
             try:
                 self._monkey_patch_localizer_methods(selective_localizer)
+                # Note: feature extractors are already patched at module level, no need to patch per instance
             except Exception as e:
                 print(f"⚠️ Failed to patch selective localizer: {e}")
 
