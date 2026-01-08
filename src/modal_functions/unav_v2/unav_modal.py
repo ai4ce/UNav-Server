@@ -1642,6 +1642,198 @@ class UnavServer:
             print("📋 [PLANNER] Using NON-TRACED execution path")
             pass
 
+    @method()
+    def localize_user(
+        self,
+        session_id: str,
+        base_64_image,
+        place: str,
+        building: str,
+        floor: str,
+        top_k: int = None,
+        refinement_queue: dict = None,
+        enable_multifloor: bool = False,
+    ):
+        """
+        Localize user position without navigation planning.
+        Returns the user's current position and floor information.
+        
+        Args:
+            session_id: Unique identifier for the user session
+            base_64_image: Base64 encoded image or numpy array
+            place: Target place name
+            building: Target building name
+            floor: Target floor name
+            top_k: Number of top candidates to retrieve (optional)
+            refinement_queue: Queue for pose refinement (optional)
+            enable_multifloor: Whether to enable multi-floor localization
+            
+        Returns:
+            dict: Contains status, floorplan_pose, best_map_key, and timing information
+        """
+        import time
+        import cv2
+        import base64
+        
+        start_time = time.time()
+        timing_data = {}
+        
+        # Validate and convert image input
+        if base_64_image is None:
+            return {
+                "status": "error",
+                "error": "No image provided. base_64_image parameter is required.",
+                "timing": {"total": (time.time() - start_time) * 1000},
+            }
+        
+        # Convert base64 string to BGR numpy array
+        if isinstance(base_64_image, str):
+            try:
+                base64_string = base_64_image
+                
+                # Remove data URL prefix if present
+                if "," in base64_string:
+                    base64_string = base64_string.split(",")[1]
+                
+                # Add padding if necessary
+                missing_padding = len(base64_string) % 4
+                if missing_padding:
+                    base64_string += "=" * (4 - missing_padding)
+                
+                # Decode and convert to image
+                image_bytes = base64.b64decode(base64_string)
+                image_array = np.frombuffer(image_bytes, dtype=np.uint8)
+                image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+                
+                if image is None:
+                    return {
+                        "status": "error",
+                        "error": "Failed to decode base64 image. Invalid image format.",
+                        "timing": {"total": (time.time() - start_time) * 1000},
+                    }
+            except Exception as img_error:
+                return {
+                    "status": "error",
+                    "error": f"Error processing base64 image: {str(img_error)}",
+                    "timing": {"total": (time.time() - start_time) * 1000},
+                }
+        elif isinstance(base_64_image, np.ndarray):
+            image = base_64_image
+        else:
+            return {
+                "status": "error",
+                "error": f"Unsupported image format. Expected base64 string or numpy array, got {type(base_64_image)}",
+                "timing": {"total": (time.time() - start_time) * 1000},
+            }
+        
+        try:
+            # Setup and session management
+            setup_start = time.time()
+            
+            session = self.get_session(session_id)
+            
+            # Use provided refinement queue or get from session
+            if refinement_queue is None:
+                refinement_queue = session.get("refinement_queue") or {}
+            
+            timing_data["setup"] = (time.time() - setup_start) * 1000
+            
+            # Localization
+            localization_start = time.time()
+            
+            # Ensure GPU components ready
+            self.ensure_gpu_components_ready()
+            
+            # Ensure maps are loaded
+            self.ensure_maps_loaded(
+                place, building, floor=floor,
+                enable_multifloor=enable_multifloor
+            )
+            
+            # Get the selective localizer
+            map_key = (place, building)
+            localizer_to_use = self.selective_localizers.get(map_key)
+            if not localizer_to_use and floor:
+                floor_key = (place, building, floor)
+                localizer_to_use = self.selective_localizers.get(floor_key, self.localizer)
+            else:
+                localizer_to_use = localizer_to_use or self.localizer
+            
+            # Perform localization
+            output = localizer_to_use.localize(image, refinement_queue, top_k=top_k)
+            
+            timing_data["localization"] = (time.time() - localization_start) * 1000
+            
+            # Check if localization succeeded
+            if output is None or "floorplan_pose" not in output:
+                return {
+                    "status": "error",
+                    "error": "Localization failed, no pose found.",
+                    "error_code": "localization_failed",
+                    "timing": timing_data,
+                }
+            
+            # Process localization results
+            processing_start = time.time()
+            
+            floorplan_pose = output["floorplan_pose"]
+            source_key = output["best_map_key"]
+            localized_place, localized_building, localized_floor = source_key
+            
+            # Update user's current floor context and pose
+            self.update_session(
+                session_id,
+                {
+                    "current_place": localized_place,
+                    "current_building": localized_building,
+                    "current_floor": localized_floor,
+                    "floorplan_pose": floorplan_pose,
+                    "refinement_queue": output["refinement_queue"],
+                },
+            )
+            
+            timing_data["processing"] = (time.time() - processing_start) * 1000
+            
+            # Serialization
+            serialization_start = time.time()
+            
+            serialized_source_key = self._safe_serialize(source_key)
+            serialized_floorplan_pose = self._safe_serialize(floorplan_pose)
+            
+            timing_data["serialization"] = (time.time() - serialization_start) * 1000
+            
+            # Calculate total time
+            timing_data["total"] = (time.time() - start_time) * 1000
+            
+            # Return localization results
+            return {
+                "status": "success",
+                "floorplan_pose": serialized_floorplan_pose,
+                "best_map_key": serialized_source_key,
+                "location_info": {
+                    "place": localized_place,
+                    "building": localized_building,
+                    "floor": localized_floor,
+                    "position": serialized_floorplan_pose.get("xy"),
+                    "heading": serialized_floorplan_pose.get("ang"),
+                },
+                "refinement_queue": output["refinement_queue"],
+                "timing": timing_data,
+            }
+            
+        except Exception as e:
+            timing_data["total"] = (time.time() - start_time) * 1000
+            
+            import traceback
+            traceback.print_exc()
+            
+            return {
+                "status": "error",
+                "error": str(e),
+                "type": type(e).__name__,
+                "timing": timing_data,
+            }
+
     def _safe_serialize(self, obj):
         """Helper method to safely serialize objects for JSON response"""
         import json
