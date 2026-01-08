@@ -15,7 +15,7 @@ from modal_config import app, unav_image, volume, gemini_secret, middleware_secr
     gpu=["T4","L4","A10G"], 
     enable_memory_snapshot=False,
     memory=73728,
-    scaledown_window=500,
+    timeout=600,
     secrets=[gemini_secret, middleware_secret],
 )
 class UnavServer:
@@ -1817,7 +1817,6 @@ class UnavServer:
                     "position": serialized_floorplan_pose.get("xy"),
                     "heading": serialized_floorplan_pose.get("ang"),
                 },
-                "refinement_queue": output["refinement_queue"],
                 "timing": timing_data,
             }
             
