@@ -16,6 +16,7 @@ from modal_config import app, unav_image, volume, gemini_secret, middleware_secr
     enable_memory_snapshot=False,
     memory=73728,
     timeout=600,
+    scaledown_window=300,
     secrets=[gemini_secret, middleware_secret],
 )
 class UnavServer:
