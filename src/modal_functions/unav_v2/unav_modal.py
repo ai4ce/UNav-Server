@@ -15,7 +15,7 @@ from modal_config import app, unav_image, volume, gemini_secret, middleware_secr
     gpu=["T4","L4","A10G"], 
     enable_memory_snapshot=False,
     memory=73728,
-    timeout=600,
+    timeout=60,
     secrets=[gemini_secret, middleware_secret],
 )
 class UnavServer:
@@ -1090,6 +1090,21 @@ class UnavServer:
         Get destinations for a specific place, building, and floor.
         Loads places on demand for fast startup.
         """
+        # Read and print top-level content of mounted volume
+        volume_path = "/root/UNav-IO"
+        try:
+            if os.path.exists(volume_path):
+                top_level_contents = os.listdir(volume_path)
+                print(f"📂 [VOLUME] Top-level contents of {volume_path}:")
+                for item in top_level_contents:
+                    item_path = os.path.join(volume_path, item)
+                    item_type = "DIR" if os.path.isdir(item_path) else "FILE"
+                    print(f"  [{item_type}] {item}")
+            else:
+                print(f"⚠️ [VOLUME] Volume path {volume_path} does not exist")
+        except Exception as vol_error:
+            print(f"❌ [VOLUME] Error reading volume: {vol_error}")
+        
         # Create span for getting destinations if tracer available
         if hasattr(self, "tracer") and self.tracer:
             with self.tracer.start_as_current_span(
