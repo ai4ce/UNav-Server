@@ -1100,6 +1100,30 @@ class UnavServer:
                     item_path = os.path.join(volume_path, item)
                     item_type = "DIR" if os.path.isdir(item_path) else "FILE"
                     print(f"  [{item_type}] {item}")
+                    
+                    # For data folder, print two levels deeper
+                    if item == "data" and os.path.isdir(item_path):
+                        try:
+                            level1_contents = os.listdir(item_path)
+                            print(f"    📁 [LEVEL 1] Contents of {item}:")
+                            for level1_item in level1_contents:
+                                level1_item_path = os.path.join(item_path, level1_item)
+                                level1_type = "DIR" if os.path.isdir(level1_item_path) else "FILE"
+                                print(f"      [{level1_type}] {level1_item}")
+                                
+                                # Print second level if it's a directory
+                                if os.path.isdir(level1_item_path):
+                                    try:
+                                        level2_contents = os.listdir(level1_item_path)
+                                        print(f"        📁 [LEVEL 2] Contents of {level1_item}:")
+                                        for level2_item in level2_contents:
+                                            level2_item_path = os.path.join(level1_item_path, level2_item)
+                                            level2_type = "DIR" if os.path.isdir(level2_item_path) else "FILE"
+                                            print(f"          [{level2_type}] {level2_item}")
+                                    except Exception as l2_error:
+                                        print(f"          ⚠️ Error reading level 2: {l2_error}")
+                        except Exception as l1_error:
+                            print(f"    ⚠️ Error reading data folder: {l1_error}")
             else:
                 print(f"⚠️ [VOLUME] Volume path {volume_path} does not exist")
         except Exception as vol_error:
@@ -1129,7 +1153,69 @@ class UnavServer:
                     # Use components with the loaded place
                     target_key = (place, building, floor)
                     pf_target = self.nav.pf_map[target_key]
-
+                    
+                    # Read boundaries.json file for the current location
+                    data_root = getattr(self, "DATA_ROOT", "/root/UNav-IO/data")
+                    boundaries_path = os.path.join(data_root, place, building, floor, "boundaries.json")
+                    
+                    print(f"📄 [BOUNDARIES] Reading boundaries from: {boundaries_path}")
+                    
+                    try:
+                        if os.path.exists(boundaries_path):
+                            import json
+                            with open(boundaries_path, 'r') as f:
+                                boundaries_data = json.load(f)
+                            print(f"✅ [BOUNDARIES] Successfully loaded boundaries.json")
+                            
+                            # Extract destinations from shapes
+                            if isinstance(boundaries_data, dict) and "shapes" in boundaries_data:
+                                shapes = boundaries_data["shapes"]
+                                print(f"🔍 [BOUNDARIES] Found {len(shapes)} shapes in boundaries.json")
+                                
+                                # Print first few destinations as examples
+                                print(f"📍 [BOUNDARIES] Destinations found:")
+                                for i, shape in enumerate(shapes[:10]):  # Show first 10
+                                    label = shape.get("label", "Unknown")
+                                    points = shape.get("points", [])
+                                    shape_type = shape.get("shape_type", "unknown")
+                                    
+                                    # Calculate center/representative point
+                                    if points and len(points) > 0:
+                                        if shape_type == "point":
+                                            center = points[0] if points else None
+                                        else:
+                                            # Calculate centroid for polygons
+                                            x_coords = [p[0] for p in points]
+                                            y_coords = [p[1] for p in points]
+                                            center = [sum(x_coords) / len(x_coords), sum(y_coords) / len(y_coords)]
+                                        
+                                        print(f"  [{i}] Label: '{label}' | Type: {shape_type} | Center: {center} | Points: {len(points)}")
+                                    else:
+                                        print(f"  [{i}] Label: '{label}' | Type: {shape_type} | No points")
+                                
+                                if len(shapes) > 10:
+                                    print(f"  ... and {len(shapes) - 10} more shapes")
+                                
+                                # Show how to access specific destination
+                                print(f"\n💡 [BOUNDARIES] How to access destinations:")
+                                print(f"  - Access all shapes: boundaries_data['shapes']")
+                                print(f"  - Find by label: [s for s in boundaries_data['shapes'] if 'office' in s.get('label', '').lower()]")
+                                print(f"  - Get coordinates: shape['points']")
+                                print(f"  - Available keys: {list(boundaries_data.keys())}")
+                                
+                                boundaries_data = boundaries_data
+                            else:
+                                print(f"⚠️ [BOUNDARIES] No 'shapes' key found in boundaries.json")
+                                boundaries_data = None
+                        else:
+                            print(f"⚠️ [BOUNDARIES] File not found: {boundaries_path}")
+                            boundaries_data = None
+                    except Exception as e:
+                        print(f"❌ [BOUNDARIES] Error reading boundaries.json: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        boundaries_data = None
+                    
                     destinations = [
                         {"id": str(did), "name": pf_target.labels[did]}
                         for did in pf_target.dest_ids

@@ -32,30 +32,30 @@ def main():
         )
         print("Result:", result)
 
-        print("\n" + "="*50)
-        print("Testing localize_user...")
-        print("="*50)
-        localize_result = unav_server.localize_user.remote(
-            session_id=SESSION_ID,
-            base_64_image=base64_encoded,
-            place=PLACE,
-            building=BUILDING,
-            floor=FLOOR,
-        )
-        print("Localization Result:", localize_result)
+        # print("\n" + "="*50)
+        # print("Testing localize_user...")
+        # print("="*50)
+        # localize_result = unav_server.localize_user.remote(
+        #     session_id=SESSION_ID,
+        #     base_64_image=base64_encoded,
+        #     place=PLACE,
+        #     building=BUILDING,
+        #     floor=FLOOR,
+        # )
+        # print("Localization Result:", localize_result)
 
-        print("\n" + "="*50)
-        print("Testing planner (full navigation)...")
-        print("="*50)
-        planner_result = unav_server.planner.remote(
-            destination_id=DESTINATION_ID,
-            base_64_image=base64_encoded,
-            session_id=SESSION_ID,
-            building=BUILDING,
-            floor=FLOOR,
-            place=PLACE,
-        )
-        print("Planner Result:", planner_result)
+        # print("\n" + "="*50)
+        # print("Testing planner (full navigation)...")
+        # print("="*50)
+        # planner_result = unav_server.planner.remote(
+        #     destination_id=DESTINATION_ID,
+        #     base_64_image=base64_encoded,
+        #     session_id=SESSION_ID,
+        #     building=BUILDING,
+        #     floor=FLOOR,
+        #     place=PLACE,
+        # )
+        # print("Planner Result:", planner_result)
     except Exception as e:
         print(f"Error during Modal class lookup or execution: {e}")
 
