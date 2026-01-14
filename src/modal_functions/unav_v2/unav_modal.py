@@ -1116,7 +1116,7 @@ class UnavServer:
                     pf_target = self.nav.pf_map[target_key]
 
                     destinations = [
-                        {"id": str(did), "name": pf_target.labels[did]}
+                        {"id": str(did), "name": pf_target.labels[did],"xy":pf_target.nodes[did]}
                         for did in pf_target.dest_ids
                     ]
 
@@ -1152,9 +1152,9 @@ class UnavServer:
                 pf_target = self.nav.pf_map[target_key]
 
                 destinations = [
-                    {"id": str(did), "name": pf_target.labels[did]}
-                    for did in pf_target.dest_ids
-                ]
+                        {"id": str(did), "name": pf_target.labels[did],"xy":pf_target.nodes[did]}
+                        for did in pf_target.dest_ids
+                    ]
 
                 print(f"✅ Found {len(destinations)} destinations")
 
