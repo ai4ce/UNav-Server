@@ -16,6 +16,7 @@ from modal_config import app, unav_image, volume, gemini_secret, middleware_secr
     enable_memory_snapshot=False,
     memory=73728,
     timeout=600,
+    scaledown_window=300,
     secrets=[gemini_secret, middleware_secret],
 )
 class UnavServer:
@@ -1116,7 +1117,7 @@ class UnavServer:
                     pf_target = self.nav.pf_map[target_key]
 
                     destinations = [
-                        {"id": str(did), "name": pf_target.labels[did]}
+                        {"id": str(did), "name": pf_target.labels[did],"xy":pf_target.nodes[did]}
                         for did in pf_target.dest_ids
                     ]
 
@@ -1152,9 +1153,9 @@ class UnavServer:
                 pf_target = self.nav.pf_map[target_key]
 
                 destinations = [
-                    {"id": str(did), "name": pf_target.labels[did]}
-                    for did in pf_target.dest_ids
-                ]
+                        {"id": str(did), "name": pf_target.labels[did],"xy":pf_target.nodes[did]}
+                        for did in pf_target.dest_ids
+                    ]
 
                 print(f"✅ Found {len(destinations)} destinations")
 
