@@ -1856,6 +1856,218 @@ class UnavServer:
         return convert_obj(obj)
 
     @method()
+    def generate_nav_instructions_from_coordinates(
+        self,
+        session_id: str,
+        localization_result: dict,
+        dest_id: int,
+        target_place: str,
+        target_building: str,
+        target_floor: str,
+        unit: str = "meter",
+        language: str = "en",
+    ):
+        """
+        Generate navigation instructions from localized coordinates to a destination.
+        
+        This function takes the coordinates returned by localize_user and generates
+        step-by-step navigation instructions to reach the specified destination.
+        
+        Args:
+            session_id: Unique identifier for the user session
+            localization_result: Result dictionary from localize_user containing:
+                - floorplan_pose: Current position with xy coordinates and angle
+                - best_map_key: Tuple of (place, building, floor)
+            dest_id: Destination node ID in the navigation graph
+            target_place: Target place name
+            target_building: Target building name
+            target_floor: Target floor name
+            unit: Unit for distance measurements ("meter" or "foot")
+            language: Language code for instructions (e.g., "en", "es", "fr")
+            
+        Returns:
+            dict: Contains status, navigation instructions, path info, and timing
+                - status: "success" or "error"
+                - instructions: List of step-by-step navigation commands
+                - path_info: Details about the route
+                - timing: Performance metrics
+        """
+        import time
+        
+        start_time = time.time()
+        timing_data = {}
+        
+        try:
+            # Step 1: Validate input
+            validation_start = time.time()
+            
+            if not localization_result or localization_result.get("status") != "success":
+                return {
+                    "status": "error",
+                    "error": "Invalid localization result. Please provide a successful localization_result from localize_user.",
+                    "timing": {"total": (time.time() - start_time) * 1000},
+                }
+            
+            floorplan_pose = localization_result.get("floorplan_pose")
+            best_map_key = localization_result.get("best_map_key")
+            
+            if not floorplan_pose or not best_map_key:
+                return {
+                    "status": "error",
+                    "error": "Missing floorplan_pose or best_map_key in localization result.",
+                    "timing": {"total": (time.time() - start_time) * 1000},
+                }
+            
+            # Extract start position
+            start_xy = floorplan_pose.get("xy")
+            start_heading = -floorplan_pose.get("ang", 0)  # Negate angle for navigation
+            
+            if not start_xy or len(start_xy) != 2:
+                return {
+                    "status": "error",
+                    "error": "Invalid start position in floorplan_pose.",
+                    "timing": {"total": (time.time() - start_time) * 1000},
+                }
+            
+            # Extract start location
+            if isinstance(best_map_key, (list, tuple)) and len(best_map_key) >= 3:
+                start_place, start_building, start_floor = best_map_key[0], best_map_key[1], best_map_key[2]
+            else:
+                return {
+                    "status": "error",
+                    "error": "Invalid best_map_key format in localization result.",
+                    "timing": {"total": (time.time() - start_time) * 1000},
+                }
+            
+            timing_data["validation"] = (time.time() - validation_start) * 1000
+            
+            # Step 2: Ensure GPU components and maps are ready
+            setup_start = time.time()
+            
+            self.ensure_gpu_components_ready()
+            self.ensure_maps_loaded(
+                target_place, target_building, floor=target_floor,
+                enable_multifloor=True
+            )
+            
+            timing_data["setup"] = (time.time() - setup_start) * 1000
+            
+            # Step 3: Path planning
+            path_planning_start = time.time()
+            
+            # Convert dest_id to int if necessary
+            try:
+                dest_id_for_path = int(dest_id)
+            except (ValueError, TypeError):
+                dest_id_for_path = dest_id
+            
+            # Plan navigation path to destination
+            result = self.nav.find_path(
+                start_place,
+                start_building,
+                start_floor,
+                start_xy,
+                target_place,
+                target_building,
+                target_floor,
+                dest_id_for_path,
+            )
+            
+            timing_data["path_planning"] = (time.time() - path_planning_start) * 1000
+            
+            if result is None:
+                return {
+                    "status": "error",
+                    "error": "Path planning failed. Could not find route to destination.",
+                    "timing": timing_data,
+                }
+            
+            # Check if result contains an error
+            if isinstance(result, dict) and "error" in result:
+                return {
+                    "status": "error",
+                    "error": f"Path planning failed: {result['error']}",
+                    "timing": timing_data,
+                }
+            
+            # Step 4: Generate navigation instructions
+            command_generation_start = time.time()
+            
+            # Generate spoken/navigation commands
+            cmds = self.commander(
+                self.nav,
+                result,
+                initial_heading=start_heading,
+                unit=unit,
+                language=language,
+            )
+            
+            timing_data["command_generation"] = (time.time() - command_generation_start) * 1000
+            
+            # Step 5: Serialize results
+            serialization_start = time.time()
+            
+            serialized_result = self._safe_serialize(result)
+            serialized_cmds = self._safe_serialize(cmds)
+            
+            timing_data["serialization"] = (time.time() - serialization_start) * 1000
+            
+            # Calculate total time
+            timing_data["total"] = (time.time() - start_time) * 1000
+            
+            # Step 6: Update session with navigation context
+            self.update_session(
+                session_id,
+                {
+                    "current_place": start_place,
+                    "current_building": start_building,
+                    "current_floor": start_floor,
+                    "target_place": target_place,
+                    "target_building": target_building,
+                    "target_floor": target_floor,
+                    "selected_dest_id": dest_id,
+                },
+            )
+            
+            # Return navigation instructions
+            return {
+                "status": "success",
+                "instructions": serialized_cmds,
+                "path_info": serialized_result,
+                "navigation_details": {
+                    "start_location": {
+                        "place": start_place,
+                        "building": start_building,
+                        "floor": start_floor,
+                        "coordinates": start_xy,
+                        "heading": start_heading,
+                    },
+                    "destination": {
+                        "place": target_place,
+                        "building": target_building,
+                        "floor": target_floor,
+                        "dest_id": dest_id,
+                    },
+                    "unit": unit,
+                    "language": language,
+                },
+                "timing": timing_data,
+            }
+            
+        except Exception as e:
+            timing_data["total"] = (time.time() - start_time) * 1000
+            
+            import traceback
+            traceback.print_exc()
+            
+            return {
+                "status": "error",
+                "error": str(e),
+                "type": type(e).__name__,
+                "timing": timing_data,
+            }
+
+    @method()
     def get_user_session(self, user_id: str):
         """Get current user session data"""
         try:
