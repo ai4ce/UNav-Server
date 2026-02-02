@@ -56,6 +56,42 @@ def main():
             place=PLACE,
         )
         print("Planner Result:", planner_result)
+
+        print("\n" + "="*50)
+        print("Testing generate_nav_instructions_from_coordinates...")
+        print("="*50)
+        # Create a mock localization result with provided coordinates
+        mock_localization_result = {
+            "status": "success",
+            "floorplan_pose": {
+                "xy": [2022.320618102614, 439.39776200033907],
+                "ang": 298.4154661831644
+            },
+            "best_map_key": [PLACE, BUILDING, FLOOR],
+            "location_info": {
+                "place": PLACE,
+                "building": BUILDING,
+                "floor": FLOOR,
+                "position": [2022.320618102614, 439.39776200033907],
+                "heading": 298.4154661831644
+            }
+        }
+        
+        nav_instructions_result = unav_server.generate_nav_instructions_from_coordinates.remote(
+            session_id=SESSION_ID,
+            localization_result=mock_localization_result,
+            dest_id=int(DESTINATION_ID),
+            target_place=PLACE,
+            target_building=BUILDING,
+            target_floor=FLOOR,
+            unit="meter",
+            language="en"
+        )
+        print("Navigation Instructions Result:", nav_instructions_result)
+        if nav_instructions_result.get("status") == "success":
+            print("\nGenerated Instructions:")
+            for idx, instruction in enumerate(nav_instructions_result.get("instructions", []), 1):
+                print(f"  {idx}. {instruction}")
     except Exception as e:
         print(f"Error during Modal class lookup or execution: {e}")
 
