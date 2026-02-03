@@ -2018,6 +2018,8 @@ class UnavServer:
             
             serialized_result = self._safe_serialize(result)
             serialized_cmds = self._safe_serialize(cmds)
+            serialized_source_key = self._safe_serialize(best_map_key)
+            serialized_floorplan_pose = self._safe_serialize(floorplan_pose)
             
             timing_data["serialization"] = (time.time() - serialization_start) * 1000
             
@@ -2038,30 +2040,24 @@ class UnavServer:
                 },
             )
             
-            # Return navigation instructions
-            return {
+            # Return navigation instructions in same format as planner
+            result_dict = {
                 "status": "success",
-                "instructions": serialized_cmds,
-                "path_info": serialized_result,
-                "navigation_details": {
-                    "start_location": {
-                        "place": start_place,
-                        "building": start_building,
-                        "floor": start_floor,
-                        "coordinates": start_xy,
-                        "heading": start_heading,
-                    },
-                    "destination": {
-                        "place": target_place,
-                        "building": target_building,
-                        "floor": target_floor,
-                        "dest_id": dest_id,
-                    },
+                "result": serialized_result,
+                "cmds": serialized_cmds,
+                "best_map_key": serialized_source_key,
+                "floorplan_pose": serialized_floorplan_pose,
+                "navigation_info": {
+                    "start_location": f"{start_place}/{start_building}/{start_floor}",
+                    "destination": f"{target_place}/{target_building}/{target_floor}",
+                    "dest_id": dest_id,
                     "unit": unit,
                     "language": language,
                 },
                 "timing": timing_data,
             }
+            
+            return self.convert_navigation_to_trajectory(result_dict)
             
         except Exception as e:
             timing_data["total"] = (time.time() - start_time) * 1000
