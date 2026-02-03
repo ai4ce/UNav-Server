@@ -864,6 +864,15 @@ class UnavServer:
                                             and floor_name != target_floor
                                         ):
                                             continue
+                                        
+                                        # Validate that required navigation files exist
+                                        boundaries_file = os.path.join(floor_path, "boundaries.json")
+                                        if not os.path.exists(boundaries_file):
+                                            print(
+                                                f"    ⚠️ Skipping {building_name}/{floor_name}: missing boundaries.json"
+                                            )
+                                            continue
+                                        
                                         floors.append(floor_name)
 
                                 if floors:  # Only add building if it has floors
