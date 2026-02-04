@@ -858,6 +858,17 @@ class UnavServer:
                                     if os.path.isdir(
                                         floor_path
                                     ) and not should_skip_folder(floor_name):
+                                        # Skip specific problematic floor
+                                        if (
+                                            place_name == "New_York_City"
+                                            and building_name == "LOH"
+                                            and floor_name == "9_floor"
+                                        ):
+                                            print(
+                                                f"    ⚠️ Skipping {building_name}/{floor_name}: explicitly excluded"
+                                            )
+                                            continue
+                                        
                                         if (
                                             not enable_multifloor
                                             and target_floor
