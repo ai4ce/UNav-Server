@@ -1312,43 +1312,43 @@ class UnavServer:
                         import cv2
 
                         try:
-                        # Fix base64 padding if needed
-                        base64_string = base_64_image
-                        print(
-                            f"Received base64 image string of length {len(base64_string)}"
-                        )
-                        ## print the first 50 characers of bas64 string
-                        # print(f"{base64_string[0:50]}")
-                        # Remove data URL prefix if present (e.g., "data:image/jpeg;base64,")
-                        if "," in base64_string:
-                            base64_string = base64_string.split(",")[1]
+                            # Fix base64 padding if needed
+                            base64_string = base_64_image
+                            print(
+                                f"Received base64 image string of length {len(base64_string)}"
+                            )
+                            ## print the first 50 characers of bas64 string
+                            # print(f"{base64_string[0:50]}")
+                            # Remove data URL prefix if present (e.g., "data:image/jpeg;base64,")
+                            if "," in base64_string:
+                                base64_string = base64_string.split(",")[1]
 
-                        # Add padding if necessary
-                        missing_padding = len(base64_string) % 4
-                        if missing_padding:
-                            base64_string += "=" * (4 - missing_padding)
+                            # Add padding if necessary
+                            missing_padding = len(base64_string) % 4
+                            if missing_padding:
+                                base64_string += "=" * (4 - missing_padding)
 
-                        # Decode base64 string to bytes
-                        image_bytes = base64.b64decode(base64_string)
+                            # Decode base64 string to bytes
+                            image_bytes = base64.b64decode(base64_string)
 
-                        # print(f"Image bytes {image_bytes}")
-                        # Convert bytes to numpy array
-                        image_array = np.frombuffer(image_bytes, dtype=np.uint8)
-                        # Decode image using OpenCV (automatically in BGR format)
-                        image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+                            # print(f"Image bytes {image_bytes}")
+                            # Convert bytes to numpy array
+                            image_array = np.frombuffer(image_bytes, dtype=np.uint8)
+                            # Decode image using OpenCV (automatically in BGR format)
+                            image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
 
-                        if image is None:
+                            if image is None:
+                                return {
+                                    "status": "error",
+                                    "error": "Failed to decode base64 image. Invalid image format.",
+                                    "timing": {"total": (time.time() - start_time) * 1000},
+                                }
+                        except Exception as img_error:
                             return {
                                 "status": "error",
-                                "error": "Failed to decode base64 image. Invalid image format.",
+                                "error": f"Error processing base64 image: {str(img_error)}",
                                 "timing": {"total": (time.time() - start_time) * 1000},
                             }
-                    except Exception as img_error:
-                        return {
-                            "status": "error",
-                            "error": f"Error processing base64 image: {str(img_error)}",
-                            "timing": {"total": (time.time() - start_time) * 1000},
-                        }
                     elif isinstance(base_64_image, np.ndarray):
                         # If already a numpy array, use it directly (assume BGR format)
                         image = base_64_image
