@@ -56,6 +56,29 @@ def main():
             place=PLACE,
         )
         print("Planner Result:", planner_result)
+
+        print("\n" + "="*50)
+        print("Testing planner with user-provided coordinates (skip localization)...")
+        print("="*50)
+        # Test planner with user-provided coordinates
+        # These coordinates match the localization result from the previous test
+        planner_with_coords_result = unav_server.planner.remote(
+            session_id=SESSION_ID + "_coords",
+            base_64_image=None,  # Optional when using provided coordinates
+            destination_id=DESTINATION_ID,
+            place=PLACE,
+            building=BUILDING,
+            floor=FLOOR,
+            should_use_user_provided_coordinate=True,
+            x=2022.320618102614,
+            y=439.39776200033907,
+            angle=298.4154661831644,
+            unit="meter",
+            language="en"
+        )
+        print("Planner with Coordinates Result:", planner_with_coords_result)
+
+ 
     except Exception as e:
         print(f"Error during Modal class lookup or execution: {e}")
 

@@ -858,12 +858,32 @@ class UnavServer:
                                     if os.path.isdir(
                                         floor_path
                                     ) and not should_skip_folder(floor_name):
+                                        # Skip specific problematic floor
+                                        if (
+                                            place_name == "New_York_City"
+                                            and building_name == "LOH"
+                                            and floor_name == "9_floor"
+                                        ):
+                                            print(
+                                                f"    ⚠️ Skipping {building_name}/{floor_name}: explicitly excluded"
+                                            )
+                                            continue
+                                        
                                         if (
                                             not enable_multifloor
                                             and target_floor
                                             and floor_name != target_floor
                                         ):
                                             continue
+                                        
+                                        # Validate that required navigation files exist
+                                        boundaries_file = os.path.join(floor_path, "boundaries.json")
+                                        if not os.path.exists(boundaries_file):
+                                            print(
+                                                f"    ⚠️ Skipping {building_name}/{floor_name}: missing boundaries.json"
+                                            )
+                                            continue
+                                        
                                         floors.append(floor_name)
 
                                 if floors:  # Only add building if it has floors
@@ -1021,6 +1041,39 @@ class UnavServer:
         """Update user session with new data"""
         session = self.get_session(user_id)
         session.update(updates)
+
+    def _construct_mock_localization_output(
+        self,
+        x: float,
+        y: float,
+        angle: float,
+        place: str,
+        building: str,
+        floor: str,
+    ) -> dict:
+        """
+        Construct a mock localization output from user-provided coordinates.
+        This allows skipping the actual localization phase when coordinates are known.
+        
+        Args:
+            x: X coordinate on the floor plan
+            y: Y coordinate on the floor plan
+            angle: Heading angle (direction user is facing)
+            place: Place name
+            building: Building name
+            floor: Floor name
+            
+        Returns:
+            dict: Mock localization output matching the structure from localizer.localize()
+        """
+        return {
+            "floorplan_pose": {
+                "xy": [x, y],
+                "ang": angle
+            },
+            "best_map_key": (place, building, floor),
+            "refinement_queue": {}  # Empty since we're not doing actual localization
+        }
 
     @method()
     def set_navigation_context(
@@ -1182,9 +1235,31 @@ class UnavServer:
         refinement_queue: dict = None,
         is_vlm_extraction_enabled: bool = False,
         enable_multifloor: bool = False,
+        should_use_user_provided_coordinate: bool = False,
+        x: float = None,
+        y: float = None,
+        angle: float = None,
     ):
         """
         Full localization and navigation pipeline with timing tracking and middleware tracing.
+        
+        Args:
+            session_id: Unique identifier for the user session
+            base_64_image: Base64 encoded image or numpy array (optional if using provided coordinates)
+            destination_id: Destination node ID
+            place: Place name
+            building: Building name
+            floor: Floor name
+            top_k: Number of top candidates for localization
+            unit: Distance unit ("meter" or "feet")
+            language: Language code for instructions
+            refinement_queue: Queue for pose refinement
+            is_vlm_extraction_enabled: Enable VLM text extraction fallback
+            enable_multifloor: Enable multi-floor navigation
+            should_use_user_provided_coordinate: If True, skip localization and use provided x, y, angle
+            x: X coordinate on floor plan (required if should_use_user_provided_coordinate=True)
+            y: Y coordinate on floor plan (required if should_use_user_provided_coordinate=True)
+            angle: Heading angle in degrees (required if should_use_user_provided_coordinate=True)
         """
         import time
         import logging
@@ -1210,66 +1285,79 @@ class UnavServer:
                 timing_data = {}
                 image = None
 
-                # Validate and convert image input
-                if base_64_image is None:
-                    return {
-                        "status": "error",
-                        "error": "No image provided. base_64_image parameter is required.",
-                        "timing": {"total": (time.time() - start_time) * 1000},
-                    }
-
-                # Convert base64 string to BGR numpy array using OpenCV
-                if isinstance(base_64_image, str):
-                    import base64
-                    import cv2
-
-                    try:
-                        # Fix base64 padding if needed
-                        base64_string = base_64_image
-                        print(
-                            f"Received base64 image string of length {len(base64_string)}"
-                        )
-                        ## print the first 50 characers of bas64 string
-                        # print(f"{base64_string[0:50]}")
-                        # Remove data URL prefix if present (e.g., "data:image/jpeg;base64,")
-                        if "," in base64_string:
-                            base64_string = base64_string.split(",")[1]
-
-                        # Add padding if necessary
-                        missing_padding = len(base64_string) % 4
-                        if missing_padding:
-                            base64_string += "=" * (4 - missing_padding)
-
-                        # Decode base64 string to bytes
-                        image_bytes = base64.b64decode(base64_string)
-
-                        # print(f"Image bytes {image_bytes}")
-                        # Convert bytes to numpy array
-                        image_array = np.frombuffer(image_bytes, dtype=np.uint8)
-                        # Decode image using OpenCV (automatically in BGR format)
-                        image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
-
-                        if image is None:
-                            return {
-                                "status": "error",
-                                "error": "Failed to decode base64 image. Invalid image format.",
-                                "timing": {"total": (time.time() - start_time) * 1000},
-                            }
-                    except Exception as img_error:
+                # Validate user-provided coordinates if enabled
+                if should_use_user_provided_coordinate:
+                    if x is None or y is None or angle is None:
                         return {
                             "status": "error",
-                            "error": f"Error processing base64 image: {str(img_error)}",
+                            "error": "When should_use_user_provided_coordinate=True, x, y, and angle must all be provided.",
                             "timing": {"total": (time.time() - start_time) * 1000},
                         }
-                elif isinstance(base_64_image, np.ndarray):
-                    # If already a numpy array, use it directly (assume BGR format)
-                    image = base_64_image
-                else:
+                    print(f"📍 Using user-provided coordinates: x={x}, y={y}, angle={angle}°")
+                    # Image is optional when using provided coordinates
+                    if base_64_image is not None:
+                        print("⚠️ Image provided but will be ignored since using provided coordinates")
+                elif base_64_image is None:
+                    # Image is required when not using provided coordinates
                     return {
                         "status": "error",
-                        "error": f"Unsupported image format. Expected base64 string or numpy array, got {type(base_64_image)}",
+                        "error": "No image provided. base_64_image parameter is required when not using provided coordinates.",
                         "timing": {"total": (time.time() - start_time) * 1000},
                     }
+
+                # Convert base64 string to BGR numpy array using OpenCV (skip if using provided coordinates)
+                if not should_use_user_provided_coordinate:
+                    if isinstance(base_64_image, str):
+                        import base64
+                        import cv2
+
+                        try:
+                            # Fix base64 padding if needed
+                            base64_string = base_64_image
+                            print(
+                                f"Received base64 image string of length {len(base64_string)}"
+                            )
+                            ## print the first 50 characers of bas64 string
+                            # print(f"{base64_string[0:50]}")
+                            # Remove data URL prefix if present (e.g., "data:image/jpeg;base64,")
+                            if "," in base64_string:
+                                base64_string = base64_string.split(",")[1]
+
+                            # Add padding if necessary
+                            missing_padding = len(base64_string) % 4
+                            if missing_padding:
+                                base64_string += "=" * (4 - missing_padding)
+
+                            # Decode base64 string to bytes
+                            image_bytes = base64.b64decode(base64_string)
+
+                            # print(f"Image bytes {image_bytes}")
+                            # Convert bytes to numpy array
+                            image_array = np.frombuffer(image_bytes, dtype=np.uint8)
+                            # Decode image using OpenCV (automatically in BGR format)
+                            image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+
+                            if image is None:
+                                return {
+                                    "status": "error",
+                                    "error": "Failed to decode base64 image. Invalid image format.",
+                                    "timing": {"total": (time.time() - start_time) * 1000},
+                                }
+                        except Exception as img_error:
+                            return {
+                                "status": "error",
+                                "error": f"Error processing base64 image: {str(img_error)}",
+                                "timing": {"total": (time.time() - start_time) * 1000},
+                            }
+                    elif isinstance(base_64_image, np.ndarray):
+                        # If already a numpy array, use it directly (assume BGR format)
+                        image = base_64_image
+                    else:
+                        return {
+                            "status": "error",
+                            "error": f"Unsupported image format. Expected base64 string or numpy array, got {type(base_64_image)}",
+                            "timing": {"total": (time.time() - start_time) * 1000},
+                        }
 
                 # --- GPU DEBUG INFO ---
                 try:
@@ -1355,93 +1443,114 @@ class UnavServer:
                     ) * 1000  # Convert to ms
                     print(f"⏱️ Setup: {timing_data['setup']:.2f}ms")
 
-                    # Step 2: Localization
-                    localization_start = time.time()
-
-                    # Create child span for localization
-                    with self.tracer.start_as_current_span(
-                        "localization_span"
-                    ) as localization_span:
-                        # Ensure GPU components are ready (initializes localizer)
-                        self.ensure_gpu_components_ready()
-
-                        with self.tracer.start_as_current_span(
-                            "load_maps_span"
-                        ) as load_maps_span:
-                            # Ensure maps are loaded for the target location
-                            self.ensure_maps_loaded(
-                                target_place,
-                                target_building,
-                                floor=target_floor,
-                                enable_multifloor=enable_multifloor,
-                            )
-
-                        # Get the selective localizer for this building (all floors loaded)
-                        map_key = (target_place, target_building)
-                        localizer_to_use = self.selective_localizers.get(map_key)
-                        if not localizer_to_use and target_floor:
-                            floor_key = (target_place, target_building, target_floor)
-                            localizer_to_use = self.selective_localizers.get(
-                                floor_key, self.localizer
-                            )
-                        else:
-                            localizer_to_use = localizer_to_use or self.localizer
-
-                        # Localizer already patched in ensure_maps_loaded() or initialize_gpu_components()
-                        # No need to patch again here to avoid double-wrapping spans
-
-                        output = localizer_to_use.localize(
-                            image, refinement_queue, top_k=top_k
+                    # Step 2: Localization (or skip if using provided coordinates)
+                    if should_use_user_provided_coordinate:
+                        # Skip localization - construct mock output from provided coordinates
+                        print("⏭️ Skipping localization - using provided coordinates")
+                        localization_start = time.time()
+                        
+                        # Construct mock localization output
+                        output = self._construct_mock_localization_output(
+                            x=x,
+                            y=y,
+                            angle=angle,
+                            place=target_place,
+                            building=target_building,
+                            floor=target_floor,
                         )
+                        
+                        timing_data["localization"] = (
+                            time.time() - localization_start
+                        ) * 1000
+                        print(f"⏱️ Mock Localization: {timing_data['localization']:.2f}ms")
+                    else:
+                        # Normal localization process
+                        localization_start = time.time()
 
-                    timing_data["localization"] = (
-                        time.time() - localization_start
-                    ) * 1000
-                    print(f"⏱️ Localization: {timing_data['localization']:.2f}ms")
+                        # Create child span for localization
+                        with self.tracer.start_as_current_span(
+                            "localization_span"
+                        ) as localization_span:
+                            # Ensure GPU components are ready (initializes localizer)
+                            self.ensure_gpu_components_ready()
 
-                    if output is None or "floorplan_pose" not in output:
-                        print("❌ Localization failed, no pose found.")
-
-                        if is_vlm_extraction_enabled:
-                            # Run VLM to extract text from image as fallback
-                            try:
-                                print(
-                                    "🔄 Attempting VLM fallback for text extraction..."
+                            with self.tracer.start_as_current_span(
+                                "load_maps_span"
+                            ) as load_maps_span:
+                                # Ensure maps are loaded for the target location
+                                self.ensure_maps_loaded(
+                                    target_place,
+                                    target_building,
+                                    floor=target_floor,
+                                    enable_multifloor=enable_multifloor,
                                 )
-                                extracted_text = self.run_vlm_on_image(image)
 
-                                # Log the extracted text for debugging
-                                print(
-                                    f"📝 VLM extracted text: {extracted_text[:200]}..."
+                            # Get the selective localizer for this building (all floors loaded)
+                            map_key = (target_place, target_building)
+                            localizer_to_use = self.selective_localizers.get(map_key)
+                            if not localizer_to_use and target_floor:
+                                floor_key = (target_place, target_building, target_floor)
+                                localizer_to_use = self.selective_localizers.get(
+                                    floor_key, self.localizer
                                 )
+                            else:
+                                localizer_to_use = localizer_to_use or self.localizer
 
-                                # You can add logic here to process the extracted text
-                                # For example, search for room numbers, building names, etc.
-                                # and use that information to provide approximate location or guidance
+                            # Localizer already patched in ensure_maps_loaded() or initialize_gpu_components()
+                            # No need to patch again here to avoid double-wrapping spans
 
-                                return {
-                                    "status": "error",
-                                    "error": "Localization failed, but VLM text extraction completed.",
-                                    "extracted_text": extracted_text,
-                                    "timing": timing_data,
-                                    "fallback_info": "Text was extracted from the image but precise localization failed. Please try taking a clearer photo or move to a different location.",
-                                }
+                            output = localizer_to_use.localize(
+                                image, refinement_queue, top_k=top_k
+                            )
 
-                            except Exception as vlm_error:
-                                print(f"❌ Error during VLM fallback: {vlm_error}")
-                                return {
-                                    "status": "error",
-                                    "error": "Localization failed and VLM fallback also failed.",
-                                    "vlm_error": str(vlm_error),
-                                    "timing": timing_data,
-                                }
+                        timing_data["localization"] = (
+                            time.time() - localization_start
+                        ) * 1000
+                        print(f"⏱️ Localization: {timing_data['localization']:.2f}ms")
 
-                        return {
-                            "status": "error",
-                            "error": "Localization failed, no pose found.",
-                            "error_code": "localization_failed",
-                            "timing": timing_data,
-                        }
+                        if output is None or "floorplan_pose" not in output:
+                            print("❌ Localization failed, no pose found.")
+
+                            if is_vlm_extraction_enabled:
+                                # Run VLM to extract text from image as fallback
+                                try:
+                                    print(
+                                        "🔄 Attempting VLM fallback for text extraction..."
+                                    )
+                                    extracted_text = self.run_vlm_on_image(image)
+
+                                    # Log the extracted text for debugging
+                                    print(
+                                        f"📝 VLM extracted text: {extracted_text[:200]}..."
+                                    )
+
+                                    # You can add logic here to process the extracted text
+                                    # For example, search for room numbers, building names, etc.
+                                    # and use that information to provide approximate location or guidance
+
+                                    return {
+                                        "status": "error",
+                                        "error": "Localization failed, but VLM text extraction completed.",
+                                        "extracted_text": extracted_text,
+                                        "timing": timing_data,
+                                        "fallback_info": "Text was extracted from the image but precise localization failed. Please try taking a clearer photo or move to a different location.",
+                                    }
+
+                                except Exception as vlm_error:
+                                    print(f"❌ Error during VLM fallback: {vlm_error}")
+                                    return {
+                                        "status": "error",
+                                        "error": "Localization failed and VLM fallback also failed.",
+                                        "vlm_error": str(vlm_error),
+                                        "timing": timing_data,
+                                    }
+
+                            return {
+                                "status": "error",
+                                "error": "Localization failed, no pose found.",
+                                "error_code": "localization_failed",
+                                "timing": timing_data,
+                            }
 
                     # Step 3: Process localization results
                     processing_start = time.time()
@@ -1854,6 +1963,214 @@ class UnavServer:
                 return o
 
         return convert_obj(obj)
+
+    @method()
+    def generate_nav_instructions_from_coordinates(
+        self,
+        session_id: str,
+        localization_result: dict,
+        dest_id: int,
+        target_place: str,
+        target_building: str,
+        target_floor: str,
+        unit: str = "meter",
+        language: str = "en",
+    ):
+        """
+        Generate navigation instructions from localized coordinates to a destination.
+        
+        This function takes the coordinates returned by localize_user and generates
+        step-by-step navigation instructions to reach the specified destination.
+        
+        Args:
+            session_id: Unique identifier for the user session
+            localization_result: Result dictionary from localize_user containing:
+                - floorplan_pose: Current position with xy coordinates and angle
+                - best_map_key: Tuple of (place, building, floor)
+            dest_id: Destination node ID in the navigation graph
+            target_place: Target place name
+            target_building: Target building name
+            target_floor: Target floor name
+            unit: Unit for distance measurements ("meter" or "foot")
+            language: Language code for instructions (e.g., "en", "es", "fr")
+            
+        Returns:
+            dict: Contains status, navigation instructions, path info, and timing
+                - status: "success" or "error"
+                - instructions: List of step-by-step navigation commands
+                - path_info: Details about the route
+                - timing: Performance metrics
+        """
+        import time
+        
+        start_time = time.time()
+        timing_data = {}
+        
+        try:
+            # Step 1: Validate input
+            validation_start = time.time()
+            
+            if not localization_result or localization_result.get("status") != "success":
+                return {
+                    "status": "error",
+                    "error": "Invalid localization result. Please provide a successful localization_result from localize_user.",
+                    "timing": {"total": (time.time() - start_time) * 1000},
+                }
+            
+            floorplan_pose = localization_result.get("floorplan_pose")
+            best_map_key = localization_result.get("best_map_key")
+            
+            if not floorplan_pose or not best_map_key:
+                return {
+                    "status": "error",
+                    "error": "Missing floorplan_pose or best_map_key in localization result.",
+                    "timing": {"total": (time.time() - start_time) * 1000},
+                }
+            
+            # Extract start position
+            start_xy = floorplan_pose.get("xy")
+            start_heading = -floorplan_pose.get("ang", 0)  # Negate angle for navigation
+            
+            if not start_xy or len(start_xy) != 2:
+                return {
+                    "status": "error",
+                    "error": "Invalid start position in floorplan_pose.",
+                    "timing": {"total": (time.time() - start_time) * 1000},
+                }
+            
+            # Extract start location
+            if isinstance(best_map_key, (list, tuple)) and len(best_map_key) >= 3:
+                start_place, start_building, start_floor = best_map_key[0], best_map_key[1], best_map_key[2]
+            else:
+                return {
+                    "status": "error",
+                    "error": "Invalid best_map_key format in localization result.",
+                    "timing": {"total": (time.time() - start_time) * 1000},
+                }
+            
+            timing_data["validation"] = (time.time() - validation_start) * 1000
+            
+            # Step 2: Ensure GPU components and maps are ready
+            setup_start = time.time()
+            
+            self.ensure_gpu_components_ready()
+            self.ensure_maps_loaded(
+                target_place, target_building, floor=target_floor,
+                enable_multifloor=True
+            )
+            
+            timing_data["setup"] = (time.time() - setup_start) * 1000
+            
+            # Step 3: Path planning
+            path_planning_start = time.time()
+            
+            # Convert dest_id to int if necessary
+            try:
+                dest_id_for_path = int(dest_id)
+            except (ValueError, TypeError):
+                dest_id_for_path = dest_id
+            
+            # Plan navigation path to destination
+            result = self.nav.find_path(
+                start_place,
+                start_building,
+                start_floor,
+                start_xy,
+                target_place,
+                target_building,
+                target_floor,
+                dest_id_for_path,
+            )
+            
+            timing_data["path_planning"] = (time.time() - path_planning_start) * 1000
+            
+            if result is None:
+                return {
+                    "status": "error",
+                    "error": "Path planning failed. Could not find route to destination.",
+                    "timing": timing_data,
+                }
+            
+            # Check if result contains an error
+            if isinstance(result, dict) and "error" in result:
+                return {
+                    "status": "error",
+                    "error": f"Path planning failed: {result['error']}",
+                    "timing": timing_data,
+                }
+            
+            # Step 4: Generate navigation instructions
+            command_generation_start = time.time()
+            
+            # Generate spoken/navigation commands
+            cmds = self.commander(
+                self.nav,
+                result,
+                initial_heading=start_heading,
+                unit=unit,
+                language=language,
+            )
+            
+            timing_data["command_generation"] = (time.time() - command_generation_start) * 1000
+            
+            # Step 5: Serialize results
+            serialization_start = time.time()
+            
+            serialized_result = self._safe_serialize(result)
+            serialized_cmds = self._safe_serialize(cmds)
+            serialized_source_key = self._safe_serialize(best_map_key)
+            serialized_floorplan_pose = self._safe_serialize(floorplan_pose)
+            
+            timing_data["serialization"] = (time.time() - serialization_start) * 1000
+            
+            # Calculate total time
+            timing_data["total"] = (time.time() - start_time) * 1000
+            
+            # Step 6: Update session with navigation context
+            self.update_session(
+                session_id,
+                {
+                    "current_place": start_place,
+                    "current_building": start_building,
+                    "current_floor": start_floor,
+                    "target_place": target_place,
+                    "target_building": target_building,
+                    "target_floor": target_floor,
+                    "selected_dest_id": dest_id,
+                },
+            )
+            
+            # Return navigation instructions in same format as planner
+            result_dict = {
+                "status": "success",
+                "result": serialized_result,
+                "cmds": serialized_cmds,
+                "best_map_key": serialized_source_key,
+                "floorplan_pose": serialized_floorplan_pose,
+                "navigation_info": {
+                    "start_location": f"{start_place}/{start_building}/{start_floor}",
+                    "destination": f"{target_place}/{target_building}/{target_floor}",
+                    "dest_id": dest_id,
+                    "unit": unit,
+                    "language": language,
+                },
+                "timing": timing_data,
+            }
+            
+            return self.convert_navigation_to_trajectory(result_dict)
+            
+        except Exception as e:
+            timing_data["total"] = (time.time() - start_time) * 1000
+            
+            import traceback
+            traceback.print_exc()
+            
+            return {
+                "status": "error",
+                "error": str(e),
+                "type": type(e).__name__,
+                "timing": timing_data,
+            }
 
     @method()
     def get_user_session(self, user_id: str):
