@@ -1042,6 +1042,39 @@ class UnavServer:
         session = self.get_session(user_id)
         session.update(updates)
 
+    def _construct_mock_localization_output(
+        self,
+        x: float,
+        y: float,
+        angle: float,
+        place: str,
+        building: str,
+        floor: str,
+    ) -> dict:
+        """
+        Construct a mock localization output from user-provided coordinates.
+        This allows skipping the actual localization phase when coordinates are known.
+        
+        Args:
+            x: X coordinate on the floor plan
+            y: Y coordinate on the floor plan
+            angle: Heading angle (direction user is facing)
+            place: Place name
+            building: Building name
+            floor: Floor name
+            
+        Returns:
+            dict: Mock localization output matching the structure from localizer.localize()
+        """
+        return {
+            "floorplan_pose": {
+                "xy": [x, y],
+                "ang": angle
+            },
+            "best_map_key": (place, building, floor),
+            "refinement_queue": {}  # Empty since we're not doing actual localization
+        }
+
     @method()
     def set_navigation_context(
         self,
@@ -1202,9 +1235,31 @@ class UnavServer:
         refinement_queue: dict = None,
         is_vlm_extraction_enabled: bool = False,
         enable_multifloor: bool = False,
+        should_use_user_provided_coordinate: bool = False,
+        x: float = None,
+        y: float = None,
+        angle: float = None,
     ):
         """
         Full localization and navigation pipeline with timing tracking and middleware tracing.
+        
+        Args:
+            session_id: Unique identifier for the user session
+            base_64_image: Base64 encoded image or numpy array (optional if using provided coordinates)
+            destination_id: Destination node ID
+            place: Place name
+            building: Building name
+            floor: Floor name
+            top_k: Number of top candidates for localization
+            unit: Distance unit ("meter" or "feet")
+            language: Language code for instructions
+            refinement_queue: Queue for pose refinement
+            is_vlm_extraction_enabled: Enable VLM text extraction fallback
+            enable_multifloor: Enable multi-floor navigation
+            should_use_user_provided_coordinate: If True, skip localization and use provided x, y, angle
+            x: X coordinate on floor plan (required if should_use_user_provided_coordinate=True)
+            y: Y coordinate on floor plan (required if should_use_user_provided_coordinate=True)
+            angle: Heading angle in degrees (required if should_use_user_provided_coordinate=True)
         """
         import time
         import logging
@@ -1230,20 +1285,33 @@ class UnavServer:
                 timing_data = {}
                 image = None
 
-                # Validate and convert image input
-                if base_64_image is None:
+                # Validate user-provided coordinates if enabled
+                if should_use_user_provided_coordinate:
+                    if x is None or y is None or angle is None:
+                        return {
+                            "status": "error",
+                            "error": "When should_use_user_provided_coordinate=True, x, y, and angle must all be provided.",
+                            "timing": {"total": (time.time() - start_time) * 1000},
+                        }
+                    print(f"📍 Using user-provided coordinates: x={x}, y={y}, angle={angle}°")
+                    # Image is optional when using provided coordinates
+                    if base_64_image is not None:
+                        print("⚠️ Image provided but will be ignored since using provided coordinates")
+                elif base_64_image is None:
+                    # Image is required when not using provided coordinates
                     return {
                         "status": "error",
-                        "error": "No image provided. base_64_image parameter is required.",
+                        "error": "No image provided. base_64_image parameter is required when not using provided coordinates.",
                         "timing": {"total": (time.time() - start_time) * 1000},
                     }
 
-                # Convert base64 string to BGR numpy array using OpenCV
-                if isinstance(base_64_image, str):
-                    import base64
-                    import cv2
+                # Convert base64 string to BGR numpy array using OpenCV (skip if using provided coordinates)
+                if not should_use_user_provided_coordinate:
+                    if isinstance(base_64_image, str):
+                        import base64
+                        import cv2
 
-                    try:
+                        try:
                         # Fix base64 padding if needed
                         base64_string = base_64_image
                         print(
@@ -1281,15 +1349,15 @@ class UnavServer:
                             "error": f"Error processing base64 image: {str(img_error)}",
                             "timing": {"total": (time.time() - start_time) * 1000},
                         }
-                elif isinstance(base_64_image, np.ndarray):
-                    # If already a numpy array, use it directly (assume BGR format)
-                    image = base_64_image
-                else:
-                    return {
-                        "status": "error",
-                        "error": f"Unsupported image format. Expected base64 string or numpy array, got {type(base_64_image)}",
-                        "timing": {"total": (time.time() - start_time) * 1000},
-                    }
+                    elif isinstance(base_64_image, np.ndarray):
+                        # If already a numpy array, use it directly (assume BGR format)
+                        image = base_64_image
+                    else:
+                        return {
+                            "status": "error",
+                            "error": f"Unsupported image format. Expected base64 string or numpy array, got {type(base_64_image)}",
+                            "timing": {"total": (time.time() - start_time) * 1000},
+                        }
 
                 # --- GPU DEBUG INFO ---
                 try:
@@ -1375,93 +1443,114 @@ class UnavServer:
                     ) * 1000  # Convert to ms
                     print(f"⏱️ Setup: {timing_data['setup']:.2f}ms")
 
-                    # Step 2: Localization
-                    localization_start = time.time()
-
-                    # Create child span for localization
-                    with self.tracer.start_as_current_span(
-                        "localization_span"
-                    ) as localization_span:
-                        # Ensure GPU components are ready (initializes localizer)
-                        self.ensure_gpu_components_ready()
-
-                        with self.tracer.start_as_current_span(
-                            "load_maps_span"
-                        ) as load_maps_span:
-                            # Ensure maps are loaded for the target location
-                            self.ensure_maps_loaded(
-                                target_place,
-                                target_building,
-                                floor=target_floor,
-                                enable_multifloor=enable_multifloor,
-                            )
-
-                        # Get the selective localizer for this building (all floors loaded)
-                        map_key = (target_place, target_building)
-                        localizer_to_use = self.selective_localizers.get(map_key)
-                        if not localizer_to_use and target_floor:
-                            floor_key = (target_place, target_building, target_floor)
-                            localizer_to_use = self.selective_localizers.get(
-                                floor_key, self.localizer
-                            )
-                        else:
-                            localizer_to_use = localizer_to_use or self.localizer
-
-                        # Localizer already patched in ensure_maps_loaded() or initialize_gpu_components()
-                        # No need to patch again here to avoid double-wrapping spans
-
-                        output = localizer_to_use.localize(
-                            image, refinement_queue, top_k=top_k
+                    # Step 2: Localization (or skip if using provided coordinates)
+                    if should_use_user_provided_coordinate:
+                        # Skip localization - construct mock output from provided coordinates
+                        print("⏭️ Skipping localization - using provided coordinates")
+                        localization_start = time.time()
+                        
+                        # Construct mock localization output
+                        output = self._construct_mock_localization_output(
+                            x=x,
+                            y=y,
+                            angle=angle,
+                            place=target_place,
+                            building=target_building,
+                            floor=target_floor,
                         )
+                        
+                        timing_data["localization"] = (
+                            time.time() - localization_start
+                        ) * 1000
+                        print(f"⏱️ Mock Localization: {timing_data['localization']:.2f}ms")
+                    else:
+                        # Normal localization process
+                        localization_start = time.time()
 
-                    timing_data["localization"] = (
-                        time.time() - localization_start
-                    ) * 1000
-                    print(f"⏱️ Localization: {timing_data['localization']:.2f}ms")
+                        # Create child span for localization
+                        with self.tracer.start_as_current_span(
+                            "localization_span"
+                        ) as localization_span:
+                            # Ensure GPU components are ready (initializes localizer)
+                            self.ensure_gpu_components_ready()
 
-                    if output is None or "floorplan_pose" not in output:
-                        print("❌ Localization failed, no pose found.")
-
-                        if is_vlm_extraction_enabled:
-                            # Run VLM to extract text from image as fallback
-                            try:
-                                print(
-                                    "🔄 Attempting VLM fallback for text extraction..."
+                            with self.tracer.start_as_current_span(
+                                "load_maps_span"
+                            ) as load_maps_span:
+                                # Ensure maps are loaded for the target location
+                                self.ensure_maps_loaded(
+                                    target_place,
+                                    target_building,
+                                    floor=target_floor,
+                                    enable_multifloor=enable_multifloor,
                                 )
-                                extracted_text = self.run_vlm_on_image(image)
 
-                                # Log the extracted text for debugging
-                                print(
-                                    f"📝 VLM extracted text: {extracted_text[:200]}..."
+                            # Get the selective localizer for this building (all floors loaded)
+                            map_key = (target_place, target_building)
+                            localizer_to_use = self.selective_localizers.get(map_key)
+                            if not localizer_to_use and target_floor:
+                                floor_key = (target_place, target_building, target_floor)
+                                localizer_to_use = self.selective_localizers.get(
+                                    floor_key, self.localizer
                                 )
+                            else:
+                                localizer_to_use = localizer_to_use or self.localizer
 
-                                # You can add logic here to process the extracted text
-                                # For example, search for room numbers, building names, etc.
-                                # and use that information to provide approximate location or guidance
+                            # Localizer already patched in ensure_maps_loaded() or initialize_gpu_components()
+                            # No need to patch again here to avoid double-wrapping spans
 
-                                return {
-                                    "status": "error",
-                                    "error": "Localization failed, but VLM text extraction completed.",
-                                    "extracted_text": extracted_text,
-                                    "timing": timing_data,
-                                    "fallback_info": "Text was extracted from the image but precise localization failed. Please try taking a clearer photo or move to a different location.",
-                                }
+                            output = localizer_to_use.localize(
+                                image, refinement_queue, top_k=top_k
+                            )
 
-                            except Exception as vlm_error:
-                                print(f"❌ Error during VLM fallback: {vlm_error}")
-                                return {
-                                    "status": "error",
-                                    "error": "Localization failed and VLM fallback also failed.",
-                                    "vlm_error": str(vlm_error),
-                                    "timing": timing_data,
-                                }
+                        timing_data["localization"] = (
+                            time.time() - localization_start
+                        ) * 1000
+                        print(f"⏱️ Localization: {timing_data['localization']:.2f}ms")
 
-                        return {
-                            "status": "error",
-                            "error": "Localization failed, no pose found.",
-                            "error_code": "localization_failed",
-                            "timing": timing_data,
-                        }
+                        if output is None or "floorplan_pose" not in output:
+                            print("❌ Localization failed, no pose found.")
+
+                            if is_vlm_extraction_enabled:
+                                # Run VLM to extract text from image as fallback
+                                try:
+                                    print(
+                                        "🔄 Attempting VLM fallback for text extraction..."
+                                    )
+                                    extracted_text = self.run_vlm_on_image(image)
+
+                                    # Log the extracted text for debugging
+                                    print(
+                                        f"📝 VLM extracted text: {extracted_text[:200]}..."
+                                    )
+
+                                    # You can add logic here to process the extracted text
+                                    # For example, search for room numbers, building names, etc.
+                                    # and use that information to provide approximate location or guidance
+
+                                    return {
+                                        "status": "error",
+                                        "error": "Localization failed, but VLM text extraction completed.",
+                                        "extracted_text": extracted_text,
+                                        "timing": timing_data,
+                                        "fallback_info": "Text was extracted from the image but precise localization failed. Please try taking a clearer photo or move to a different location.",
+                                    }
+
+                                except Exception as vlm_error:
+                                    print(f"❌ Error during VLM fallback: {vlm_error}")
+                                    return {
+                                        "status": "error",
+                                        "error": "Localization failed and VLM fallback also failed.",
+                                        "vlm_error": str(vlm_error),
+                                        "timing": timing_data,
+                                    }
+
+                            return {
+                                "status": "error",
+                                "error": "Localization failed, no pose found.",
+                                "error_code": "localization_failed",
+                                "timing": timing_data,
+                            }
 
                     # Step 3: Process localization results
                     processing_start = time.time()
