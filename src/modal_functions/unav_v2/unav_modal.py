@@ -12,7 +12,7 @@ from modal_config import app, unav_image, volume, gemini_secret, middleware_secr
 @app.cls(
     image=unav_image,
     volumes={"/root/UNav-IO": volume},
-    gpu=["T4","L4","A10G"], 
+    gpu=["A10G"], 
     enable_memory_snapshot=False,
     memory=73728,
     timeout=600,
