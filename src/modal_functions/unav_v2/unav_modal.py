@@ -8,6 +8,7 @@ from typing import Dict, List, Any, Optional
 
 from deploy_config import get_scaledown_window, get_gpu_config
 from modal_config import app, unav_image, volume, gemini_secret, middleware_secret
+from destinations_service import get_destinations_list_impl
 
 
 @app.cls(
@@ -1145,81 +1146,13 @@ class UnavServer:
         Get destinations for a specific place, building, and floor.
         Loads places on demand for fast startup.
         """
-        # Create span for getting destinations if tracer available
-        if hasattr(self, "tracer") and self.tracer:
-            with self.tracer.start_as_current_span(
-                "get_destinations_list_span"
-            ) as span:
-                try:
-                    print(
-                        f"🎯 [Phase 3] Getting destinations for {place}/{building}/{floor}"
-                    )
-
-                    with self.tracer.start_as_current_span(
-                        "ensure_maps_loaded"
-                    ) as load_span:
-                        # Ensure maps are loaded for this location (load all floors for the building)
-                        self.ensure_maps_loaded(
-                            place,
-                            building,
-                            floor=floor,
-                            enable_multifloor=enable_multifloor,
-                        )
-
-                    # Use components with the loaded place
-                    target_key = (place, building, floor)
-                    pf_target = self.nav.pf_map[target_key]
-
-                    destinations = [
-                        {"id": str(did), "name": pf_target.labels[did],"xy":pf_target.nodes[did]}
-                        for did in pf_target.dest_ids
-                    ]
-
-                    print(f"✅ Found {len(destinations)} destinations")
-
-                    return {
-                        "destinations": destinations,
-                    }
-
-                except Exception as e:
-                    print(f"❌ Error getting destinations: {e}")
-                    return {
-                        "status": "error",
-                        "message": str(e),
-                        "type": type(e).__name__,
-                    }
-        else:
-            try:
-                print(
-                    f"🎯 [Phase 3] Getting destinations for {place}/{building}/{floor}"
-                )
-
-                # Ensure maps are loaded for this location (load all floors for the building)
-                self.ensure_maps_loaded(
-                    place,
-                    building,
-                    floor=floor,
-                    enable_multifloor=enable_multifloor,
-                )
-
-                # Use components with the loaded place
-                target_key = (place, building, floor)
-                pf_target = self.nav.pf_map[target_key]
-
-                destinations = [
-                        {"id": str(did), "name": pf_target.labels[did],"xy":pf_target.nodes[did]}
-                        for did in pf_target.dest_ids
-                    ]
-
-                print(f"✅ Found {len(destinations)} destinations")
-
-                return {
-                    "destinations": destinations,
-                }
-
-            except Exception as e:
-                print(f"❌ Error getting destinations: {e}")
-                return {"status": "error", "message": str(e), "type": type(e).__name__}
+        return get_destinations_list_impl(
+            server=self,
+            floor=floor,
+            place=place,
+            building=building,
+            enable_multifloor=enable_multifloor,
+        )
 
     @method()
     def planner(
