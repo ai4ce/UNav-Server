@@ -6,9 +6,9 @@ import json
 import os
 from typing import Dict, List, Any, Optional
 
-from deploy_config import get_scaledown_window, get_gpu_config
-from modal_config import app, unav_image, volume, gemini_secret, middleware_secret
-from destinations_service import get_destinations_list_impl
+from .deploy_config import get_scaledown_window, get_gpu_config
+from .modal_config import app, unav_image, volume, gemini_secret, middleware_secret
+from .destinations_service import get_destinations_list_impl
 
 
 @app.cls(

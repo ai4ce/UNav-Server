@@ -94,5 +94,4 @@ jobs:
           UNAV_SCALEDOWN_WINDOW: ${{ inputs.scaledown_window }}
           UNAV_GPU_TYPE: ${{ inputs.gpu_type }}
         run: |
-          cd src/modal_functions/unav_v2
-          modal deploy unav_modal.py
+          modal deploy -m src.modal_functions.unav_v2.unav_modal
