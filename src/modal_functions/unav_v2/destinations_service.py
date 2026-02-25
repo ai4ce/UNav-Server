@@ -66,7 +66,7 @@ def get_destinations_list_impl(
                 )
         else:
             destinations = _collect_floor_destinations(
-                target_floor=floor, include_floor=False
+                target_floor=floor, include_floor=True
             )
 
         print(f"✅ Found {len(destinations)} destinations")
