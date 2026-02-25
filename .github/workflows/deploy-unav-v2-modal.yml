@@ -1,0 +1,48 @@
+name: Deploy UNav v2 Modal
+
+on:
+  workflow_dispatch:
+    inputs:
+      scaledown_window:
+        description: "Modal scaledown window in seconds"
+        required: true
+        default: "300"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Validate scaledown window
+        run: |
+          python - <<'PY'
+          import os
+          value = os.environ["UNAV_SCALEDOWN_WINDOW"]
+          parsed = int(value)
+          if parsed <= 0:
+              raise ValueError("scaledown_window must be a positive integer")
+          print(f"Using UNAV_SCALEDOWN_WINDOW={parsed}")
+          PY
+        env:
+          UNAV_SCALEDOWN_WINDOW: ${{ inputs.scaledown_window }}
+
+      - name: Deploy to Modal
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+          UNAV_SCALEDOWN_WINDOW: ${{ inputs.scaledown_window }}
+        run: |
+          cd src/modal_functions/unav_v2
+          modal deploy unav_modal.py

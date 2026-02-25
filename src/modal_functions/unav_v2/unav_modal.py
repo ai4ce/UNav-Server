@@ -9,14 +9,26 @@ from typing import Dict, List, Any, Optional
 from modal_config import app, unav_image, volume, gemini_secret, middleware_secret
 
 
+def _get_scaledown_window() -> int:
+    raw_value = os.getenv("UNAV_SCALEDOWN_WINDOW", "300")
+    try:
+        value = int(raw_value)
+        return max(1, value)
+    except (TypeError, ValueError):
+        print(
+            f"⚠️ Invalid UNAV_SCALEDOWN_WINDOW={raw_value!r}; falling back to 300 seconds."
+        )
+        return 300
+
+
 @app.cls(
     image=unav_image,
     volumes={"/root/UNav-IO": volume},
-    gpu=["A10G"], 
+    gpu=["A10G"],
     enable_memory_snapshot=False,
     memory=73728,
     timeout=600,
-    scaledown_window=300,
+    scaledown_window=_get_scaledown_window(),
     secrets=[gemini_secret, middleware_secret],
 )
 class UnavServer:
