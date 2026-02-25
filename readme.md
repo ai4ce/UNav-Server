@@ -39,6 +39,18 @@ cd src/modal_functions/unav_v2
 modal deploy unav_modal.py
 ```
 
+`scaledown_window` is configurable at deploy time using `UNAV_SCALEDOWN_WINDOW` (default: `300`):
+
+```bash
+UNAV_SCALEDOWN_WINDOW=600 modal deploy unav_modal.py
+```
+
+You can also deploy from GitHub UI using:
+
+- Actions -> `Deploy UNav v2 Modal` -> `Run workflow`
+- Set `scaledown_window` input
+- Ensure repository secrets `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET` are configured
+
 ## To test the deployed unav code with a predefined function parameters
 
 ```bash
