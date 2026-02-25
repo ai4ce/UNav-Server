@@ -7,6 +7,18 @@ on:
         description: "Modal scaledown window in seconds"
         required: true
         default: "300"
+      gpu_type:
+        description: "GPU type for Modal deployment"
+        required: true
+        default: "t4"
+        type: choice
+        options:
+          - a10
+          - t4
+          - any
+
+permissions:
+  contents: read
 
 jobs:
   deploy:
@@ -25,7 +37,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Validate scaledown window
+      - name: Validate deploy inputs
         run: |
           python - <<'PY'
           import os
@@ -33,16 +45,54 @@ jobs:
           parsed = int(value)
           if parsed <= 0:
               raise ValueError("scaledown_window must be a positive integer")
+          gpu = os.environ["UNAV_GPU_TYPE"].strip().lower()
+          if gpu not in {"a10", "t4", "any"}:
+              raise ValueError("gpu_type must be one of: a10, t4, any")
           print(f"Using UNAV_SCALEDOWN_WINDOW={parsed}")
+          print(f"Using UNAV_GPU_TYPE={gpu}")
           PY
         env:
           UNAV_SCALEDOWN_WINDOW: ${{ inputs.scaledown_window }}
+          UNAV_GPU_TYPE: ${{ inputs.gpu_type }}
+
+      - name: Deployment metadata
+        run: |
+          echo "Triggered by: $GITHUB_ACTOR"
+          echo "Run URL: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          {
+            echo "### UNav v2 Modal Deployment"
+            echo "- Triggered by: \`$GITHUB_ACTOR\`"
+            echo "- Ref: \`${GITHUB_REF_NAME}\`"
+            echo "- GPU type: \`${UNAV_GPU_TYPE}\`"
+            echo "- Scaledown window: \`${UNAV_SCALEDOWN_WINDOW}\`"
+            echo "- Run URL: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          UNAV_SCALEDOWN_WINDOW: ${{ inputs.scaledown_window }}
+          UNAV_GPU_TYPE: ${{ inputs.gpu_type }}
+
+      - name: Validate required secrets are present
+        run: |
+          python - <<'PY'
+          import os
+          missing = [
+              key for key in ("MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET")
+              if not os.environ.get(key)
+          ]
+          if missing:
+              raise ValueError(f"Missing required GitHub Actions secrets: {', '.join(missing)}")
+          print("Required secrets are configured.")
+          PY
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
 
       - name: Deploy to Modal
         env:
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
           UNAV_SCALEDOWN_WINDOW: ${{ inputs.scaledown_window }}
+          UNAV_GPU_TYPE: ${{ inputs.gpu_type }}
         run: |
           cd src/modal_functions/unav_v2
           modal deploy unav_modal.py
