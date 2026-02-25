@@ -10,7 +10,7 @@ on:
       gpu_type:
         description: "GPU type for Modal deployment"
         required: true
-        default: "a10"
+        default: "t4"
         type: choice
         options:
           - a10

@@ -15,7 +15,7 @@ def get_scaledown_window() -> int:
 
 
 def get_gpu_config() -> List[str]:
-    raw_value = os.getenv("UNAV_GPU_TYPE", "a10")
+    raw_value = os.getenv("UNAV_GPU_TYPE", "t4")
     gpu_choice = str(raw_value).strip().lower()
 
     # Modal docs support GPU shortcodes and "any" for flexible scheduling.
@@ -28,8 +28,8 @@ def get_gpu_config() -> List[str]:
 
     if gpu_choice not in mapping:
         print(
-            f"⚠️ Invalid UNAV_GPU_TYPE={raw_value!r}; expected one of: t4, a10, any. Falling back to a10."
+            f"⚠️ Invalid UNAV_GPU_TYPE={raw_value!r}; expected one of: t4, a10, any. Falling back to t4."
         )
-        return ["A10"]
+        return ["T4"]
 
     return [mapping[gpu_choice]]

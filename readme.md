@@ -42,7 +42,7 @@ modal deploy unav_modal.py
 `scaledown_window` and GPU type are configurable at deploy time using:
 
 - `UNAV_SCALEDOWN_WINDOW` (default: `300`)
-- `UNAV_GPU_TYPE` (default: `a10`, allowed: `a10`, `t4`, `any`)
+- `UNAV_GPU_TYPE` (default: `t4`, allowed: `a10`, `t4`, `any`)
 
 ```bash
 UNAV_SCALEDOWN_WINDOW=600 UNAV_GPU_TYPE=t4 modal deploy unav_modal.py
