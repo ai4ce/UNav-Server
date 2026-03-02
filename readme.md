@@ -42,7 +42,7 @@ modal deploy unav_modal.py
 `scaledown_window` and GPU type are configurable at deploy time using:
 
 - `UNAV_SCALEDOWN_WINDOW` (default: `300`)
-- `UNAV_GPU_TYPE` (default: `t4`, allowed: `a10`, `t4`, `any`)
+- `UNAV_GPU_TYPE` (default: `t4`, allowed: `a10`, `t4`, `a100`, `any`)
 
 ```bash
 UNAV_SCALEDOWN_WINDOW=600 UNAV_GPU_TYPE=t4 modal deploy unav_modal.py
@@ -52,7 +52,7 @@ You can also deploy from GitHub UI using:
 
 - Actions -> `Deploy UNav v2 Modal` -> `Run workflow`
 - Set `scaledown_window` input
-- Set `gpu_type` input (`a10`, `t4`, or `any`)
+- Set `gpu_type` input (`a10`, `t4`, `a100`, or `any`)
 - Ensure repository secrets `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET` are configured
 
 ## To test the deployed unav code with a predefined function parameters

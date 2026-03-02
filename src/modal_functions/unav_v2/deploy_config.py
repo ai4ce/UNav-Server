@@ -23,12 +23,13 @@ def get_gpu_config() -> List[str]:
         "t4": "T4",
         "a10": "A10",
         "a10g": "A10",
+        "a100": "A100",
         "any": "any",
     }
 
     if gpu_choice not in mapping:
         print(
-            f"⚠️ Invalid UNAV_GPU_TYPE={raw_value!r}; expected one of: t4, a10, any. Falling back to t4."
+            f"⚠️ Invalid UNAV_GPU_TYPE={raw_value!r}; expected one of: t4, a10, a100, any. Falling back to t4."
         )
         return ["T4"]
 
