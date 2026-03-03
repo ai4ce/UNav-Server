@@ -6,7 +6,7 @@ import json
 import os
 from typing import Dict, List, Any, Optional
 
-from .deploy_config import get_scaledown_window, get_gpu_config
+from .deploy_config import get_scaledown_window, get_gpu_config, get_memory_mb
 from .modal_config import app, unav_image, volume, gemini_secret, middleware_secret
 from .destinations_service import get_destinations_list_impl
 
@@ -16,7 +16,7 @@ from .destinations_service import get_destinations_list_impl
     volumes={"/root/UNav-IO": volume},
     gpu=get_gpu_config(),
     enable_memory_snapshot=False,
-    memory=73728,
+    memory=get_memory_mb(),
     timeout=600,
     scaledown_window=get_scaledown_window(),
     secrets=[gemini_secret, middleware_secret],

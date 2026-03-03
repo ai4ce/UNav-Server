@@ -17,6 +17,17 @@ on:
           - t4
           - any
           - a100
+      ram_mb:
+        description: "RAM reservation in MiB (max in this workflow: 98304)"
+        required: true
+        default: "73728"
+        type: choice
+        options:
+          - "49152" # 48 GiB
+          - "65536" # 64 GiB
+          - "73728" # 72 GiB
+          - "81920" # 80 GiB
+          - "98304" # 96 GiB (max in this workflow)
 
 permissions:
   contents: read
@@ -49,12 +60,21 @@ jobs:
           gpu = os.environ["UNAV_GPU_TYPE"].strip().lower()
           if gpu not in {"a10", "t4", "any", "a100"}:
               raise ValueError("gpu_type must be one of: a10, t4, any, a100")
+          ram_mb = int(os.environ["UNAV_RAM_MB"])
+          max_ram_mb = 98304
+          if ram_mb <= 0:
+              raise ValueError("ram_mb must be a positive integer")
+          if ram_mb > max_ram_mb:
+              raise ValueError(f"ram_mb cannot exceed configured max ({max_ram_mb} MiB)")
           print(f"Using UNAV_SCALEDOWN_WINDOW={parsed}")
           print(f"Using UNAV_GPU_TYPE={gpu}")
+          print(f"Using UNAV_RAM_MB={ram_mb}")
+          print(f"Configured workflow max RAM (MiB): {max_ram_mb}")
           PY
         env:
           UNAV_SCALEDOWN_WINDOW: ${{ inputs.scaledown_window }}
           UNAV_GPU_TYPE: ${{ inputs.gpu_type }}
+          UNAV_RAM_MB: ${{ inputs.ram_mb }}
 
       - name: Deployment metadata
         run: |
@@ -66,11 +86,14 @@ jobs:
             echo "- Ref: \`${GITHUB_REF_NAME}\`"
             echo "- GPU type: \`${UNAV_GPU_TYPE}\`"
             echo "- Scaledown window: \`${UNAV_SCALEDOWN_WINDOW}\`"
+            echo "- RAM reservation (MiB): \`${UNAV_RAM_MB}\`"
+            echo "- Configured max RAM (MiB): \`98304\`"
             echo "- Run URL: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           } >> "$GITHUB_STEP_SUMMARY"
         env:
           UNAV_SCALEDOWN_WINDOW: ${{ inputs.scaledown_window }}
           UNAV_GPU_TYPE: ${{ inputs.gpu_type }}
+          UNAV_RAM_MB: ${{ inputs.ram_mb }}
 
       - name: Validate required secrets are present
         run: |
@@ -94,5 +117,6 @@ jobs:
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
           UNAV_SCALEDOWN_WINDOW: ${{ inputs.scaledown_window }}
           UNAV_GPU_TYPE: ${{ inputs.gpu_type }}
+          UNAV_RAM_MB: ${{ inputs.ram_mb }}
         run: |
           modal deploy -m src.modal_functions.unav_v2.unav_modal
