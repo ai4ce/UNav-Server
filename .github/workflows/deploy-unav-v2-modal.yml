@@ -17,23 +17,15 @@ on:
           - t4
           - any
           - a100
-      ram_option:
-        description: "RAM option for Modal deployment"
+      ram_mb:
+        description: "RAM reservation in MiB (max in this workflow: 73728)"
         required: true
-        default: "current"
+        default: "73728"
         type: choice
         options:
-          - current
-          - modal_max
-          - custom
-      modal_max_ram_mb:
-        description: "Modal allowed RAM limit in MiB (you specify this)"
-        required: true
-        default: "73728"
-      custom_ram_mb:
-        description: "Custom RAM in MiB (used when ram_option=custom)"
-        required: true
-        default: "73728"
+          - "49152" # 48 GiB
+          - "65536" # 64 GiB
+          - "73728" # 72 GiB (current + max in this workflow)
 
 permissions:
   contents: read
@@ -66,38 +58,21 @@ jobs:
           gpu = os.environ["UNAV_GPU_TYPE"].strip().lower()
           if gpu not in {"a10", "t4", "any", "a100"}:
               raise ValueError("gpu_type must be one of: a10, t4, any, a100")
-          ram_option = os.environ["UNAV_RAM_OPTION"].strip().lower()
-          if ram_option not in {"current", "modal_max", "custom"}:
-              raise ValueError("ram_option must be one of: current, modal_max, custom")
-          modal_max_mb = int(os.environ["UNAV_MODAL_MAX_RAM_MB"])
-          custom_mb = int(os.environ["UNAV_CUSTOM_RAM_MB"])
-          if modal_max_mb <= 0:
-              raise ValueError("modal_max_ram_mb must be a positive integer")
-          if custom_mb <= 0:
-              raise ValueError("custom_ram_mb must be a positive integer")
-          if custom_mb > modal_max_mb:
-              raise ValueError(
-                  "custom_ram_mb cannot exceed modal_max_ram_mb because Modal enforces a max per container"
-              )
-          if ram_option == "current":
-              resolved_ram_mb = 73728
-          elif ram_option == "modal_max":
-              resolved_ram_mb = modal_max_mb
-          else:
-              resolved_ram_mb = custom_mb
+          ram_mb = int(os.environ["UNAV_RAM_MB"])
+          max_ram_mb = 73728
+          if ram_mb <= 0:
+              raise ValueError("ram_mb must be a positive integer")
+          if ram_mb > max_ram_mb:
+              raise ValueError(f"ram_mb cannot exceed configured max ({max_ram_mb} MiB)")
           print(f"Using UNAV_SCALEDOWN_WINDOW={parsed}")
           print(f"Using UNAV_GPU_TYPE={gpu}")
-          print(f"Using UNAV_RAM_OPTION={ram_option}")
-          print(f"Using UNAV_MODAL_MAX_RAM_MB={modal_max_mb}")
-          print(f"Using UNAV_CUSTOM_RAM_MB={custom_mb}")
-          print(f"Resolved UNAV memory (MiB): {resolved_ram_mb}")
+          print(f"Using UNAV_RAM_MB={ram_mb}")
+          print(f"Configured workflow max RAM (MiB): {max_ram_mb}")
           PY
         env:
           UNAV_SCALEDOWN_WINDOW: ${{ inputs.scaledown_window }}
           UNAV_GPU_TYPE: ${{ inputs.gpu_type }}
-          UNAV_RAM_OPTION: ${{ inputs.ram_option }}
-          UNAV_MODAL_MAX_RAM_MB: ${{ inputs.modal_max_ram_mb }}
-          UNAV_CUSTOM_RAM_MB: ${{ inputs.custom_ram_mb }}
+          UNAV_RAM_MB: ${{ inputs.ram_mb }}
 
       - name: Deployment metadata
         run: |
@@ -109,17 +84,14 @@ jobs:
             echo "- Ref: \`${GITHUB_REF_NAME}\`"
             echo "- GPU type: \`${UNAV_GPU_TYPE}\`"
             echo "- Scaledown window: \`${UNAV_SCALEDOWN_WINDOW}\`"
-            echo "- RAM option: \`${UNAV_RAM_OPTION}\`"
-            echo "- Modal max RAM (MiB): \`${UNAV_MODAL_MAX_RAM_MB}\`"
-            echo "- Custom RAM (MiB): \`${UNAV_CUSTOM_RAM_MB}\`"
+            echo "- RAM reservation (MiB): \`${UNAV_RAM_MB}\`"
+            echo "- Configured max RAM (MiB): \`73728\`"
             echo "- Run URL: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           } >> "$GITHUB_STEP_SUMMARY"
         env:
           UNAV_SCALEDOWN_WINDOW: ${{ inputs.scaledown_window }}
           UNAV_GPU_TYPE: ${{ inputs.gpu_type }}
-          UNAV_RAM_OPTION: ${{ inputs.ram_option }}
-          UNAV_MODAL_MAX_RAM_MB: ${{ inputs.modal_max_ram_mb }}
-          UNAV_CUSTOM_RAM_MB: ${{ inputs.custom_ram_mb }}
+          UNAV_RAM_MB: ${{ inputs.ram_mb }}
 
       - name: Validate required secrets are present
         run: |
@@ -143,8 +115,6 @@ jobs:
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
           UNAV_SCALEDOWN_WINDOW: ${{ inputs.scaledown_window }}
           UNAV_GPU_TYPE: ${{ inputs.gpu_type }}
-          UNAV_RAM_OPTION: ${{ inputs.ram_option }}
-          UNAV_MODAL_MAX_RAM_MB: ${{ inputs.modal_max_ram_mb }}
-          UNAV_CUSTOM_RAM_MB: ${{ inputs.custom_ram_mb }}
+          UNAV_RAM_MB: ${{ inputs.ram_mb }}
         run: |
           modal deploy -m src.modal_functions.unav_v2.unav_modal

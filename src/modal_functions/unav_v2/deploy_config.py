@@ -41,54 +41,23 @@ def get_gpu_config() -> List[str]:
 def get_memory_mb() -> int:
     """
     Resolve UNav memory reservation in MiB for Modal deployment.
-
-    Modes:
-    - current: use DEFAULT_UNAV_RAM_MB
-    - modal_max: use UNAV_MODAL_MAX_RAM_MB
-    - custom: use UNAV_CUSTOM_RAM_MB (must be <= UNAV_MODAL_MAX_RAM_MB)
+    UNAV_RAM_MB is expected to come from a workflow dropdown.
     """
-    option_raw = os.getenv("UNAV_RAM_OPTION", "current")
-    option = str(option_raw).strip().lower()
-    if option not in {"current", "modal_max", "custom"}:
+    raw_value = os.getenv("UNAV_RAM_MB", str(DEFAULT_UNAV_RAM_MB))
+    try:
+        requested_mb = int(raw_value)
+        if requested_mb <= 0:
+            raise ValueError("must be > 0")
+    except (TypeError, ValueError):
         print(
-            f"⚠️ Invalid UNAV_RAM_OPTION={option_raw!r}; expected current|modal_max|custom. Falling back to current."
+            f"⚠️ Invalid UNAV_RAM_MB={raw_value!r}; falling back to {DEFAULT_UNAV_RAM_MB}."
         )
-        option = "current"
-
-    modal_max_raw = os.getenv("UNAV_MODAL_MAX_RAM_MB", str(DEFAULT_UNAV_RAM_MB))
-    custom_raw = os.getenv("UNAV_CUSTOM_RAM_MB", str(DEFAULT_UNAV_RAM_MB))
-
-    def _parse_positive_int(value: str, env_name: str, fallback: int) -> int:
-        try:
-            parsed = int(value)
-            if parsed <= 0:
-                raise ValueError("must be > 0")
-            return parsed
-        except (TypeError, ValueError):
-            print(
-                f"⚠️ Invalid {env_name}={value!r}; falling back to {fallback}."
-            )
-            return fallback
-
-    modal_max_mb = _parse_positive_int(
-        modal_max_raw,
-        "UNAV_MODAL_MAX_RAM_MB",
-        DEFAULT_UNAV_RAM_MB,
-    )
-    custom_mb = _parse_positive_int(
-        custom_raw,
-        "UNAV_CUSTOM_RAM_MB",
-        DEFAULT_UNAV_RAM_MB,
-    )
-
-    if option == "current":
         return DEFAULT_UNAV_RAM_MB
-    if option == "modal_max":
-        return modal_max_mb
 
-    if custom_mb > modal_max_mb:
+    max_allowed_mb = DEFAULT_UNAV_RAM_MB
+    if requested_mb > max_allowed_mb:
         print(
-            f"⚠️ UNAV_CUSTOM_RAM_MB={custom_mb} exceeds UNAV_MODAL_MAX_RAM_MB={modal_max_mb}; clamping to {modal_max_mb}."
+            f"⚠️ UNAV_RAM_MB={requested_mb} exceeds configured max ({max_allowed_mb}); clamping to {max_allowed_mb}."
         )
-        return modal_max_mb
-    return custom_mb
+        return max_allowed_mb
+    return requested_mb
