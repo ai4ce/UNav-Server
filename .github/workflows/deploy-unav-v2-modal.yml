@@ -18,14 +18,16 @@ on:
           - any
           - a100
       ram_mb:
-        description: "RAM reservation in MiB (max in this workflow: 73728)"
+        description: "RAM reservation in MiB (max in this workflow: 98304)"
         required: true
         default: "73728"
         type: choice
         options:
           - "49152" # 48 GiB
           - "65536" # 64 GiB
-          - "73728" # 72 GiB (current + max in this workflow)
+          - "73728" # 72 GiB
+          - "81920" # 80 GiB
+          - "98304" # 96 GiB (max in this workflow)
 
 permissions:
   contents: read
@@ -59,7 +61,7 @@ jobs:
           if gpu not in {"a10", "t4", "any", "a100"}:
               raise ValueError("gpu_type must be one of: a10, t4, any, a100")
           ram_mb = int(os.environ["UNAV_RAM_MB"])
-          max_ram_mb = 73728
+          max_ram_mb = 98304
           if ram_mb <= 0:
               raise ValueError("ram_mb must be a positive integer")
           if ram_mb > max_ram_mb:
@@ -85,7 +87,7 @@ jobs:
             echo "- GPU type: \`${UNAV_GPU_TYPE}\`"
             echo "- Scaledown window: \`${UNAV_SCALEDOWN_WINDOW}\`"
             echo "- RAM reservation (MiB): \`${UNAV_RAM_MB}\`"
-            echo "- Configured max RAM (MiB): \`73728\`"
+            echo "- Configured max RAM (MiB): \`98304\`"
             echo "- Run URL: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           } >> "$GITHUB_STEP_SUMMARY"
         env:

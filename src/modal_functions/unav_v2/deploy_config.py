@@ -2,6 +2,7 @@ import os
 from typing import List
 
 DEFAULT_UNAV_RAM_MB = 73728
+MAX_UNAV_RAM_MB = 98304
 
 
 def get_scaledown_window() -> int:
@@ -54,7 +55,7 @@ def get_memory_mb() -> int:
         )
         return DEFAULT_UNAV_RAM_MB
 
-    max_allowed_mb = DEFAULT_UNAV_RAM_MB
+    max_allowed_mb = MAX_UNAV_RAM_MB
     if requested_mb > max_allowed_mb:
         print(
             f"⚠️ UNAV_RAM_MB={requested_mb} exceeds configured max ({max_allowed_mb}); clamping to {max_allowed_mb}."
