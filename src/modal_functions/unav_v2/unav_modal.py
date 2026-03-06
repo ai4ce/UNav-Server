@@ -1,26 +1,25 @@
-from modal import method, gpu, enter
-import json
-import traceback
-import numpy as np
-import os
-from typing import Dict, List, Any, Optional
+from modal import method
+from typing import Any, Dict, Optional
 
-from .deploy_config import get_scaledown_window, get_gpu_config, get_memory_mb
-from .modal_config import app, unav_image, volume, gemini_secret, middleware_secret
+from .deploy_config import get_memory_mb, get_gpu_config, get_scaledown_window
 from .destinations_service import get_destinations_list_impl
-from .unav_places_methods import (
-    _get_fallback_places,
-    ensure_gpu_components_ready,
-    ensure_maps_loaded,
-    get_places,
+from .modal_config import app, gemini_secret, middleware_secret, unav_image, volume
+from .server_methods.init_methods import (
+    _configure_middleware_tracing,
+    _gpu_available,
+    initialize_cpu_components,
+    initialize_gpu_components,
+    initialize_middleware,
 )
-from .unav_session_methods import (
-    _construct_mock_localization_output,
-    get_session,
-    set_navigation_context,
-    update_session,
+from .server_methods.monkey_patch_methods import (
+    _monkey_patch_feature_extractors,
+    _monkey_patch_lightglue,
+    _monkey_patch_localizer_methods,
+    _monkey_patch_matching_and_ransac,
+    _monkey_patch_pose_refinement,
 )
-from .unav_output_methods import (
+from .server_methods.navigation_methods import localize_user, planner
+from .server_methods.output_methods import (
     _safe_serialize,
     clear_user_session,
     convert_navigation_to_trajectory,
@@ -29,12 +28,17 @@ from .unav_output_methods import (
     run_vlm_on_image,
     unav_navigation_simple,
 )
-from .unav_monkey_patch_methods import (
-    _monkey_patch_feature_extractors,
-    _monkey_patch_lightglue,
-    _monkey_patch_localizer_methods,
-    _monkey_patch_matching_and_ransac,
-    _monkey_patch_pose_refinement,
+from .server_methods.places_methods import (
+    _get_fallback_places,
+    ensure_gpu_components_ready,
+    ensure_maps_loaded,
+    get_places,
+)
+from .server_methods.session_methods import (
+    _construct_mock_localization_output,
+    get_session,
+    set_navigation_context,
+    update_session,
 )
 
 
@@ -54,17 +58,19 @@ class UnavServer:
     tracer: Optional[Any] = None
     _middleware_init_pending: bool = False
 
-    # Refactored method groups imported from dedicated modules
+    # Place/map methods
     get_places = get_places
     _get_fallback_places = _get_fallback_places
     ensure_maps_loaded = ensure_maps_loaded
     ensure_gpu_components_ready = ensure_gpu_components_ready
 
+    # Session/context methods
     get_session = get_session
     update_session = update_session
     _construct_mock_localization_output = _construct_mock_localization_output
     set_navigation_context = set_navigation_context
 
+    # Output/serialization methods
     _safe_serialize = _safe_serialize
     generate_nav_instructions_from_coordinates = generate_nav_instructions_from_coordinates
     get_user_session = get_user_session
@@ -73,229 +79,23 @@ class UnavServer:
     convert_navigation_to_trajectory = convert_navigation_to_trajectory
     run_vlm_on_image = run_vlm_on_image
 
+    # Monkey patch methods
     _monkey_patch_localizer_methods = _monkey_patch_localizer_methods
     _monkey_patch_pose_refinement = _monkey_patch_pose_refinement
     _monkey_patch_feature_extractors = _monkey_patch_feature_extractors
     _monkey_patch_lightglue = _monkey_patch_lightglue
     _monkey_patch_matching_and_ransac = _monkey_patch_matching_and_ransac
 
-    def _gpu_available(self) -> bool:
-        """Utility to detect whether CUDA GPUs are currently accessible."""
-        try:
-            import torch
+    # Initialization methods
+    _gpu_available = _gpu_available
+    _configure_middleware_tracing = _configure_middleware_tracing
+    initialize_middleware = initialize_middleware
+    initialize_cpu_components = initialize_cpu_components
+    initialize_gpu_components = initialize_gpu_components
 
-            available = torch.cuda.is_available()
-            print(f"[GPU CHECK] torch.cuda.is_available(): {available}")
-            return available
-        except Exception as exc:
-            print(f"[GPU CHECK] Unable to determine GPU availability: {exc}")
-            return False
-
-    def _configure_middleware_tracing(self):
-        print("🔧 [CONFIGURE] Starting Middleware.io configuration...")
-        from middleware import mw_tracker, MWOptions
-        from opentelemetry import trace
-        import os
-
-        api_key = os.environ.get("MW_API_KEY")
-        target = os.environ.get("MW_TARGET")
-
-        if not api_key or not target:
-            print(
-                "⚠️ Warning: MW_API_KEY and MW_TARGET not set. Skipping middleware initialization."
-            )
-            self.tracer = None
-            return
-
-        try:
-            mw_tracker(
-                MWOptions(
-                    access_token=api_key,
-                    target=target,
-                    service_name="UNav-Server",
-                    console_exporter=False,
-                    log_level="INFO",
-                    collect_profiling=True,
-                    collect_traces=True,
-                    collect_metrics=True,
-                )
-            )
-
-            self.tracer = trace.get_tracer(__name__)
-            print("✅ Middleware.io initialized successfully")
-            print(f"✅ [CONFIGURE] Tracer created: {type(self.tracer).__name__}")
-        except Exception as e:
-            print(f"⚠️ Warning: Failed to initialize Middleware.io: {e}")
-            self.tracer = None
-            print(f"⚠️ [CONFIGURE] Tracer set to None due to error")
-
-    @enter(snap=False)
-    def initialize_middleware(self):
-        """
-        Initialize Middleware.io tracking for profiling and telemetry.
-        """
-        print("🔧 [Phase 0] Initializing Middleware.io...")
-        print(
-            f"🔧 [Phase 0] Current tracer state: {getattr(self, 'tracer', 'NOT_SET')}"
-        )
-        print(
-            f"🔧 [Phase 0] Middleware init pending: {getattr(self, '_middleware_init_pending', 'NOT_SET')}"
-        )
-
-        if not self._gpu_available():
-            print(
-                "⏸️ GPU not yet available; deferring Middleware.io initialization until a GPU-backed container is ready."
-            )
-            self._middleware_init_pending = True
-            self.tracer = None
-            print(f"🔧 [Phase 0] Set _middleware_init_pending=True, tracer=None")
-            return
-
-        self._middleware_init_pending = False
-        print("✅ GPU available; proceeding with Middleware.io initialization")
-        self._configure_middleware_tracing()
-
-    @enter(snap=False)
-    def initialize_cpu_components(self):
-        """
-        Initialize CPU-only components that can be safely snapshotted.
-        This includes configuration, data loading, and navigation setup.
-        """
-        print("🚀 [Phase 1] Initializing CPU components for snapshotting...")
-
-        from unav.config import UNavConfig
-        from unav.navigator.multifloor import FacilityNavigator
-        from unav.navigator.commander import commands_from_result
-
-        # Configuration constants
-        self.DATA_ROOT = "/root/UNav-IO/data"
-        self.FEATURE_MODEL = "DinoV2Salad"
-        self.LOCAL_FEATURE_MODEL = "superpoint+lightglue"
-        self.PLACES = self.get_places()  # Load all places but defer map loading
-
-        print("🔧 Initializing UNavConfig...")
-        self.config = UNavConfig(
-            data_final_root=self.DATA_ROOT,
-            places=self.PLACES,
-            global_descriptor_model=self.FEATURE_MODEL,
-            local_feature_model=self.LOCAL_FEATURE_MODEL,
-        )
-        print("✅ UNavConfig initialized successfully")
-
-        # Extract specific sub-configs for localization and navigation modules
-        self.localizor_config = self.config.localizer_config
-        self.navigator_config = self.config.navigator_config
-        print("✅ Config objects extracted successfully")
-
-        print("🧭 Initializing FacilityNavigator (CPU-only)...")
-        self.nav = FacilityNavigator(self.navigator_config)
-        print("✅ FacilityNavigator initialized successfully")
-
-        # Store commander function for navigation
-        self.commander = commands_from_result
-
-        # Initialize loaded places tracking (all places are now in config, but maps not loaded)
-        self.maps_loaded = set()
-
-        # Cache for selective localizers (key: (place, building, floor) -> localizer instance)
-        self.selective_localizers = {}
-
-        # Set flag to indicate CPU components are ready
-        self.cpu_components_initialized = True
-        print("📸 CPU components ready for snapshotting!")
-
-    @enter(snap=False)
-    def initialize_gpu_components(self):
-        """
-        Initialize GPU-dependent components that cannot be snapshotted.
-        This must run after snapshot restoration on GPU-enabled containers.
-        """
-        print("🚀 [Phase 2] Initializing GPU components after snapshot restoration...")
-
-        # --- GPU DEBUG INFO ---
-        try:
-            import torch
-
-            cuda_available = torch.cuda.is_available()
-            print(f"[GPU DEBUG] torch.cuda.is_available(): {cuda_available}")
-
-            if not cuda_available:
-                print(
-                    "[GPU ERROR] CUDA not available! This will cause model loading to fail."
-                )
-                print(
-                    "[GPU ERROR] Modal should have allocated a GPU. Raising exception to trigger retry..."
-                )
-                raise RuntimeError(
-                    "GPU not available when required. Modal will retry with GPU allocation."
-                )
-
-            print(f"[GPU DEBUG] torch.cuda.device_count(): {torch.cuda.device_count()}")
-            print(
-                f"[GPU DEBUG] torch.cuda.current_device(): {torch.cuda.current_device()}"
-            )
-            print(
-                f"[GPU DEBUG] torch.cuda.get_device_name(0): {torch.cuda.get_device_name(0)}"
-            )
-        except Exception as gpu_debug_exc:
-            print(f"[GPU DEBUG] Error printing GPU info: {gpu_debug_exc}")
-            # If it's our intentional GPU check failure, re-raise it
-            if "GPU not available when required" in str(gpu_debug_exc):
-                raise
-        # --- END GPU DEBUG INFO ---
-
-        # Ensure CPU components are initialized
-        if not hasattr(self, "cpu_components_initialized"):
-            print("⚠️ CPU components not initialized, initializing now...")
-            self.initialize_cpu_components()
-
-        from unav.localizer.localizer import UNavLocalizer
-
-        print("🤖 Initializing UNavLocalizer (GPU-dependent)...")
-        self.localizer = UNavLocalizer(self.localizor_config)
-
-        # Add fine-grained tracing to internal localizer steps without editing the package
-        #(monkey-patch key methods if available)
-        try:
-            self._monkey_patch_localizer_methods(self.localizer)
-            self._monkey_patch_pose_refinement()
-            #self._monkey_patch_matching_and_ransac()
-            self._monkey_patch_feature_extractors()
-        except Exception as e:
-            print(f"⚠️ Failed to monkey-patch UNavLocalizer methods: {e}")
-
-        # Skip loading all maps/features at startup - will load on demand
-        print("✅ UNavLocalizer initialized (maps will load on demand)")
-
-        # Set flag to indicate full system is ready
-        self.gpu_components_initialized = True
-        print("🎉 Full UNav system initialization complete! Ready for fast inference.")
-        print(
-            f"🎉 [Phase 2] Checking for deferred middleware init: _middleware_init_pending={getattr(self, '_middleware_init_pending', 'NOT_SET')}"
-        )
-
-        if getattr(self, "_middleware_init_pending", False):
-            print(
-                "🔁 GPU acquired; completing deferred Middleware.io initialization..."
-            )
-            print(
-                f"🔁 [Phase 2] Before deferred init: tracer={getattr(self, 'tracer', 'NOT_SET')}"
-            )
-            self._middleware_init_pending = False
-            self._configure_middleware_tracing()
-            # Re-apply patches with the new tracer
-            try:
-                self._monkey_patch_localizer_methods(self.localizer)
-                self._monkey_patch_pose_refinement()
-                self._monkey_patch_matching_and_ransac()
-                self._monkey_patch_feature_extractors()
-            except Exception as e:
-                print(f"⚠️ Failed to re-patch after deferred init: {e}")
-            print(
-                f"🔁 [Phase 2] After deferred init: tracer={getattr(self, 'tracer', 'NOT_SET')}, _middleware_init_pending={getattr(self, '_middleware_init_pending', 'NOT_SET')}"
-            )
-        else:
-            print("✅ [Phase 2] No deferred middleware initialization needed")
+    # Main navigation methods
+    planner = planner
+    localize_user = localize_user
 
     @method()
     def start_server(self):
@@ -304,9 +104,9 @@ class UnavServer:
 
         """
         Initializes and starts the serverless instance.
-    
-        This function helps in reducing the server response time for actual requests by pre-warming the server. 
-        By starting the server in advance, it ensures that the server is ready to handle incoming requests immediately, 
+
+        This function helps in reducing the server response time for actual requests by pre-warming the server.
+        By starting the server in advance, it ensures that the server is ready to handle incoming requests immediately,
         thus avoiding the latency associated with a cold start.
         """
         print("UNAV Container started...")
@@ -314,13 +114,13 @@ class UnavServer:
 
         # Create span for server start if tracer available
         if hasattr(self, "tracer") and self.tracer:
-            with self.tracer.start_as_current_span("start_server_span") as span:
+            with self.tracer.start_as_current_span("start_server_span"):
                 response = {"status": "success", "message": "Server started."}
                 logging.info("Server warmup completed successfully")
                 return json.dumps(response)
-        else:
-            response = {"status": "success", "message": "Server started."}
-            return json.dumps(response)
+
+        response = {"status": "success", "message": "Server started."}
+        return json.dumps(response)
 
     @method()
     def get_destinations_list(
@@ -341,726 +141,3 @@ class UnavServer:
             building=building,
             enable_multifloor=enable_multifloor,
         )
-
-    @method()
-    def planner(
-        self,
-        session_id: str,
-        base_64_image,
-        destination_id: str,
-        place: str,
-        building: str,
-        floor: str,
-        top_k: int = None,
-        unit: str = "meter",
-        language: str = "en",
-        refinement_queue: dict = None,
-        is_vlm_extraction_enabled: bool = False,
-        enable_multifloor: bool = False,
-        should_use_user_provided_coordinate: bool = False,
-        x: float = None,
-        y: float = None,
-        angle: float = None,
-    ):
-        """
-        Full localization and navigation pipeline with timing tracking and middleware tracing.
-        
-        Args:
-            session_id: Unique identifier for the user session
-            base_64_image: Base64 encoded image or numpy array (optional if using provided coordinates)
-            destination_id: Destination node ID
-            place: Place name
-            building: Building name
-            floor: Floor name
-            top_k: Number of top candidates for localization
-            unit: Distance unit ("meter" or "feet")
-            language: Language code for instructions
-            refinement_queue: Queue for pose refinement
-            is_vlm_extraction_enabled: Enable VLM text extraction fallback
-            enable_multifloor: Enable multi-floor navigation
-            should_use_user_provided_coordinate: If True, skip localization and use provided x, y, angle
-            x: X coordinate on floor plan (required if should_use_user_provided_coordinate=True)
-            y: Y coordinate on floor plan (required if should_use_user_provided_coordinate=True)
-            angle: Heading angle in degrees (required if should_use_user_provided_coordinate=True)
-        """
-        import time
-        import logging
-        import uuid
-
-        # Generate a unique ID for this specific call to planner
-        call_id = str(uuid.uuid4())
-
-        # Check tracing availability
-        has_tracer = hasattr(self, "tracer") and self.tracer is not None
-        print(
-            f"📋 [PLANNER] Called with session_id={session_id}, call_id={call_id}, has_tracer={has_tracer}, tracer_type={type(getattr(self, 'tracer', None)).__name__}"
-        )
-
-        # Create parent span for the entire planner operation if tracer is available
-        if has_tracer:
-            print(f"📋 [PLANNER] Using TRACED execution path for call_id={call_id}")
-            with self.tracer.start_as_current_span("planner_span") as parent_span:
-                parent_span.set_attribute("unav.call_id", call_id)
-                parent_span.set_attribute("unav.session_id", session_id)
-                # Start total timing
-                start_time = time.time()
-                timing_data = {}
-                image = None
-
-                # Validate user-provided coordinates if enabled
-                if should_use_user_provided_coordinate:
-                    if x is None or y is None or angle is None:
-                        return {
-                            "status": "error",
-                            "error": "When should_use_user_provided_coordinate=True, x, y, and angle must all be provided.",
-                            "timing": {"total": (time.time() - start_time) * 1000},
-                        }
-                    print(f"📍 Using user-provided coordinates: x={x}, y={y}, angle={angle}°")
-                    # Image is optional when using provided coordinates
-                    if base_64_image is not None:
-                        print("⚠️ Image provided but will be ignored since using provided coordinates")
-                elif base_64_image is None:
-                    # Image is required when not using provided coordinates
-                    return {
-                        "status": "error",
-                        "error": "No image provided. base_64_image parameter is required when not using provided coordinates.",
-                        "timing": {"total": (time.time() - start_time) * 1000},
-                    }
-
-                # Convert base64 string to BGR numpy array using OpenCV (skip if using provided coordinates)
-                if not should_use_user_provided_coordinate:
-                    if isinstance(base_64_image, str):
-                        import base64
-                        import cv2
-
-                        try:
-                            # Fix base64 padding if needed
-                            base64_string = base_64_image
-                            print(
-                                f"Received base64 image string of length {len(base64_string)}"
-                            )
-                            ## print the first 50 characers of bas64 string
-                            # print(f"{base64_string[0:50]}")
-                            # Remove data URL prefix if present (e.g., "data:image/jpeg;base64,")
-                            if "," in base64_string:
-                                base64_string = base64_string.split(",")[1]
-
-                            # Add padding if necessary
-                            missing_padding = len(base64_string) % 4
-                            if missing_padding:
-                                base64_string += "=" * (4 - missing_padding)
-
-                            # Decode base64 string to bytes
-                            image_bytes = base64.b64decode(base64_string)
-
-                            # print(f"Image bytes {image_bytes}")
-                            # Convert bytes to numpy array
-                            image_array = np.frombuffer(image_bytes, dtype=np.uint8)
-                            # Decode image using OpenCV (automatically in BGR format)
-                            image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
-
-                            if image is None:
-                                return {
-                                    "status": "error",
-                                    "error": "Failed to decode base64 image. Invalid image format.",
-                                    "timing": {"total": (time.time() - start_time) * 1000},
-                                }
-                        except Exception as img_error:
-                            return {
-                                "status": "error",
-                                "error": f"Error processing base64 image: {str(img_error)}",
-                                "timing": {"total": (time.time() - start_time) * 1000},
-                            }
-                    elif isinstance(base_64_image, np.ndarray):
-                        # If already a numpy array, use it directly (assume BGR format)
-                        image = base_64_image
-                    else:
-                        return {
-                            "status": "error",
-                            "error": f"Unsupported image format. Expected base64 string or numpy array, got {type(base_64_image)}",
-                            "timing": {"total": (time.time() - start_time) * 1000},
-                        }
-
-                # --- GPU DEBUG INFO ---
-                try:
-                    import torch
-
-                    cuda_available = torch.cuda.is_available()
-                    print(f"[GPU DEBUG] torch.cuda.is_available(): {cuda_available}")
-                    if cuda_available:
-                        print(
-                            f"[GPU DEBUG] torch.cuda.device_count(): {torch.cuda.device_count()}"
-                        )
-                        print(
-                            f"[GPU DEBUG] torch.cuda.current_device(): {torch.cuda.current_device()}"
-                        )
-                        print(
-                            f"[GPU DEBUG] torch.cuda.get_device_name(0): {torch.cuda.get_device_name(0)}"
-                        )
-                    # import subprocess
-                    # nvidia_smi = subprocess.check_output(["nvidia-smi"]).decode()
-                    # print(f"[GPU DEBUG] nvidia-smi output:\n{nvidia_smi}")
-                except Exception as gpu_debug_exc:
-                    print(f"[GPU DEBUG] Error printing GPU info: {gpu_debug_exc}")
-                # --- END GPU DEBUG INFO ---
-
-                try:
-                    # Step 1: Setup and session management
-                    setup_start = time.time()
-
-                    dest_id = destination_id
-                    target_place = place
-                    target_building = building
-                    target_floor = floor
-                    user_id = session_id
-                    # Get user session
-                    session = self.get_session(user_id)
-
-                    # Use provided parameters or fallback to session values
-                    if not dest_id:
-                        dest_id = session.get("selected_dest_id")
-                    if not target_place:
-                        target_place = session.get("target_place")
-                    if not target_building:
-                        target_building = session.get("target_building")
-                    if not target_floor:
-                        target_floor = session.get("target_floor")
-                    if unit == "feet":
-                        unit = session.get("unit", "feet")
-                    if language == "en":
-                        language = session.get("language", "en")
-
-                    # Check for required navigation context
-                    if not all([dest_id, target_place, target_building, target_floor]):
-                        return {
-                            "status": "error",
-                            "error": "Incomplete navigation context. Please select a destination.",
-                            "missing_fields": {
-                                "dest_id": dest_id is None,
-                                "target_place": target_place is None,
-                                "target_building": target_building is None,
-                                "target_floor": target_floor is None,
-                            },
-                        }
-
-                    # Automatically set/update navigation context in session
-                    self.update_session(
-                        user_id,
-                        {
-                            "selected_dest_id": dest_id,
-                            "target_place": target_place,
-                            "target_building": target_building,
-                            "target_floor": target_floor,
-                            "unit": unit,
-                            "language": language,
-                        },
-                    )
-
-                    # Use provided refinement queue or get from session
-                    if refinement_queue is None:
-                        refinement_queue = session.get("refinement_queue") or {}
-
-                    timing_data["setup"] = (
-                        time.time() - setup_start
-                    ) * 1000  # Convert to ms
-                    print(f"⏱️ Setup: {timing_data['setup']:.2f}ms")
-
-                    # Step 2: Localization (or skip if using provided coordinates)
-                    if should_use_user_provided_coordinate:
-                        # Skip localization - construct mock output from provided coordinates
-                        print("⏭️ Skipping localization - using provided coordinates")
-                        localization_start = time.time()
-                        
-                        # Construct mock localization output
-                        output = self._construct_mock_localization_output(
-                            x=x,
-                            y=y,
-                            angle=angle,
-                            place=target_place,
-                            building=target_building,
-                            floor=target_floor,
-                        )
-                        
-                        timing_data["localization"] = (
-                            time.time() - localization_start
-                        ) * 1000
-                        print(f"⏱️ Mock Localization: {timing_data['localization']:.2f}ms")
-                    else:
-                        # Normal localization process
-                        localization_start = time.time()
-
-                        # Create child span for localization
-                        with self.tracer.start_as_current_span(
-                            "localization_span"
-                        ) as localization_span:
-                            # Ensure GPU components are ready (initializes localizer)
-                            self.ensure_gpu_components_ready()
-
-                            with self.tracer.start_as_current_span(
-                                "load_maps_span"
-                            ) as load_maps_span:
-                                # Ensure maps are loaded for the target location
-                                self.ensure_maps_loaded(
-                                    target_place,
-                                    target_building,
-                                    floor=target_floor,
-                                    enable_multifloor=enable_multifloor,
-                                )
-
-                            # Get the selective localizer for this building (all floors loaded)
-                            map_key = (target_place, target_building)
-                            localizer_to_use = self.selective_localizers.get(map_key)
-                            if not localizer_to_use and target_floor:
-                                floor_key = (target_place, target_building, target_floor)
-                                localizer_to_use = self.selective_localizers.get(
-                                    floor_key, self.localizer
-                                )
-                            else:
-                                localizer_to_use = localizer_to_use or self.localizer
-
-                            # Localizer already patched in ensure_maps_loaded() or initialize_gpu_components()
-                            # No need to patch again here to avoid double-wrapping spans
-
-                            output = localizer_to_use.localize(
-                                image, refinement_queue, top_k=top_k
-                            )
-
-                        timing_data["localization"] = (
-                            time.time() - localization_start
-                        ) * 1000
-                        print(f"⏱️ Localization: {timing_data['localization']:.2f}ms")
-
-                        if output is None or "floorplan_pose" not in output:
-                            print("❌ Localization failed, no pose found.")
-
-                            if is_vlm_extraction_enabled:
-                                # Run VLM to extract text from image as fallback
-                                try:
-                                    print(
-                                        "🔄 Attempting VLM fallback for text extraction..."
-                                    )
-                                    extracted_text = self.run_vlm_on_image(image)
-
-                                    # Log the extracted text for debugging
-                                    print(
-                                        f"📝 VLM extracted text: {extracted_text[:200]}..."
-                                    )
-
-                                    # You can add logic here to process the extracted text
-                                    # For example, search for room numbers, building names, etc.
-                                    # and use that information to provide approximate location or guidance
-
-                                    return {
-                                        "status": "error",
-                                        "error": "Localization failed, but VLM text extraction completed.",
-                                        "extracted_text": extracted_text,
-                                        "timing": timing_data,
-                                        "fallback_info": "Text was extracted from the image but precise localization failed. Please try taking a clearer photo or move to a different location.",
-                                    }
-
-                                except Exception as vlm_error:
-                                    print(f"❌ Error during VLM fallback: {vlm_error}")
-                                    return {
-                                        "status": "error",
-                                        "error": "Localization failed and VLM fallback also failed.",
-                                        "vlm_error": str(vlm_error),
-                                        "timing": timing_data,
-                                    }
-
-                            return {
-                                "status": "error",
-                                "error": "Localization failed, no pose found.",
-                                "error_code": "localization_failed",
-                                "timing": timing_data,
-                            }
-
-                    # Step 3: Process localization results
-                    processing_start = time.time()
-
-                    floorplan_pose = output["floorplan_pose"]
-                    start_xy, start_heading = (
-                        floorplan_pose["xy"],
-                        -floorplan_pose["ang"],
-                    )
-                    source_key = output["best_map_key"]
-                    start_place, start_building, start_floor = source_key
-
-                    # Validate start position
-                    if start_xy is None or len(start_xy) != 2:
-                        return {
-                            "status": "error",
-                            "error": "Invalid start position from localization.",
-                            "timing": timing_data,
-                        }
-
-                    # Check if we're on the right floor for navigation
-                    if (start_place, start_building, start_floor) != (
-                        target_place,
-                        target_building,
-                        target_floor,
-                    ):
-                        # Multi-floor navigation will be handled by the navigator
-                        pass
-
-                    # Update user's current floor context and pose for real-time tracking
-                    self.update_session(
-                        user_id,
-                        {
-                            "current_place": start_place,
-                            "current_building": start_building,
-                            "current_floor": start_floor,
-                            "floorplan_pose": floorplan_pose,
-                            "refinement_queue": output["refinement_queue"],
-                        },
-                    )
-
-                    # Convert dest_id to int if it's a string (common issue)
-                    try:
-                        dest_id_for_path = int(dest_id)
-                    except (ValueError, TypeError):
-                        dest_id_for_path = dest_id
-
-                    timing_data["processing"] = (time.time() - processing_start) * 1000
-                    print(f"⏱️ Processing: {timing_data['processing']:.2f}ms")
-
-                    # Step 4: Path planning
-                    path_planning_start = time.time()
-
-                    # Create child span for path planning
-                    with self.tracer.start_as_current_span(
-                        "path_planning_span"
-                    ) as path_planning_span:
-                        # Plan navigation path to destination
-                        result = self.nav.find_path(
-                            start_place,
-                            start_building,
-                            start_floor,
-                            start_xy,
-                            target_place,
-                            target_building,
-                            target_floor,
-                            dest_id_for_path,
-                        )
-
-                    timing_data["path_planning"] = (
-                        time.time() - path_planning_start
-                    ) * 1000
-                    print(f"⏱️ Path Planning: {timing_data['path_planning']:.2f}ms")
-
-                    if result is None:
-                        return {
-                            "status": "error",
-                            "error": "Path planning failed. Could not find route to destination.",
-                            "timing": timing_data,
-                        }
-
-                    # Check if result contains an error
-                    if isinstance(result, dict) and "error" in result:
-                        return {
-                            "status": "error",
-                            "error": f"Path planning failed: {result['error']}",
-                            "timing": timing_data,
-                        }
-
-                    # Step 5: Command generation
-                    command_generation_start = time.time()
-
-                    # Create child span for command generation
-                    with self.tracer.start_as_current_span(
-                        "command_generation_span"
-                    ) as command_span:
-                        # Generate spoken/navigation commands
-                        cmds = self.commander(
-                            self.nav,
-                            result,
-                            initial_heading=start_heading,
-                            unit=unit,
-                            language=language,
-                        )
-
-                    timing_data["command_generation"] = (
-                        time.time() - command_generation_start
-                    ) * 1000
-                    print(
-                        f"⏱️ Command Generation: {timing_data['command_generation']:.2f}ms"
-                    )
-
-                    # Step 6: Serialization
-                    serialization_start = time.time()
-
-                    serialized_result = self._safe_serialize(result)
-                    serialized_cmds = self._safe_serialize(cmds)
-                    serialized_source_key = self._safe_serialize(source_key)
-                    serialized_floorplan_pose = self._safe_serialize(floorplan_pose)
-
-                    timing_data["serialization"] = (
-                        time.time() - serialization_start
-                    ) * 1000
-                    print(f"⏱️ Serialization: {timing_data['serialization']:.2f}ms")
-
-                    # Calculate total time
-                    timing_data["total"] = (time.time() - start_time) * 1000
-                    print(f"⏱️ Total Navigation Time: {timing_data['total']:.2f}ms")
-
-                    # Log summary
-                    logging.info(
-                        f"Navigation pipeline completed successfully. "
-                        f"Total time: {timing_data['total']:.0f}ms, "
-                        f"Localization: {timing_data['localization']:.0f}ms, "
-                        f"Path planning: {timing_data['path_planning']:.0f}ms"
-                    )
-
-                    # Print summary
-                    print(f"📊 Timing Breakdown:")
-                    print(
-                        f"   Setup: {timing_data['setup']:.1f}ms ({timing_data['setup']/timing_data['total']*100:.1f}%)"
-                    )
-                    print(
-                        f"   Localization: {timing_data['localization']:.1f}ms ({timing_data['localization']/timing_data['total']*100:.1f}%)"
-                    )
-                    print(
-                        f"   Processing: {timing_data['processing']:.1f}ms ({timing_data['processing']/timing_data['total']*100:.1f}%)"
-                    )
-                    print(
-                        f"   Path Planning: {timing_data['path_planning']:.1f}ms ({timing_data['path_planning']/timing_data['total']*100:.1f}%)"
-                    )
-                    print(
-                        f"   Commands: {timing_data['command_generation']:.1f}ms ({timing_data['command_generation']/timing_data['total']*100:.1f}%)"
-                    )
-                    print(
-                        f"   Serialization: {timing_data['serialization']:.1f}ms ({timing_data['serialization']/timing_data['total']*100:.1f}%)"
-                    )
-
-                    # Return all relevant info safely serialized for JSON
-                    result = {
-                        "status": "success",
-                        "result": serialized_result,
-                        "cmds": serialized_cmds,
-                        "best_map_key": serialized_source_key,
-                        "floorplan_pose": serialized_floorplan_pose,
-                        "navigation_info": {
-                            "start_location": f"{start_place}/{start_building}/{start_floor}",
-                            "destination": f"{target_place}/{target_building}/{target_floor}",
-                            "dest_id": dest_id,
-                            "unit": unit,
-                            "language": language,
-                        },
-                        "timing": timing_data,  # Include timing data in response
-                    }
-
-                    return self.convert_navigation_to_trajectory(result)
-
-                except Exception as e:
-                    # Calculate partial timing data
-                    timing_data["total"] = (time.time() - start_time) * 1000
-
-                    # Log current state for debugging
-                    try:
-                        session = self.get_session(user_id)
-                    except:
-                        session = None
-
-                    import traceback
-
-                    traceback.print_exc()
-
-                    return {
-                        "status": "error",
-                        "error": str(e),
-                        "type": type(e).__name__,
-                        "timing": timing_data,
-                    }
-        else:
-            print("📋 [PLANNER] Using NON-TRACED execution path")
-            pass
-
-    @method()
-    def localize_user(
-        self,
-        session_id: str,
-        base_64_image,
-        place: str,
-        building: str,
-        floor: str,
-        top_k: int = None,
-        refinement_queue: dict = None,
-        enable_multifloor: bool = False,
-    ):
-        """
-        Localize user position without navigation planning.
-        Returns the user's current position and floor information.
-        
-        Args:
-            session_id: Unique identifier for the user session
-            base_64_image: Base64 encoded image or numpy array
-            place: Target place name
-            building: Target building name
-            floor: Target floor name
-            top_k: Number of top candidates to retrieve (optional)
-            refinement_queue: Queue for pose refinement (optional)
-            enable_multifloor: Whether to enable multi-floor localization
-            
-        Returns:
-            dict: Contains status, floorplan_pose, best_map_key, and timing information
-        """
-        import time
-        import cv2
-        import base64
-        
-        start_time = time.time()
-        timing_data = {}
-        
-        # Validate and convert image input
-        if base_64_image is None:
-            return {
-                "status": "error",
-                "error": "No image provided. base_64_image parameter is required.",
-                "timing": {"total": (time.time() - start_time) * 1000},
-            }
-        
-        # Convert base64 string to BGR numpy array
-        if isinstance(base_64_image, str):
-            try:
-                base64_string = base_64_image
-                
-                # Remove data URL prefix if present
-                if "," in base64_string:
-                    base64_string = base64_string.split(",")[1]
-                
-                # Add padding if necessary
-                missing_padding = len(base64_string) % 4
-                if missing_padding:
-                    base64_string += "=" * (4 - missing_padding)
-                
-                # Decode and convert to image
-                image_bytes = base64.b64decode(base64_string)
-                image_array = np.frombuffer(image_bytes, dtype=np.uint8)
-                image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
-                
-                if image is None:
-                    return {
-                        "status": "error",
-                        "error": "Failed to decode base64 image. Invalid image format.",
-                        "timing": {"total": (time.time() - start_time) * 1000},
-                    }
-            except Exception as img_error:
-                return {
-                    "status": "error",
-                    "error": f"Error processing base64 image: {str(img_error)}",
-                    "timing": {"total": (time.time() - start_time) * 1000},
-                }
-        elif isinstance(base_64_image, np.ndarray):
-            image = base_64_image
-        else:
-            return {
-                "status": "error",
-                "error": f"Unsupported image format. Expected base64 string or numpy array, got {type(base_64_image)}",
-                "timing": {"total": (time.time() - start_time) * 1000},
-            }
-        
-        try:
-            # Setup and session management
-            setup_start = time.time()
-            
-            session = self.get_session(session_id)
-            
-            # Use provided refinement queue or get from session
-            if refinement_queue is None:
-                refinement_queue = session.get("refinement_queue") or {}
-            
-            timing_data["setup"] = (time.time() - setup_start) * 1000
-            
-            # Localization
-            localization_start = time.time()
-            
-            # Ensure GPU components ready
-            self.ensure_gpu_components_ready()
-            
-            # Ensure maps are loaded
-            self.ensure_maps_loaded(
-                place, building, floor=floor,
-                enable_multifloor=enable_multifloor
-            )
-            
-            # Get the selective localizer
-            map_key = (place, building)
-            localizer_to_use = self.selective_localizers.get(map_key)
-            if not localizer_to_use and floor:
-                floor_key = (place, building, floor)
-                localizer_to_use = self.selective_localizers.get(floor_key, self.localizer)
-            else:
-                localizer_to_use = localizer_to_use or self.localizer
-            
-            # Perform localization
-            output = localizer_to_use.localize(image, refinement_queue, top_k=top_k)
-            
-            timing_data["localization"] = (time.time() - localization_start) * 1000
-            
-            # Check if localization succeeded
-            if output is None or "floorplan_pose" not in output:
-                return {
-                    "status": "error",
-                    "error": "Localization failed, no pose found.",
-                    "error_code": "localization_failed",
-                    "timing": timing_data,
-                }
-            
-            # Process localization results
-            processing_start = time.time()
-            
-            floorplan_pose = output["floorplan_pose"]
-            source_key = output["best_map_key"]
-            localized_place, localized_building, localized_floor = source_key
-            
-            # Update user's current floor context and pose
-            self.update_session(
-                session_id,
-                {
-                    "current_place": localized_place,
-                    "current_building": localized_building,
-                    "current_floor": localized_floor,
-                    "floorplan_pose": floorplan_pose,
-                    "refinement_queue": output["refinement_queue"],
-                },
-            )
-            
-            timing_data["processing"] = (time.time() - processing_start) * 1000
-            
-            # Serialization
-            serialization_start = time.time()
-            
-            serialized_source_key = self._safe_serialize(source_key)
-            serialized_floorplan_pose = self._safe_serialize(floorplan_pose)
-            
-            timing_data["serialization"] = (time.time() - serialization_start) * 1000
-            
-            # Calculate total time
-            timing_data["total"] = (time.time() - start_time) * 1000
-            
-            # Return localization results
-            return {
-                "status": "success",
-                "floorplan_pose": serialized_floorplan_pose,
-                "best_map_key": serialized_source_key,
-                "location_info": {
-                    "place": localized_place,
-                    "building": localized_building,
-                    "floor": localized_floor,
-                    "position": serialized_floorplan_pose.get("xy"),
-                    "heading": serialized_floorplan_pose.get("ang"),
-                },
-                "timing": timing_data,
-            }
-            
-        except Exception as e:
-            timing_data["total"] = (time.time() - start_time) * 1000
-            
-            import traceback
-            traceback.print_exc()
-            
-            return {
-                "status": "error",
-                "error": str(e),
-                "type": type(e).__name__,
-                "timing": timing_data,
-            }
