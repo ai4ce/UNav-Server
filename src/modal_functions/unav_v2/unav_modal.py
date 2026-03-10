@@ -11,6 +11,32 @@ from .modal_config import app, unav_image, volume, gemini_secret, middleware_sec
 from .destinations_service import get_destinations_list_impl
 
 
+def _get_queue_key_for_image_shape(image_shape):
+    """Get a queue key based on image shape for bucket-based refinement queue handling."""
+    if image_shape is None:
+        return "default"
+    h, w = image_shape[:2]
+    return f"{h}x{w}"
+
+
+def _get_refinement_queue_for_map(queue_dict, map_key, queue_key):
+    """Get the refinement queue for a specific map_key and queue_key (image shape bucket)."""
+    if map_key not in queue_dict:
+        return {"pairs": [], "initial_poses": [], "pps": []}
+    map_queues = queue_dict[map_key]
+    if queue_key not in map_queues:
+        return {"pairs": [], "initial_poses": [], "pps": []}
+    return map_queues[queue_key]
+
+
+def _update_refinement_queue(queue_dict, map_key, queue_key, new_queue_state):
+    """Update the refinement queue for a specific map_key and queue_key."""
+    if map_key not in queue_dict:
+        queue_dict[map_key] = {}
+    queue_dict[map_key][queue_key] = new_queue_state
+    return queue_dict
+
+
 @app.cls(
     image=unav_image,
     volumes={"/root/UNav-IO": volume},
@@ -1168,7 +1194,7 @@ class UnavServer:
         language: str = "en",
         refinement_queue: dict = None,
         is_vlm_extraction_enabled: bool = False,
-        enable_multifloor: bool = False,
+        enable_multifloor: bool = True,
         should_use_user_provided_coordinate: bool = False,
         x: float = None,
         y: float = None,
@@ -1433,9 +1459,63 @@ class UnavServer:
                             # Localizer already patched in ensure_maps_loaded() or initialize_gpu_components()
                             # No need to patch again here to avoid double-wrapping spans
 
-                            output = localizer_to_use.localize(
-                                image, refinement_queue, top_k=top_k
-                            )
+                            queue_key = _get_queue_key_for_image_shape(image.shape)
+                            is_cold_start = len(refinement_queue) == 0
+
+                            if is_cold_start:
+                                print(f"🔄 Cold-start detected, running stabilization passes...")
+                                bootstrap_outputs = []
+                                empty_queue = refinement_queue.copy()
+
+                                for bootstrap_pass in range(2):
+                                    bootstrap_output = localizer_to_use.localize(
+                                        image, empty_queue, top_k=top_k
+                                    )
+                                    if bootstrap_output and bootstrap_output.get("success"):
+                                        bootstrap_outputs.append(bootstrap_output)
+                                        best_map_key = bootstrap_output.get("best_map_key")
+                                        new_queue = bootstrap_output.get("refinement_queue", {})
+                                        if best_map_key and new_queue:
+                                            empty_queue = _update_refinement_queue(
+                                                empty_queue, best_map_key, queue_key,
+                                                new_queue.get(best_map_key, {}).get(queue_key, {"pairs": [], "initial_poses": [], "pps": []})
+                                            )
+
+                                if len(bootstrap_outputs) >= 2:
+                                    xy_sum = [0.0, 0.0]
+                                    ang_sum = 0.0
+                                    for bo in bootstrap_outputs:
+                                        fp = bo.get("floorplan_pose", {})
+                                        xy = fp.get("xy", [0, 0])
+                                        xy_sum[0] += xy[0]
+                                        xy_sum[1] += xy[1]
+                                        ang_sum += fp.get("ang", 0)
+                                    avg_xy = [xy_sum[0] / len(bootstrap_outputs), xy_sum[1] / len(bootstrap_outputs)]
+                                    avg_ang = ang_sum / len(bootstrap_outputs)
+                                    output = bootstrap_outputs[-1].copy()
+                                    output["floorplan_pose"] = {
+                                        "xy": avg_xy,
+                                        "ang": avg_ang
+                                    }
+                                    output["bootstrap_mode"] = "mean_pass2_pass3"
+                                    output["bootstrap_passes"] = len(bootstrap_outputs)
+                                    print(f"✅ Cold-start stabilization: averaged {len(bootstrap_outputs)} passes")
+                                elif bootstrap_outputs:
+                                    output = bootstrap_outputs[-1]
+                                    output["bootstrap_mode"] = "single_pass"
+                                else:
+                                    output = localizer_to_use.localize(
+                                        image, refinement_queue, top_k=top_k
+                                    )
+                                    output["bootstrap_mode"] = "none"
+                            else:
+                                output = localizer_to_use.localize(
+                                    image, refinement_queue, top_k=top_k
+                                )
+                                output["bootstrap_mode"] = "none"
+
+                            output["map_scope"] = "building_level_multifloor" if enable_multifloor else "floor_locked"
+                            output["queue_key"] = queue_key
 
                         timing_data["localization"] = (
                             time.time() - localization_start
@@ -1657,7 +1737,15 @@ class UnavServer:
                             "unit": unit,
                             "language": language,
                         },
-                        "timing": timing_data,  # Include timing data in response
+                        "timing": timing_data,
+                        "debug_info": {
+                            "map_scope": output.get("map_scope", "unknown"),
+                            "bootstrap_mode": output.get("bootstrap_mode", "none"),
+                            "bootstrap_passes": output.get("bootstrap_passes"),
+                            "queue_key": output.get("queue_key", "unknown"),
+                            "n_frames": output.get("n_frames"),
+                            "top_candidates_count": len(output.get("top_candidates", [])),
+                        },
                     }
 
                     return self.convert_navigation_to_trajectory(result)
@@ -1696,7 +1784,7 @@ class UnavServer:
         floor: str,
         top_k: int = None,
         refinement_queue: dict = None,
-        enable_multifloor: bool = False,
+        enable_multifloor: bool = True,
     ):
         """
         Localize user position without navigation planning.
@@ -1803,8 +1891,61 @@ class UnavServer:
             else:
                 localizer_to_use = localizer_to_use or self.localizer
             
-            # Perform localization
-            output = localizer_to_use.localize(image, refinement_queue, top_k=top_k)
+            queue_key = _get_queue_key_for_image_shape(image.shape)
+            is_cold_start = len(refinement_queue) == 0
+
+            if is_cold_start:
+                print(f"🔄 Cold-start detected, running stabilization passes...")
+                bootstrap_outputs = []
+                empty_queue = refinement_queue.copy()
+
+                for bootstrap_pass in range(2):
+                    bootstrap_output = localizer_to_use.localize(
+                        image, empty_queue, top_k=top_k
+                    )
+                    if bootstrap_output and bootstrap_output.get("success"):
+                        bootstrap_outputs.append(bootstrap_output)
+                        best_map_key = bootstrap_output.get("best_map_key")
+                        new_queue = bootstrap_output.get("refinement_queue", {})
+                        if best_map_key and new_queue:
+                            empty_queue = _update_refinement_queue(
+                                empty_queue, best_map_key, queue_key,
+                                new_queue.get(best_map_key, {}).get(queue_key, {"pairs": [], "initial_poses": [], "pps": []})
+                            )
+
+                if len(bootstrap_outputs) >= 2:
+                    xy_sum = [0.0, 0.0]
+                    ang_sum = 0.0
+                    for bo in bootstrap_outputs:
+                        fp = bo.get("floorplan_pose", {})
+                        xy = fp.get("xy", [0, 0])
+                        xy_sum[0] += xy[0]
+                        xy_sum[1] += xy[1]
+                        ang_sum += fp.get("ang", 0)
+                    avg_xy = [xy_sum[0] / len(bootstrap_outputs), xy_sum[1] / len(bootstrap_outputs)]
+                    avg_ang = ang_sum / len(bootstrap_outputs)
+                    output = bootstrap_outputs[-1].copy()
+                    output["floorplan_pose"] = {
+                        "xy": avg_xy,
+                        "ang": avg_ang
+                    }
+                    output["bootstrap_mode"] = "mean_pass2_pass3"
+                    output["bootstrap_passes"] = len(bootstrap_outputs)
+                    print(f"✅ Cold-start stabilization: averaged {len(bootstrap_outputs)} passes")
+                elif bootstrap_outputs:
+                    output = bootstrap_outputs[-1]
+                    output["bootstrap_mode"] = "single_pass"
+                else:
+                    output = localizer_to_use.localize(
+                        image, refinement_queue, top_k=top_k
+                    )
+                    output["bootstrap_mode"] = "none"
+            else:
+                output = localizer_to_use.localize(image, refinement_queue, top_k=top_k)
+                output["bootstrap_mode"] = "none"
+
+            output["map_scope"] = "building_level_multifloor" if enable_multifloor else "floor_locked"
+            output["queue_key"] = queue_key
             
             timing_data["localization"] = (time.time() - localization_start) * 1000
             
@@ -1862,6 +2003,14 @@ class UnavServer:
                     "heading": serialized_floorplan_pose.get("ang"),
                 },
                 "timing": timing_data,
+                "debug_info": {
+                    "map_scope": output.get("map_scope", "unknown"),
+                    "bootstrap_mode": output.get("bootstrap_mode", "none"),
+                    "bootstrap_passes": output.get("bootstrap_passes"),
+                    "queue_key": output.get("queue_key", "unknown"),
+                    "n_frames": output.get("n_frames"),
+                    "top_candidates_count": len(output.get("top_candidates", [])),
+                },
             }
             
         except Exception as e:
