@@ -1474,6 +1474,10 @@ class UnavServer:
                                     if bootstrap_output and bootstrap_output.get("success"):
                                         bootstrap_outputs.append(bootstrap_output)
                                         best_map_key = bootstrap_output.get("best_map_key")
+                                        fp = bootstrap_output.get("floorplan_pose", {})
+                                        xy = fp.get("xy", [0, 0])
+                                        ang = fp.get("ang", 0)
+                                        print(f"  📍 Pass {bootstrap_pass + 1}: xy={xy}, ang={ang:.2f}°, map={best_map_key}")
                                         new_queue = bootstrap_output.get("refinement_queue", {})
                                         if best_map_key and new_queue:
                                             empty_queue = _update_refinement_queue(
@@ -1492,6 +1496,7 @@ class UnavServer:
                                         ang_sum += fp.get("ang", 0)
                                     avg_xy = [xy_sum[0] / len(bootstrap_outputs), xy_sum[1] / len(bootstrap_outputs)]
                                     avg_ang = ang_sum / len(bootstrap_outputs)
+                                    print(f"  ➡️  Averaged {len(bootstrap_outputs)} passes: xy={avg_xy}, ang={avg_ang:.2f}°")
                                     output = bootstrap_outputs[-1].copy()
                                     output["floorplan_pose"] = {
                                         "xy": avg_xy,
@@ -1499,15 +1504,17 @@ class UnavServer:
                                     }
                                     output["bootstrap_mode"] = "mean_all_passes"
                                     output["bootstrap_passes"] = len(bootstrap_outputs)
-                                    print(f"✅ Cold-start stabilization: averaged {len(bootstrap_outputs)} passes")
+                                    print(f"✅ Cold-start stabilization complete")
                                 elif bootstrap_outputs:
                                     output = bootstrap_outputs[-1]
                                     output["bootstrap_mode"] = "single_pass"
+                                    print(f"⚠️ Only 1 pass succeeded, using single pass result")
                                 else:
                                     output = localizer_to_use.localize(
                                         image, refinement_queue, top_k=top_k
                                     )
                                     output["bootstrap_mode"] = "none"
+                                    print(f"❌ All stabilization passes failed, using fallback")
                             else:
                                 output = localizer_to_use.localize(
                                     image, refinement_queue, top_k=top_k
@@ -1906,6 +1913,10 @@ class UnavServer:
                     if bootstrap_output and bootstrap_output.get("success"):
                         bootstrap_outputs.append(bootstrap_output)
                         best_map_key = bootstrap_output.get("best_map_key")
+                        fp = bootstrap_output.get("floorplan_pose", {})
+                        xy = fp.get("xy", [0, 0])
+                        ang = fp.get("ang", 0)
+                        print(f"  📍 Pass {bootstrap_pass + 1}: xy={xy}, ang={ang:.2f}°, map={best_map_key}")
                         new_queue = bootstrap_output.get("refinement_queue", {})
                         if best_map_key and new_queue:
                             empty_queue = _update_refinement_queue(
@@ -1924,6 +1935,7 @@ class UnavServer:
                         ang_sum += fp.get("ang", 0)
                     avg_xy = [xy_sum[0] / len(bootstrap_outputs), xy_sum[1] / len(bootstrap_outputs)]
                     avg_ang = ang_sum / len(bootstrap_outputs)
+                    print(f"  ➡️  Averaged {len(bootstrap_outputs)} passes: xy={avg_xy}, ang={avg_ang:.2f}°")
                     output = bootstrap_outputs[-1].copy()
                     output["floorplan_pose"] = {
                         "xy": avg_xy,
@@ -1931,15 +1943,17 @@ class UnavServer:
                     }
                     output["bootstrap_mode"] = "mean_all_passes"
                     output["bootstrap_passes"] = len(bootstrap_outputs)
-                    print(f"✅ Cold-start stabilization: averaged {len(bootstrap_outputs)} passes")
+                    print(f"✅ Cold-start stabilization complete")
                 elif bootstrap_outputs:
                     output = bootstrap_outputs[-1]
                     output["bootstrap_mode"] = "single_pass"
+                    print(f"⚠️ Only 1 pass succeeded, using single pass result")
                 else:
                     output = localizer_to_use.localize(
                         image, refinement_queue, top_k=top_k
                     )
                     output["bootstrap_mode"] = "none"
+                    print(f"❌ All stabilization passes failed, using fallback")
             else:
                 output = localizer_to_use.localize(image, refinement_queue, top_k=top_k)
                 output["bootstrap_mode"] = "none"
