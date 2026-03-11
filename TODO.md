@@ -107,6 +107,11 @@ def _update_refinement_queue(queue_dict, map_key, queue_key, new_queue_state):
 1. **Enable memory snapshots**: Could persist queue across cold-starts (but adds ~5-10s restore time)
 2. **Client-side queue**: Pass queue with each request
 3. **External storage**: Redis for queue persistence
+4. **top_k optimization**: Experiment with different top_k values:
+   - Default (None) uses config value (~10-20)
+   - Lower top_k = faster but fewer candidates
+   - Higher top_k = slower but more candidates to match against
+   - Consider making it dynamic based on image quality
 
 ---
 
