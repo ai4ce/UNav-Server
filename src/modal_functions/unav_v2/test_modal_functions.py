@@ -24,13 +24,13 @@ def main():
             image_data = image_file.read()
             base64_encoded = base64.b64encode(image_data).decode("utf-8")
 
-        print("Testing get_destinations_list...")
-        result = unav_server.get_destinations_list.remote(
-            floor=FLOOR,
-            place=PLACE,
-            building=BUILDING,
-        )
-        print("Result:", result)
+        # print("Testing get_destinations_list...")
+        # result = unav_server.get_destinations_list.remote(
+        #     floor=FLOOR,
+        #     place=PLACE,
+        #     building=BUILDING,
+        # )
+        # print("Result:", result)
 
         print("\n" + "="*50)
         print("Testing localize_user...")
@@ -44,39 +44,39 @@ def main():
         )
         print("Localization Result:", localize_result)
 
-        print("\n" + "="*50)
-        print("Testing planner (full navigation)...")
-        print("="*50)
-        planner_result = unav_server.planner.remote(
-            destination_id=DESTINATION_ID,
-            base_64_image=base64_encoded,
-            session_id=SESSION_ID,
-            building=BUILDING,
-            floor=FLOOR,
-            place=PLACE,
-        )
-        print("Planner Result:", planner_result)
+        # print("\n" + "="*50)
+        # print("Testing planner (full navigation)...")
+        # print("="*50)
+        # planner_result = unav_server.planner.remote(
+        #     destination_id=DESTINATION_ID,
+        #     base_64_image=base64_encoded,
+        #     session_id=SESSION_ID,
+        #     building=BUILDING,
+        #     floor=FLOOR,
+        #     place=PLACE,
+        # )
+        # print("Planner Result:", planner_result)
 
-        print("\n" + "="*50)
-        print("Testing planner with user-provided coordinates (skip localization)...")
-        print("="*50)
-        # Test planner with user-provided coordinates
-        # These coordinates match the localization result from the previous test
-        planner_with_coords_result = unav_server.planner.remote(
-            session_id=SESSION_ID + "_coords",
-            base_64_image=None,  # Optional when using provided coordinates
-            destination_id=DESTINATION_ID,
-            place=PLACE,
-            building=BUILDING,
-            floor=FLOOR,
-            should_use_user_provided_coordinate=True,
-            x=2022.320618102614,
-            y=439.39776200033907,
-            angle=298.4154661831644,
-            unit="meter",
-            language="en"
-        )
-        print("Planner with Coordinates Result:", planner_with_coords_result)
+        # print("\n" + "="*50)
+        # print("Testing planner with user-provided coordinates (skip localization)...")
+        # print("="*50)
+        # # Test planner with user-provided coordinates
+        # # These coordinates match the localization result from the previous test
+        # planner_with_coords_result = unav_server.planner.remote(
+        #     session_id=SESSION_ID + "_coords",
+        #     base_64_image=None,  # Optional when using provided coordinates
+        #     destination_id=DESTINATION_ID,
+        #     place=PLACE,
+        #     building=BUILDING,
+        #     floor=FLOOR,
+        #     should_use_user_provided_coordinate=True,
+        #     x=2022.320618102614,
+        #     y=439.39776200033907,
+        #     angle=298.4154661831644,
+        #     unit="meter",
+        #     language="en"
+        # )
+        # print("Planner with Coordinates Result:", planner_with_coords_result)
 
  
     except Exception as e:
