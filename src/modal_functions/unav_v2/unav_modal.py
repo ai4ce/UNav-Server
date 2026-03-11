@@ -1233,6 +1233,11 @@ class UnavServer:
         print(
             f"📋 [PLANNER] Called with session_id={session_id}, call_id={call_id}, has_tracer={has_tracer}, tracer_type={type(getattr(self, 'tracer', None)).__name__}"
         )
+        print(
+            f"📋 [PLANNER] Params: place={place}, building={building}, floor={floor}, "
+            f"enable_multifloor={enable_multifloor}, top_k={top_k}, is_vlm_extraction_enabled={is_vlm_extraction_enabled}, "
+            f"should_use_user_provided_coordinate={should_use_user_provided_coordinate}"
+        )
 
         # Create parent span for the entire planner operation if tracer is available
         if has_tracer:
@@ -1813,6 +1818,12 @@ class UnavServer:
         import time
         import cv2
         import base64
+        
+        print(
+            f"📋 [LOCALIZE_USER] Called with session_id={session_id}, "
+            f"place={place}, building={building}, floor={floor}, "
+            f"enable_multifloor={enable_multifloor}, top_k={top_k}"
+        )
         
         start_time = time.time()
         timing_data = {}
