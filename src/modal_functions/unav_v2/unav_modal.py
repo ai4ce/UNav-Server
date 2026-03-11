@@ -1467,7 +1467,7 @@ class UnavServer:
                                 bootstrap_outputs = []
                                 empty_queue = refinement_queue.copy()
 
-                                for bootstrap_pass in range(2):
+                                for bootstrap_pass in range(3):
                                     bootstrap_output = localizer_to_use.localize(
                                         image, empty_queue, top_k=top_k
                                     )
@@ -1497,7 +1497,7 @@ class UnavServer:
                                         "xy": avg_xy,
                                         "ang": avg_ang
                                     }
-                                    output["bootstrap_mode"] = "mean_pass2_pass3"
+                                    output["bootstrap_mode"] = "mean_all_passes"
                                     output["bootstrap_passes"] = len(bootstrap_outputs)
                                     print(f"✅ Cold-start stabilization: averaged {len(bootstrap_outputs)} passes")
                                 elif bootstrap_outputs:
@@ -1899,7 +1899,7 @@ class UnavServer:
                 bootstrap_outputs = []
                 empty_queue = refinement_queue.copy()
 
-                for bootstrap_pass in range(2):
+                for bootstrap_pass in range(3):
                     bootstrap_output = localizer_to_use.localize(
                         image, empty_queue, top_k=top_k
                     )
@@ -1929,7 +1929,7 @@ class UnavServer:
                         "xy": avg_xy,
                         "ang": avg_ang
                     }
-                    output["bootstrap_mode"] = "mean_pass2_pass3"
+                    output["bootstrap_mode"] = "mean_all_passes"
                     output["bootstrap_passes"] = len(bootstrap_outputs)
                     print(f"✅ Cold-start stabilization: averaged {len(bootstrap_outputs)} passes")
                 elif bootstrap_outputs:
