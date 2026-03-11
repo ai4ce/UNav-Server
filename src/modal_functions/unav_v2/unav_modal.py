@@ -1472,7 +1472,7 @@ class UnavServer:
                                 bootstrap_outputs = []
                                 empty_queue = refinement_queue.copy()
 
-                                for bootstrap_pass in range(3):
+                                for bootstrap_pass in range(2):
                                     bootstrap_output = localizer_to_use.localize(
                                         image, empty_queue, top_k=top_k
                                     )
@@ -1917,7 +1917,7 @@ class UnavServer:
                 bootstrap_outputs = []
                 empty_queue = refinement_queue.copy()
 
-                for bootstrap_pass in range(3):
+                for bootstrap_pass in range(2):
                     bootstrap_output = localizer_to_use.localize(
                         image, empty_queue, top_k=top_k
                     )
