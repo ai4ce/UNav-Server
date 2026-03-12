@@ -1189,7 +1189,7 @@ class UnavServer:
         place: str,
         building: str,
         floor: str,
-        top_k: int = 50,
+        top_k: int = None,
         unit: str = "meter",
         language: str = "en",
         refinement_queue: dict = None,
