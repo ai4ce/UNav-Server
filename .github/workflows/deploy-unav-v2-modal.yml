@@ -17,6 +17,7 @@ on:
           - t4
           - any
           - a100
+          - h200
       ram_mb:
         description: "RAM reservation in MiB (max in this workflow: 98304)"
         required: true

@@ -27,6 +27,7 @@ def get_gpu_config() -> List[str]:
         "a10": "A10",
         "a10g": "A10",
         "a100": "A100",
+        "h200": "H200",
         "any": "any",
     }
 
