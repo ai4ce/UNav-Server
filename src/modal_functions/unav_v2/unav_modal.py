@@ -158,6 +158,7 @@ class UnavServer:
         x: float = None,
         y: float = None,
         angle: float = None,
+        turn_mode: str = "default",
     ):
         """Full localization and navigation pipeline."""
         return run_planner(
@@ -178,6 +179,7 @@ class UnavServer:
             x=x,
             y=y,
             angle=angle,
+            turn_mode=turn_mode,
         )
 
     @method()

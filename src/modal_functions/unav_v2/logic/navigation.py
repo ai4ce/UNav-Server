@@ -32,6 +32,7 @@ def run_planner(
     x: float = None,
     y: float = None,
     angle: float = None,
+    turn_mode: str = "default",
 ) -> Dict[str, Any]:
     """Full localization and navigation pipeline logic."""
     import time
@@ -126,7 +127,15 @@ def run_planner(
                 self.update_session(user_id, {"selected_dest_id": dest_id, "target_place": target_place, "target_building": target_building, "target_floor": target_floor, "unit": unit, "language": language})
 
                 if refinement_queue is None:
-                    refinement_queue = session.get("refinement_queue") or {}
+                    session_refinement_queue = session.get("refinement_queue") or {}
+                    if image is not None and hasattr(image, 'shape'):
+                        queue_key = image.shape[:2]
+                        if queue_key in session_refinement_queue:
+                            refinement_queue = session_refinement_queue[queue_key]
+                        else:
+                            refinement_queue = {}
+                    else:
+                        refinement_queue = {}
 
                 timing_data["setup"] = (time.time() - setup_start) * 1000
                 print(f"⏱️ Setup: {timing_data['setup']:.2f}ms")
@@ -225,7 +234,13 @@ def run_planner(
                 source_key = output["best_map_key"]
                 start_place, start_building, start_floor = source_key
 
-                self.update_session(user_id, {"current_place": start_place, "current_building": start_building, "current_floor": start_floor, "floorplan_pose": floorplan_pose, "refinement_queue": output.get("refinement_queue", {})})
+                if image is not None and hasattr(image, 'shape'):
+                    queue_key = image.shape[:2]
+                    current_session_queue = session.get("refinement_queue") or {}
+                    current_session_queue[queue_key] = output.get("refinement_queue", {})
+                else:
+                    current_session_queue = {}
+                self.update_session(user_id, {"current_place": start_place, "current_building": start_building, "current_floor": start_floor, "floorplan_pose": floorplan_pose, "refinement_queue": current_session_queue})
 
                 try:
                     dest_id_for_path = int(dest_id)
@@ -247,7 +262,14 @@ def run_planner(
 
                 command_generation_start = time.time()
                 with self.tracer.start_as_current_span("command_generation_span"):
-                    cmds = self.commander(self.nav, result, initial_heading=start_heading, unit=unit, language=language)
+                    cmds = self.commander(
+                        self.nav,
+                        result,
+                        initial_heading=start_heading,
+                        unit=unit,
+                        language=language,
+                        turn_mode=turn_mode,
+                    )
 
                 timing_data["command_generation"] = (time.time() - command_generation_start) * 1000
 
@@ -358,7 +380,12 @@ def run_localize_user(
 
                 if refinement_queue is None:
                     session = self.get_session(session_id)
-                    refinement_queue = session.get("refinement_queue") or {}
+                    session_refinement_queue = session.get("refinement_queue") or {}
+                    queue_key_tuple = image.shape[:2]
+                    if queue_key_tuple in session_refinement_queue:
+                        refinement_queue = session_refinement_queue[queue_key_tuple]
+                    else:
+                        refinement_queue = {}
 
                 is_cold_start = len(refinement_queue) == 0
                 print(f"🔍 Cold start: {is_cold_start}, refinement_queue size: {len(refinement_queue)}")
@@ -427,7 +454,10 @@ def run_localize_user(
         floorplan_pose = output["floorplan_pose"]
         best_map_key = output["best_map_key"]
 
-        self.update_session(session_id, {"current_place": best_map_key[0], "current_building": best_map_key[1], "current_floor": best_map_key[2], "floorplan_pose": floorplan_pose, "refinement_queue": output.get("refinement_queue", {})})
+        queue_key_tuple = image.shape[:2]
+        current_session_queue = session.get("refinement_queue") or {}
+        current_session_queue[queue_key_tuple] = output.get("refinement_queue", {})
+        self.update_session(session_id, {"current_place": best_map_key[0], "current_building": best_map_key[1], "current_floor": best_map_key[2], "floorplan_pose": floorplan_pose, "refinement_queue": current_session_queue})
 
         timing_data = {"total": (time.time() - start_time) * 1000}
         print(f"⏱️ Localization total: {timing_data['total']:.2f}ms")
