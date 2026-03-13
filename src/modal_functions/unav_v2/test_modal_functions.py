@@ -13,7 +13,7 @@ def main():
     FLOOR = "17_floor"
     DESTINATION_ID = "2"
     SESSION_ID = "test_session_id_2"
-    IMAGE_PATH = "media/vinay_sample.jpeg"
+    IMAGE_PATH = "media/image.png"
 
     try:
         UnavServer = modal.Cls.lookup("unav-server-v21", "UnavServer")

@@ -206,11 +206,13 @@ def run_planner(
                 print(f"📍 Localization result: floorplan_pose={output.get('floorplan_pose')}, map_key={output.get('best_map_key')}, map_scope={output.get('map_scope')}")
 
                 if output is None or "floorplan_pose" not in output:
+                    print("❌ Localization failed, no pose found.")
                     if is_vlm_extraction_enabled:
                         try:
                             extracted_text = run_vlm_on_image(server=self, image=image)
                             return {"status": "error", "error": "Localization failed", "extracted_text": extracted_text, "timing": timing_data}
                         except Exception as vlm_error:
+                            print(f"❌ Error during VLM fallback: {vlm_error}")
                             return {"status": "error", "error": "VLM failed", "vlm_error": str(vlm_error), "timing": timing_data}
                     return {"status": "error", "error": "Localization failed", "timing": timing_data}
 
@@ -228,12 +230,14 @@ def run_planner(
                     dest_id_for_path = dest_id
 
                 timing_data["processing"] = (time.time() - processing_start) * 1000
+                print(f"⏱️ Processing: {timing_data['processing']:.2f}ms")
 
                 path_planning_start = time.time()
                 with self.tracer.start_as_current_span("path_planning_span"):
                     result = self.nav.find_path(start_place, start_building, start_floor, start_xy, target_place, target_building, target_floor, dest_id_for_path)
 
                 timing_data["path_planning"] = (time.time() - path_planning_start) * 1000
+                print(f"⏱️ Path Planning: {timing_data['path_planning']:.2f}ms")
 
                 if result is None or (isinstance(result, dict) and "error" in result):
                     return {"status": "error", "error": "Path planning failed", "timing": timing_data}
@@ -250,8 +254,10 @@ def run_planner(
                 serialized_source_key = run_safe_serialize(source_key)
                 serialized_floorplan_pose = run_safe_serialize(floorplan_pose)
                 timing_data["serialization"] = (time.time() - serialization_start) * 1000
+                print(f"⏱️ Serialization: {timing_data['serialization']:.2f}ms")
 
                 timing_data["total"] = (time.time() - start_time) * 1000
+                print(f"⏱️ Total Navigation Time: {timing_data['total']:.2f}ms")
 
                 result = {
                     "status": "success",
@@ -268,6 +274,7 @@ def run_planner(
 
             except Exception as e:
                 timing_data["total"] = (time.time() - start_time) * 1000
+                print(f"❌ Error in planner: {str(e)}")
                 import traceback
                 traceback.print_exc()
                 return {"status": "error", "error": str(e), "type": type(e).__name__, "timing": timing_data}
