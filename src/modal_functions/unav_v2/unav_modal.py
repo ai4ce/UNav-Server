@@ -31,6 +31,7 @@ from .logic import (
     run_convert_navigation_to_trajectory,
     run_set_navigation_context,
     run_vlm_on_image,
+    run_safe_serialize,
 )
 
 
@@ -535,25 +536,7 @@ class UnavServer:
             }
 
     def _safe_serialize(self, obj):
-        """Helper method to safely serialize objects for JSON response"""
-        import json
-        import numpy as np
-
-        def convert_obj(o):
-            if isinstance(o, np.ndarray):
-                return o.tolist()
-            elif isinstance(o, np.integer):
-                return int(o)
-            elif isinstance(o, np.floating):
-                return float(o)
-            elif isinstance(o, dict):
-                return {k: convert_obj(v) for k, v in o.items()}
-            elif isinstance(o, (list, tuple)):
-                return [convert_obj(item) for item in o]
-            else:
-                return o
-
-        return convert_obj(obj)
+        return run_safe_serialize(obj)
 
 
     @method()

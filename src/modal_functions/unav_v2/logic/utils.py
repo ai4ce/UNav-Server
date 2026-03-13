@@ -1,6 +1,27 @@
 from typing import Any, Dict
 
 
+def run_safe_serialize(obj: Any) -> Any:
+    """Helper function to safely serialize objects for JSON response"""
+    import numpy as np
+
+    def convert_obj(o):
+        if isinstance(o, np.ndarray):
+            return o.tolist()
+        elif isinstance(o, np.integer):
+            return int(o)
+        elif isinstance(o, np.floating):
+            return float(o)
+        elif isinstance(o, dict):
+            return {k: convert_obj(v) for k, v in o.items()}
+        elif isinstance(o, (list, tuple)):
+            return [convert_obj(item) for item in o]
+        else:
+            return o
+
+    return convert_obj(obj)
+
+
 def run_construct_mock_localization_output(
     x: float,
     y: float,

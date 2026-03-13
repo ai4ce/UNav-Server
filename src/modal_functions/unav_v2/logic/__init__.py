@@ -14,6 +14,7 @@ from .utils import (
     run_construct_mock_localization_output,
     run_convert_navigation_to_trajectory,
     run_set_navigation_context,
+    run_safe_serialize,
 )
 from .vlm import run_vlm_on_image
 
@@ -33,5 +34,6 @@ __all__ = [
     "run_construct_mock_localization_output",
     "run_convert_navigation_to_trajectory",
     "run_set_navigation_context",
+    "run_safe_serialize",
     "run_vlm_on_image",
 ]
