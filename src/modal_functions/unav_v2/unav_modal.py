@@ -26,6 +26,11 @@ from .logic import (
     run_monkey_patch_matching_and_ransac,
     run_get_places,
     run_get_fallback_places,
+    run_ensure_maps_loaded,
+    run_construct_mock_localization_output,
+    run_convert_navigation_to_trajectory,
+    run_set_navigation_context,
+    run_vlm_on_image,
 )
 
 
@@ -110,90 +115,13 @@ class UnavServer:
         floor: str = None,
         enable_multifloor: bool = False,
     ):
-        """
-        Ensure that maps for a specific place/building are loaded.
-        When building is specified, loads all floors for that building.
-        Creates selective localizer instances for true lazy loading.
-        """
-        if building:
-            if enable_multifloor or not floor:
-                map_key = (place, building)
-            else:
-                map_key = (place, building, floor)
-        else:
-            map_key = place
-
-        if map_key in self.maps_loaded:
-            return  # Already loaded
-
-        print(f"🔄 [Phase 4] Creating selective localizer for: {map_key}")
-
-        # Create selective places config with only the requested location
-        if building:
-            selective_places = self.get_places(
-                target_place=place,
-                target_building=building,
-                target_floor=floor,
-                enable_multifloor=enable_multifloor,
-            )
-        else:
-            selective_places = self.get_places(target_place=place)
-
-        if not selective_places:
-            print(
-                "⚠️ No matching places found for selective load; skipping localizer creation"
-            )
-            return
-
-        # Create selective config and localizer
-        from unav.config import UNavConfig
-
-        selective_config = UNavConfig(
-            data_final_root=self.DATA_ROOT,
-            places=selective_places,
-            global_descriptor_model=self.FEATURE_MODEL,
-            local_feature_model=self.LOCAL_FEATURE_MODEL,
+        run_ensure_maps_loaded(
+            server=self,
+            place=place,
+            building=building,
+            floor=floor,
+            enable_multifloor=enable_multifloor,
         )
-
-        from unav.localizer.localizer import UNavLocalizer
-        import time
-
-        selective_localizer = UNavLocalizer(selective_config.localizer_config)
-
-        # # Optionally patch the selective localizer too
-        if hasattr(self, "tracer") and self.tracer:
-            try:
-                self._monkey_patch_localizer_methods(selective_localizer)
-                # Note: feature extractors are already patched at module level, no need to patch per instance
-            except Exception as e:
-                print(f"⚠️ Failed to patch selective localizer: {e}")
-
-        # Load maps and features with tracing if available
-        if hasattr(self, "tracer") and self.tracer:
-            with self.tracer.start_as_current_span(
-                "load_maps_and_features_span"
-            ) as load_span:
-                load_span.add_event("Starting map and feature loading")
-                load_span.set_attribute("map_key", str(map_key))
-                load_span.set_attribute("selective_places", str(selective_places))
-
-                start_load_time = time.time()
-                selective_localizer.load_maps_and_features()
-                load_duration = time.time() - start_load_time
-
-                load_span.set_attribute("load_duration_seconds", load_duration)
-                load_span.add_event("Map and feature loading completed")
-        else:
-            print(f"⏱️ Starting load_maps_and_features for: {map_key}")
-            start_load_time = time.time()
-            selective_localizer.load_maps_and_features()
-            load_duration = time.time() - start_load_time
-            print(f"⏱️ Completed load_maps_and_features in {load_duration:.2f} seconds")
-
-        # Cache the selective localizer
-        self.selective_localizers[map_key] = selective_localizer
-        self.maps_loaded.add(map_key)
-        print(f"✅ Selective localizer created and maps loaded for: {map_key}")
 
     def ensure_gpu_components_ready(self):
         """
@@ -224,29 +152,14 @@ class UnavServer:
         building: str,
         floor: str,
     ) -> dict:
-        """
-        Construct a mock localization output from user-provided coordinates.
-        This allows skipping the actual localization phase when coordinates are known.
-        
-        Args:
-            x: X coordinate on the floor plan
-            y: Y coordinate on the floor plan
-            angle: Heading angle (direction user is facing)
-            place: Place name
-            building: Building name
-            floor: Floor name
-            
-        Returns:
-            dict: Mock localization output matching the structure from localizer.localize()
-        """
-        return {
-            "floorplan_pose": {
-                "xy": [x, y],
-                "ang": angle
-            },
-            "best_map_key": (place, building, floor),
-            "refinement_queue": {}  # Empty since we're not doing actual localization
-        }
+        return run_construct_mock_localization_output(
+            x=x,
+            y=y,
+            angle=angle,
+            place=place,
+            building=building,
+            floor=floor,
+        )
 
     @method()
     def set_navigation_context(
@@ -259,26 +172,16 @@ class UnavServer:
         unit: str = "meter",
         language: str = "en",
     ):
-        """Set navigation context for a user session"""
-        try:
-            self.update_session(
-                user_id,
-                {
-                    "selected_dest_id": dest_id,
-                    "target_place": target_place,
-                    "target_building": target_building,
-                    "target_floor": target_floor,
-                    "unit": unit,
-                    "language": language,
-                },
-            )
-
-            return {
-                "status": "success",
-                "message": "Navigation context set successfully",
-            }
-        except Exception as e:
-            return {"status": "error", "message": str(e), "type": type(e).__name__}
+        return run_set_navigation_context(
+            server=self,
+            user_id=user_id,
+            dest_id=dest_id,
+            target_place=target_place,
+            target_building=target_building,
+            target_floor=target_floor,
+            unit=unit,
+            language=language,
+        )
 
     @method()
     def start_server(self):
@@ -679,221 +582,7 @@ class UnavServer:
     def convert_navigation_to_trajectory(
         self, navigation_result: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """
-        Convert navigation result format to trajectory output format.
-
-        Args:
-            navigation_result: Dictionary containing navigation result data
-
-        Returns:
-            Dictionary in trajectory output format
-        """
-
-        # Extract data from navigation result
-        result = navigation_result.get("result", {})
-        cmds = navigation_result.get("cmds", [])
-        best_map_key = navigation_result.get("best_map_key", [])
-        floorplan_pose = navigation_result.get("floorplan_pose", {})
-        navigation_info = navigation_result.get("navigation_info", {})
-
-        # Extract building, place, and floor information
-        place = best_map_key[0] if len(best_map_key) > 0 else ""
-        building = best_map_key[1] if len(best_map_key) > 1 else ""
-        floor = best_map_key[2] if len(best_map_key) > 2 else ""
-
-        # Get path coordinates from result
-        path_coords = result.get("path_coords", [])
-
-        # Add starting pose coordinates if available
-        start_xy = floorplan_pose.get("xy", [])
-        start_ang = floorplan_pose.get("ang", 0)
-
-        # Create paths array - include start position with angle if available
-        paths = []
-        if start_xy and len(start_xy) >= 2:
-            if start_ang:
-                paths.append([start_xy[0], start_xy[1], start_ang])
-            else:
-                paths.append(start_xy)
-
-        # Add all path coordinates
-        for coord in path_coords:
-            if len(coord) >= 2:
-                paths.append(coord)
-
-        # Calculate scale based on total cost and path distance (approximate)
-        # This is an estimation - you may need to adjust based on your specific use case
-        total_cost = result.get("total_cost", 0)
-        scale = (
-            0.02205862195  # Default scale, you might want to calculate this dynamically
-        )
-
-        # Create trajectory structure
-        trajectory_data = {
-            "trajectory": [
-                {
-                    "0": {
-                        "name": "destination",
-                        "building": building,
-                        "floor": floor,
-                        "paths": paths,
-                        "command": {
-                            "instructions": cmds,
-                            "are_instructions_generated": len(cmds) > 0,
-                        },
-                        "scale": scale,
-                    }
-                },
-                None,  # This seems to be a placeholder in the original format
-            ],
-            "scale": scale,
-        }
-
-        return trajectory_data
+        return run_convert_navigation_to_trajectory(navigation_result)
 
     def run_vlm_on_image(self, image: np.ndarray) -> str:
-        """
-        Run VLM on the provided image to extract text using Gemini 2.5 Flash.
-
-        Args:
-            image (np.ndarray): BGR image array.
-
-        Returns:
-            str: Extracted text from the image.
-        """
-        # Create span for VLM extraction if tracer available
-        if hasattr(self, "tracer") and self.tracer:
-            with self.tracer.start_as_current_span(
-                "vlm_text_extraction_span"
-            ) as vlm_span:
-                try:
-                    # 1) Import required libraries
-                    from google import genai
-                    from google.genai import types
-                    import cv2
-                    import os
-
-                    # 2) Assign API key - get from environment variable (set by Modal Secret)
-                    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-                    if not GEMINI_API_KEY:
-                        error_msg = "GEMINI_API_KEY environment variable not set. Please set it with your API key in Modal Secrets."
-                        print(f"❌ {error_msg}")
-                        return error_msg
-
-                    # Create client with API key
-                    client = genai.Client(api_key=GEMINI_API_KEY)
-
-                    # 3) Configure with Gemini 2.5 Flash model
-                    GEMINI_MODEL = "gemini-2.5-flash"
-
-                    # 4) Run VLM on the image
-                    # Convert BGR to RGB for proper processing
-                    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-                    # Encode image to bytes (JPEG format)
-                    _, image_bytes = cv2.imencode(".jpg", image_rgb)
-                    image_bytes = image_bytes.tobytes()
-
-                    # Create the prompt for text extraction
-                    prompt = """Analyze this image and extract all visible text content. 
-            Please provide:
-            1. All readable text, signs, labels, and written content
-            2. Any numbers, codes, or identifiers visible
-            3. Location descriptions or directional information if present
-            
-            Format the response as clear, readable text without extra formatting."""
-
-                    # Generate content using the model with proper SDK usage
-                    response = client.models.generate_content(
-                        model=GEMINI_MODEL,
-                        contents=[
-                            prompt,
-                            types.Part.from_bytes(
-                                data=image_bytes, mime_type="image/jpeg"
-                            ),
-                        ],
-                    )
-
-                    # Extract the text response
-                    extracted_text = (
-                        response.text if response.text else "No text extracted"
-                    )
-
-                    print(
-                        f"✅ VLM extraction successful: {len(extracted_text)} characters extracted"
-                    )
-
-                    return extracted_text
-
-                except ImportError as e:
-                    error_msg = f"Missing required library for VLM: {str(e)}. Please install: pip install google-genai"
-                    print(f"❌ {error_msg}")
-                    return error_msg
-                except Exception as e:
-                    error_msg = f"VLM extraction failed: {str(e)}"
-                    print(f"❌ {error_msg}")
-                    return error_msg
-        else:
-            try:
-                # 1) Import required libraries
-                from google import genai
-                from google.genai import types
-                import cv2
-                import os
-
-                # 2) Assign API key - get from environment variable (set by Modal Secret)
-                GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-                if not GEMINI_API_KEY:
-                    error_msg = "GEMINI_API_KEY environment variable not set. Please set it with your API key in Modal Secrets."
-                    print(f"❌ {error_msg}")
-                    return error_msg
-
-                # Create client with API key
-                client = genai.Client(api_key=GEMINI_API_KEY)
-
-                # 3) Configure with Gemini 2.5 Flash model
-                GEMINI_MODEL = "gemini-2.5-flash"
-
-                # 4) Run VLM on the image
-                # Convert BGR to RGB for proper processing
-                image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-                # Encode image to bytes (JPEG format)
-                _, image_bytes = cv2.imencode(".jpg", image_rgb)
-                image_bytes = image_bytes.tobytes()
-
-                # Create the prompt for text extraction
-                prompt = """Analyze this image and extract all visible text content. 
-            Please provide:
-            1. All readable text, signs, labels, and written content
-            2. Any numbers, codes, or identifiers visible
-            3. Location descriptions or directional information if present
-            
-            Format the response as clear, readable text without extra formatting."""
-
-                # Generate content using the model with proper SDK usage
-                response = client.models.generate_content(
-                    model=GEMINI_MODEL,
-                    contents=[
-                        prompt,
-                        types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
-                    ],
-                )
-
-                # Extract the text response
-                extracted_text = response.text if response.text else "No text extracted"
-
-                print(
-                    f"✅ VLM extraction successful: {len(extracted_text)} characters extracted"
-                )
-
-                return extracted_text
-
-            except ImportError as e:
-                error_msg = f"Missing required library for VLM: {str(e)}. Please install: pip install google-genai"
-                print(f"❌ {error_msg}")
-                return error_msg
-            except Exception as e:
-                error_msg = f"VLM extraction failed: {str(e)}"
-                print(f"❌ {error_msg}")
-                return error_msg
+        return run_vlm_on_image(server=self, image=image)
