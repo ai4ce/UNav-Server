@@ -120,12 +120,6 @@ def run_planner(
                 if language == "en":
                     language = session.get("language", "en")
 
-                turn_mode = session.get("turn_mode", "default")
-                if turn_mode not in {"default", "deg15"}:
-                    turn_mode = "default"
-                    session["turn_mode"] = turn_mode
-                print(f"🔧 Using turn_mode: {turn_mode}")
-
                 if not all([dest_id, target_place, target_building, target_floor]):
                     return {"status": "error", "error": "Incomplete navigation context"}
 
@@ -164,15 +158,57 @@ def run_planner(
                         else:
                             localizer_to_use = localizer_to_use or self.localizer
 
-                        queue_key = image.shape[:2]
-                        print(f"🔍 Using queue_key={queue_key}")
+                        queue_key = _get_queue_key_for_image_shape(image.shape)
+                        is_cold_start = len(refinement_queue) == 0
+                        print(f"🔍 Cold start: {is_cold_start}, refinement_queue size: {len(refinement_queue)}")
 
-                        output = localizer_to_use.localize(image, refinement_queue, top_k=top_k)
+                        if is_cold_start:
+                            bootstrap_outputs = []
+                            empty_queue = refinement_queue.copy()
+                            for bootstrap_pass in range(2):
+                                print(f"🔄 Bootstrap pass {bootstrap_pass + 1}/2...")
+                                bootstrap_output = localizer_to_use.localize(image, empty_queue, top_k=top_k)
+                                if bootstrap_output and bootstrap_output.get("success"):
+                                    bootstrap_outputs.append(bootstrap_output)
+                                    best_map_key = bootstrap_output.get("best_map_key")
+                                    print(f"   ✅ Pass {bootstrap_pass + 1}: best_map_key={best_map_key}")
+                                    new_queue = bootstrap_output.get("refinement_queue", {})
+                                    if best_map_key and new_queue:
+                                        empty_queue = _update_refinement_queue(empty_queue, best_map_key, queue_key, new_queue.get(best_map_key, {}).get(queue_key, {"pairs": [], "initial_poses": [], "pps": []}))
+
+                            if len(bootstrap_outputs) >= 2:
+                                xy_sum = [0.0, 0.0]
+                                ang_sum = 0.0
+                                for bo in bootstrap_outputs:
+                                    fp = bo.get("floorplan_pose", {})
+                                    xy = fp.get("xy", [0, 0])
+                                    xy_sum[0] += xy[0]
+                                    xy_sum[1] += xy[1]
+                                    ang_sum += fp.get("ang", 0)
+                                avg_xy = [xy_sum[0] / len(bootstrap_outputs), xy_sum[1] / len(bootstrap_outputs)]
+                                avg_ang = ang_sum / len(bootstrap_outputs)
+                                output = bootstrap_outputs[-1].copy()
+                                output["floorplan_pose"] = {"xy": avg_xy, "ang": avg_ang}
+                                output["bootstrap_mode"] = "mean_all_passes"
+                                output["bootstrap_passes"] = len(bootstrap_outputs)
+                            elif bootstrap_outputs:
+                                output = bootstrap_outputs[-1]
+                                output["bootstrap_mode"] = "single_pass"
+                            else:
+                                output = localizer_to_use.localize(image, refinement_queue, top_k=top_k)
+                                output["bootstrap_mode"] = "none"
+                        else:
+                            output = localizer_to_use.localize(image, refinement_queue, top_k=top_k)
+                            output["bootstrap_mode"] = "none"
+
+                        output["map_scope"] = "building_level_multifloor" if enable_multifloor else "floor_locked"
+                        output["queue_key"] = queue_key
 
                 timing_data["localization"] = (time.time() - localization_start) * 1000
                 print(f"⏱️ Localization: {timing_data['localization']:.2f}ms")
+                print(f"📍 Localization result: floorplan_pose={output.get('floorplan_pose')}, map_key={output.get('best_map_key')}, map_scope={output.get('map_scope')}")
 
-                if output is None or not output.get("success", False):
+                if output is None or "floorplan_pose" not in output:
                     print("❌ Localization failed, no pose found.")
                     if is_vlm_extraction_enabled:
                         try:
@@ -211,15 +247,7 @@ def run_planner(
 
                 command_generation_start = time.time()
                 with self.tracer.start_as_current_span("command_generation_span"):
-                    cmds = self.commander(
-                        self.nav,
-                        result,
-                        initial_heading=start_heading,
-                        unit=unit,
-                        language=language,
-                        turn_mode=turn_mode,
-                        data_final_root=self.DATA_ROOT,
-                    )
+                    cmds = self.commander(self.nav, result, initial_heading=start_heading, unit=unit, language=language)
 
                 timing_data["command_generation"] = (time.time() - command_generation_start) * 1000
 
@@ -307,49 +335,99 @@ def run_localize_user(
     try:
         has_tracer = hasattr(self, "tracer") and self.tracer is not None
 
-        self.ensure_gpu_components_ready()
-        run_ensure_maps_loaded(
-            server=self,
-            place=place,
-            building=building,
-            floor=floor,
-            enable_multifloor=enable_multifloor,
-        )
+        if has_tracer:
+            with self.tracer.start_as_current_span("localize_user_span") as span:
+                span.set_attribute("unav.session_id", session_id)
+                self.ensure_gpu_components_ready()
+                run_ensure_maps_loaded(
+                    server=self,
+                    place=place,
+                    building=building,
+                    floor=floor,
+                    enable_multifloor=enable_multifloor,
+                )
 
-        map_key = (place, building)
-        localizer = self.selective_localizers.get(map_key)
-        if not localizer and floor:
-            localizer = self.selective_localizers.get((place, building, floor), self.localizer)
+                map_key = (place, building)
+                localizer = self.selective_localizers.get(map_key)
+                if not localizer and floor:
+                    localizer = self.selective_localizers.get((place, building, floor), self.localizer)
+                else:
+                    localizer = localizer or self.localizer
+
+                queue_key = _get_queue_key_for_image_shape(image.shape)
+
+                if refinement_queue is None:
+                    session = self.get_session(session_id)
+                    refinement_queue = session.get("refinement_queue") or {}
+
+                is_cold_start = len(refinement_queue) == 0
+                print(f"🔍 Cold start: {is_cold_start}, refinement_queue size: {len(refinement_queue)}")
+
+                if is_cold_start:
+                    bootstrap_outputs = []
+                    empty_queue = refinement_queue.copy()
+                    for bootstrap_pass in range(2):
+                        print(f"🔄 Bootstrap pass {bootstrap_pass + 1}/2...")
+                        bootstrap_output = localizer.localize(image, empty_queue, top_k=top_k)
+                        if bootstrap_output and bootstrap_output.get("success"):
+                            bootstrap_outputs.append(bootstrap_output)
+                            best_map_key = bootstrap_output.get("best_map_key")
+                            print(f"   ✅ Pass {bootstrap_pass + 1}: best_map_key={best_map_key}")
+
+                    if len(bootstrap_outputs) >= 2:
+                        xy_sum = [0.0, 0.0]
+                        ang_sum = 0.0
+                        for bo in bootstrap_outputs:
+                            fp = bo.get("floorplan_pose", {})
+                            xy = fp.get("xy", [0, 0])
+                            xy_sum[0] += xy[0]
+                            xy_sum[1] += xy[1]
+                            ang_sum += fp.get("ang", 0)
+                        avg_xy = [xy_sum[0] / len(bootstrap_outputs), xy_sum[1] / len(bootstrap_outputs)]
+                        avg_ang = ang_sum / len(bootstrap_outputs)
+                        output = bootstrap_outputs[-1].copy()
+                        output["floorplan_pose"] = {"xy": avg_xy, "ang": avg_ang}
+                        output["bootstrap_mode"] = "mean_all_passes"
+                    elif bootstrap_outputs:
+                        output = bootstrap_outputs[-1]
+                        output["bootstrap_mode"] = "single_pass"
+                    else:
+                        output = localizer.localize(image, refinement_queue, top_k=top_k)
+                        output["bootstrap_mode"] = "none"
+                else:
+                    output = localizer.localize(image, refinement_queue, top_k=top_k)
+                    output["bootstrap_mode"] = "none"
+
+                output["map_scope"] = "building_level_multifloor" if enable_multifloor else "floor_locked"
+                output["queue_key"] = queue_key
         else:
-            localizer = localizer or self.localizer
+            self.ensure_gpu_components_ready()
+            run_ensure_maps_loaded(
+                server=self,
+                place=place,
+                building=building,
+                floor=floor,
+                enable_multifloor=enable_multifloor,
+            )
 
-        key = image.shape[:2]
-        print(f"🔍 Using queue_key={key}")
-
-        if refinement_queue is None:
-            session = self.get_session(session_id)
-            session_refinement = session.get("refinement_queue") or {}
-            if key in session_refinement:
-                refinement_queue = session_refinement[key]
+            map_key = (place, building)
+            localizer = self.selective_localizers.get(map_key)
+            if not localizer and floor:
+                localizer = self.selective_localizers.get((place, building, floor), self.localizer)
             else:
-                refinement_queue = {}
+                localizer = localizer or self.localizer
 
-        output = localizer.localize(image, refinement_queue, top_k=top_k)
+            output = localizer.localize(image, refinement_queue or {}, top_k=top_k)
+            output["bootstrap_mode"] = "none"
+            output["map_scope"] = "building_level_multifloor" if enable_multifloor else "floor_locked"
 
-        if output is None or not output.get("success", False):
+        if output is None or "floorplan_pose" not in output:
             return {"status": "error", "error": "Localization failed", "timing": {"total": (time.time() - start_time) * 1000}}
 
         floorplan_pose = output["floorplan_pose"]
         best_map_key = output["best_map_key"]
 
-        session = self.get_session(session_id)
-        session["current_place"] = best_map_key[0]
-        session["current_building"] = best_map_key[1]
-        session["current_floor"] = best_map_key[2]
-        session["floorplan_pose"] = floorplan_pose
-        if "refinement_queue" not in session or session["refinement_queue"] is None:
-            session["refinement_queue"] = {}
-        session["refinement_queue"][key] = output.get("refinement_queue", {})
+        self.update_session(session_id, {"current_place": best_map_key[0], "current_building": best_map_key[1], "current_floor": best_map_key[2], "floorplan_pose": floorplan_pose, "refinement_queue": output.get("refinement_queue", {})})
 
         timing_data = {"total": (time.time() - start_time) * 1000}
         print(f"⏱️ Localization total: {timing_data['total']:.2f}ms")
