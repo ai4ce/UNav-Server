@@ -2,18 +2,12 @@ from modal import method, gpu, enter
 import json
 import traceback
 import numpy as np
-import json
 import os
 from typing import Dict, List, Any, Optional
 
 from .deploy_config import get_scaledown_window, get_gpu_config, get_memory_mb
 from .modal_config import app, unav_image, volume, gemini_secret, middleware_secret
 from .destinations_service import get_destinations_list_impl
-from .server_methods.helpers import (
-    _get_queue_key_for_image_shape,
-    _get_refinement_queue_for_map,
-    _update_refinement_queue,
-)
 from .logic import (
     run_planner,
     run_localize_user,
@@ -24,13 +18,8 @@ from .logic import (
     run_monkey_patch_pose_refinement,
     run_monkey_patch_feature_extractors,
     run_monkey_patch_matching_and_ransac,
-    run_get_places,
-    run_get_fallback_places,
-    run_ensure_maps_loaded,
     run_construct_mock_localization_output,
-    run_convert_navigation_to_trajectory,
     run_set_navigation_context,
-    run_vlm_on_image,
     run_safe_serialize,
 )
 
@@ -87,42 +76,6 @@ class UnavServer:
     def _monkey_patch_matching_and_ransac(self):
         """Delegated to logic.init"""
         run_monkey_patch_matching_and_ransac(self)
-
-    
-    def get_places(
-        self,
-        target_place: Optional[str] = None,
-        target_building: Optional[str] = None,
-        target_floor: Optional[str] = None,
-        enable_multifloor: bool = False,
-    ):
-        """Get available places configuration - delegated to logic.places"""
-        return run_get_places(
-            self,
-            target_place=target_place,
-            target_building=target_building,
-            target_floor=target_floor,
-            enable_multifloor=enable_multifloor,
-        )
-
-    def _get_fallback_places(self):
-        """Fallback hardcoded places configuration"""
-        return run_get_fallback_places()
-
-    def ensure_maps_loaded(
-        self,
-        place: str,
-        building: str = None,
-        floor: str = None,
-        enable_multifloor: bool = False,
-    ):
-        run_ensure_maps_loaded(
-            server=self,
-            place=place,
-            building=building,
-            floor=floor,
-            enable_multifloor=enable_multifloor,
-        )
 
     def ensure_gpu_components_ready(self):
         """
@@ -294,15 +247,11 @@ class UnavServer:
             enable_multifloor=enable_multifloor,
         )
 
-    def _safe_serialize(self, obj):
-        return run_safe_serialize(obj)
-
-
     def get_user_session(self, user_id: str):
         """Get current user session data"""
         try:
             session = self.get_session(user_id)
-            return {"status": "success", "session": self._safe_serialize(session)}
+            return {"status": "success", "session": run_safe_serialize(session)}
         except Exception as e:
             return {"status": "error", "message": str(e), "type": type(e).__name__}
 
@@ -317,12 +266,3 @@ class UnavServer:
             }
         except Exception as e:
             return {"status": "error", "message": str(e), "type": type(e).__name__}
-
-
-    def convert_navigation_to_trajectory(
-        self, navigation_result: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        return run_convert_navigation_to_trajectory(navigation_result)
-
-    def run_vlm_on_image(self, image: np.ndarray) -> str:
-        return run_vlm_on_image(server=self, image=image)

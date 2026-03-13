@@ -4,6 +4,13 @@ Navigation logic functions - called by endpoints in unav_modal.py
 import numpy as np
 from typing import Dict, Any, Optional
 
+from .utils import (
+    run_safe_serialize,
+    run_convert_navigation_to_trajectory,
+)
+from .maps import run_ensure_maps_loaded
+from .vlm import run_vlm_on_image
+
 
 def run_planner(
     self,
@@ -116,7 +123,13 @@ def run_planner(
                     with self.tracer.start_as_current_span("localization_span"):
                         self.ensure_gpu_components_ready()
                         with self.tracer.start_as_current_span("load_maps_span"):
-                            self.ensure_maps_loaded(target_place, target_building, floor=target_floor, enable_multifloor=enable_multifloor)
+                            run_ensure_maps_loaded(
+                                server=self,
+                                place=target_place,
+                                building=target_building,
+                                floor=target_floor,
+                                enable_multifloor=enable_multifloor,
+                            )
 
                         map_key = (target_place, target_building)
                         localizer_to_use = self.selective_localizers.get(map_key)
@@ -174,7 +187,7 @@ def run_planner(
                 if output is None or "floorplan_pose" not in output:
                     if is_vlm_extraction_enabled:
                         try:
-                            extracted_text = self.run_vlm_on_image(image)
+                            extracted_text = run_vlm_on_image(server=self, image=image)
                             return {"status": "error", "error": "Localization failed", "extracted_text": extracted_text, "timing": timing_data}
                         except Exception as vlm_error:
                             return {"status": "error", "error": "VLM failed", "vlm_error": str(vlm_error), "timing": timing_data}
@@ -211,10 +224,10 @@ def run_planner(
                 timing_data["command_generation"] = (time.time() - command_generation_start) * 1000
 
                 serialization_start = time.time()
-                serialized_result = self._safe_serialize(result)
-                serialized_cmds = self._safe_serialize(cmds)
-                serialized_source_key = self._safe_serialize(source_key)
-                serialized_floorplan_pose = self._safe_serialize(floorplan_pose)
+                serialized_result = run_safe_serialize(result)
+                serialized_cmds = run_safe_serialize(cmds)
+                serialized_source_key = run_safe_serialize(source_key)
+                serialized_floorplan_pose = run_safe_serialize(floorplan_pose)
                 timing_data["serialization"] = (time.time() - serialization_start) * 1000
 
                 timing_data["total"] = (time.time() - start_time) * 1000
@@ -230,7 +243,7 @@ def run_planner(
                     "debug_info": {"map_scope": output.get("map_scope", "unknown"), "bootstrap_mode": output.get("bootstrap_mode", "none"), "bootstrap_passes": output.get("bootstrap_passes"), "queue_key": output.get("queue_key", "unknown"), "n_frames": output.get("n_frames"), "top_candidates_count": len(output.get("top_candidates", []))},
                 }
 
-                return self.convert_navigation_to_trajectory(result)
+                return run_convert_navigation_to_trajectory(result)
 
             except Exception as e:
                 timing_data["total"] = (time.time() - start_time) * 1000
@@ -293,7 +306,13 @@ def run_localize_user(
             with self.tracer.start_as_current_span("localize_user_span") as span:
                 span.set_attribute("unav.session_id", session_id)
                 self.ensure_gpu_components_ready()
-                self.ensure_maps_loaded(place, building, floor=floor, enable_multifloor=enable_multifloor)
+                run_ensure_maps_loaded(
+                    server=self,
+                    place=place,
+                    building=building,
+                    floor=floor,
+                    enable_multifloor=enable_multifloor,
+                )
 
                 map_key = (place, building)
                 localizer = self.selective_localizers.get(map_key)
@@ -346,7 +365,13 @@ def run_localize_user(
                 output["queue_key"] = queue_key
         else:
             self.ensure_gpu_components_ready()
-            self.ensure_maps_loaded(place, building, floor=floor, enable_multifloor=enable_multifloor)
+            run_ensure_maps_loaded(
+                server=self,
+                place=place,
+                building=building,
+                floor=floor,
+                enable_multifloor=enable_multifloor,
+            )
 
             map_key = (place, building)
             localizer = self.selective_localizers.get(map_key)
@@ -371,8 +396,8 @@ def run_localize_user(
 
         return {
             "status": "success",
-            "floorplan_pose": self._safe_serialize(floorplan_pose),
-            "best_map_key": self._safe_serialize(best_map_key),
+            "floorplan_pose": run_safe_serialize(floorplan_pose),
+            "best_map_key": run_safe_serialize(best_map_key),
             "timing": timing_data,
             "debug_info": {"map_scope": output.get("map_scope"), "bootstrap_mode": output.get("bootstrap_mode"), "queue_key": output.get("queue_key")},
         }

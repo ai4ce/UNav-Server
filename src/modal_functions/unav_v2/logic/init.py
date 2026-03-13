@@ -4,6 +4,8 @@ These are called during container startup.
 """
 from modal import enter
 
+from .places import run_get_places
+
 
 def run_init_middleware(self):
     """Initialize Middleware.io tracking for profiling and telemetry."""
@@ -33,7 +35,7 @@ def run_init_cpu_components(self):
     self.DATA_ROOT = "/root/UNav-IO/data"
     self.FEATURE_MODEL = "DinoV2Salad"
     self.LOCAL_FEATURE_MODEL = "superpoint+lightglue"
-    self.PLACES = self.get_places()
+    self.PLACES = run_get_places(self)
 
     print("🔧 Initializing UNavConfig...")
     self.config = UNavConfig(
