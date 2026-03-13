@@ -1,5 +1,8 @@
 from typing import Any
 
+from .logic.places import run_get_places
+from .logic.maps import run_ensure_maps_loaded
+
 
 def get_destinations_list_impl(
     server: Any,
@@ -32,15 +35,17 @@ def get_destinations_list_impl(
         print(f"🎯 [Phase 3] Getting destinations for {place}/{building}/{floor}")
 
         # Ensure maps are loaded for this location.
-        server.ensure_maps_loaded(
-            place,
-            building,
+        run_ensure_maps_loaded(
+            server=server,
+            place=place,
+            building=building,
             floor=floor,
             enable_multifloor=enable_multifloor,
         )
 
         if enable_multifloor:
-            places = server.get_places(
+            places = run_get_places(
+                server,
                 target_place=place,
                 target_building=building,
                 enable_multifloor=True,

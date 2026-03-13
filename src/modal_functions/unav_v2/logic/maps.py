@@ -1,5 +1,7 @@
 from typing import Any, Dict, Optional, Set
 
+from .places import run_get_places
+
 
 def run_ensure_maps_loaded(
     server: Any,
@@ -27,14 +29,15 @@ def run_ensure_maps_loaded(
     print(f"🔄 [Phase 4] Creating selective localizer for: {map_key}")
 
     if building:
-        selective_places = server.get_places(
+        selective_places = run_get_places(
+            server,
             target_place=place,
             target_building=building,
             target_floor=floor,
             enable_multifloor=enable_multifloor,
         )
     else:
-        selective_places = server.get_places(target_place=place)
+        selective_places = run_get_places(server, target_place=place)
 
     if not selective_places:
         print(
