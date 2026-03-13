@@ -44,12 +44,10 @@ class UnavServer:
     _middleware_init_pending: bool = False
 
     def _gpu_available(self) -> bool:
-        """Delegated to logic.init"""
-        return self._check_gpu_available()
+        return True
 
     def _configure_middleware_tracing(self):
-        """Delegated to logic.init"""
-        self._setup_middleware_tracing()
+        pass
 
     @enter(snap=False)
     def initialize_middleware(self):
@@ -81,12 +79,6 @@ class UnavServer:
     def _monkey_patch_matching_and_ransac(self):
         """Delegated to logic.init"""
         run_monkey_patch_matching_and_ransac(self)
-
-    def _check_gpu_available(self):
-        return True
-
-    def _setup_middleware_tracing(self):
-        pass
 
     # Placeholder methods - actual implementations in logic/init.py
     def get_places(
