@@ -47,9 +47,11 @@ def run_planner(
 
     call_id = str(uuid.uuid4())
     has_tracer = hasattr(self, "tracer") and self.tracer is not None
-    print(f"📋 [PLANNER] Called with session_id={session_id}, call_id={call_id}")
+    print(f"📋 [PLANNER] Called with session_id={session_id}, call_id={call_id}, has_tracer={has_tracer}")
+    print(f"📋 [PLANNER] Params: destination_id={destination_id}, place={place}, building={building}, floor={floor}, top_k={top_k}, unit={unit}, language={language}, enable_multifloor={enable_multifloor}, should_use_user_provided_coordinate={should_use_user_provided_coordinate}")
 
     if has_tracer:
+        print(f"📋 [PLANNER] Using TRACED execution path for call_id={call_id}")
         with self.tracer.start_as_current_span("planner_span") as parent_span:
             parent_span.set_attribute("unav.call_id", call_id)
             parent_span.set_attribute("unav.session_id", session_id)
@@ -60,6 +62,9 @@ def run_planner(
             if should_use_user_provided_coordinate:
                 if x is None or y is None or angle is None:
                     return {"status": "error", "error": "x, y, angle required", "timing": {"total": (time.time() - start_time) * 1000}}
+                print(f"📍 Using user-provided coordinates: x={x}, y={y}, angle={angle}°")
+                if base_64_image is not None:
+                    print("⚠️ Image provided but will be ignored since using provided coordinates")
             elif base_64_image is None:
                 return {"status": "error", "error": "No image provided", "timing": {"total": (time.time() - start_time) * 1000}}
 
@@ -73,6 +78,7 @@ def run_planner(
                         if missing_padding:
                             base64_string += "=" * (4 - missing_padding)
                         image_bytes = base64.b64decode(base64_string)
+                        print(f"Received base64 image string of length {len(base64_string)}")
                         image_array = np.frombuffer(image_bytes, dtype=np.uint8)
                         image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
                         if image is None:
@@ -85,6 +91,14 @@ def run_planner(
                     return {"status": "error", "error": f"Unsupported: {type(base_64_image)}", "timing": {"total": (time.time() - start_time) * 1000}}
 
             try:
+                import torch
+                cuda_available = torch.cuda.is_available()
+                print(f"[GPU DEBUG] torch.cuda.is_available(): {cuda_available}")
+                if cuda_available:
+                    print(f"[GPU DEBUG] torch.cuda.device_count(): {torch.cuda.device_count()}")
+                    print(f"[GPU DEBUG] torch.cuda.current_device(): {torch.cuda.current_device()}")
+                    print(f"[GPU DEBUG] torch.cuda.get_device_name(0): {torch.cuda.get_device_name(0)}")
+
                 setup_start = time.time()
                 dest_id = destination_id
                 target_place = place
@@ -115,11 +129,14 @@ def run_planner(
                     refinement_queue = session.get("refinement_queue") or {}
 
                 timing_data["setup"] = (time.time() - setup_start) * 1000
+                print(f"⏱️ Setup: {timing_data['setup']:.2f}ms")
 
                 if should_use_user_provided_coordinate:
+                    print("⏭️ Skipping localization - using provided coordinates")
                     localization_start = time.time()
                     output = run_construct_mock_localization_output(x=x, y=y, angle=angle, place=target_place, building=target_building, floor=target_floor)
                     timing_data["localization"] = (time.time() - localization_start) * 1000
+                    print(f"⏱️ Mock Localization: {timing_data['localization']:.2f}ms")
                 else:
                     localization_start = time.time()
                     with self.tracer.start_as_current_span("localization_span"):
@@ -185,6 +202,8 @@ def run_planner(
                         output["queue_key"] = queue_key
 
                 timing_data["localization"] = (time.time() - localization_start) * 1000
+                print(f"⏱️ Localization: {timing_data['localization']:.2f}ms")
+                print(f"📍 Localization result: floorplan_pose={output.get('floorplan_pose')}, map_key={output.get('best_map_key')}, map_scope={output.get('map_scope')}")
 
                 if output is None or "floorplan_pose" not in output:
                     if is_vlm_extraction_enabled:
@@ -276,6 +295,7 @@ def run_localize_user(
     from ..server_methods.helpers import _get_queue_key_for_image_shape
 
     print(f"📋 [LOCALIZE_USER] Called with session_id={session_id}")
+    print(f"📋 [LOCALIZE_USER] Params: place={place}, building={building}, floor={floor}, top_k={top_k}, enable_multifloor={enable_multifloor}")
     start_time = time.time()
 
     if base_64_image is None:
@@ -290,6 +310,7 @@ def run_localize_user(
             if missing_padding:
                 base64_string += "=" * (4 - missing_padding)
             image_bytes = base64.b64decode(base64_string)
+            print(f"Received base64 image string of length {len(base64_string)}")
             image_array = np.frombuffer(image_bytes, dtype=np.uint8)
             image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
             if image is None:
@@ -395,6 +416,8 @@ def run_localize_user(
         self.update_session(session_id, {"current_place": best_map_key[0], "current_building": best_map_key[1], "current_floor": best_map_key[2], "floorplan_pose": floorplan_pose, "refinement_queue": output.get("refinement_queue", {})})
 
         timing_data = {"total": (time.time() - start_time) * 1000}
+        print(f"⏱️ Localization total: {timing_data['total']:.2f}ms")
+        print(f"📍 Result: floorplan_pose={floorplan_pose}, best_map_key={best_map_key}")
 
         return {
             "status": "success",
