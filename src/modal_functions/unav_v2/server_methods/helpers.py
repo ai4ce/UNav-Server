@@ -2,11 +2,10 @@ from typing import Dict, Any
 
 
 def _get_queue_key_for_image_shape(image_shape):
-    """Get a queue key based on image shape for bucket-based refinement queue handling."""
+    """Get a queue key based on image shape - returns tuple like unav-server for consistency."""
     if image_shape is None:
-        return "default"
-    h, w = image_shape[:2]
-    return f"{h}x{w}"
+        return None
+    return image_shape[:2]  # Returns tuple (h, w) - matches unav-server behavior
 
 
 def _get_refinement_queue_for_map(queue_dict, map_key, queue_key):
