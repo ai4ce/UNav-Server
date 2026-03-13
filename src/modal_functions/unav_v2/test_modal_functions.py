@@ -8,10 +8,10 @@ import modal
 
 def main():
     # Common parameters
-    BUILDING = "Langone"
-    PLACE = "New_York_University"
-    FLOOR = "17_floor"
-    DESTINATION_ID = "2"
+    BUILDING = "LightHouse"
+    PLACE = "New_York_City"
+    FLOOR = "6_floor"
+    DESTINATION_ID = "40"
     SESSION_ID = "test_session_id_2"
     IMAGE_PATH = "media/image.png"
 
