@@ -298,7 +298,6 @@ class UnavServer:
         return run_safe_serialize(obj)
 
 
-    @method()
     def get_user_session(self, user_id: str):
         """Get current user session data"""
         try:
@@ -307,7 +306,6 @@ class UnavServer:
         except Exception as e:
             return {"status": "error", "message": str(e), "type": type(e).__name__}
 
-    @method()
     def clear_user_session(self, user_id: str):
         """Clear user session data"""
         try:
