@@ -89,12 +89,6 @@ class UnavServer:
         pass
 
     # Placeholder methods - actual implementations in logic/init.py
-    def _check_gpu_available(self):
-        return True
-
-    def _setup_middleware_tracing(self):
-        pass
-
     def get_places(
         self,
         target_place: Optional[str] = None,
