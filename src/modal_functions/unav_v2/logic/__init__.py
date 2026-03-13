@@ -8,6 +8,7 @@ from .init import (
     run_monkey_patch_feature_extractors,
     run_monkey_patch_matching_and_ransac,
 )
+from .places import run_get_places, run_get_fallback_places
 
 __all__ = [
     "run_planner",
@@ -19,4 +20,6 @@ __all__ = [
     "run_monkey_patch_pose_refinement",
     "run_monkey_patch_feature_extractors",
     "run_monkey_patch_matching_and_ransac",
+    "run_get_places",
+    "run_get_fallback_places",
 ]
