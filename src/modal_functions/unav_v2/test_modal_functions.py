@@ -8,12 +8,12 @@ import modal
 
 def main():
     # Common parameters
-    BUILDING = "LightHouse"
-    PLACE = "New_York_City"
-    FLOOR = "6_floor"
-    DESTINATION_ID = "40"
+    BUILDING = "Langone"
+    PLACE = "New_York_University"
+    FLOOR = "17_floor"
+    DESTINATION_ID = "52"
     SESSION_ID = "test_session_id_2"
-    IMAGE_PATH = "media/image.png"
+    IMAGE_PATH = "media/vinay_sample.jpeg"
 
     try:
         UnavServer = modal.Cls.lookup("unav-server-v21", "UnavServer")
