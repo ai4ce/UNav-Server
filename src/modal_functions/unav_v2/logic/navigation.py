@@ -221,7 +221,7 @@ def run_planner(
 
                 command_generation_start = time.time()
                 with self.tracer.start_as_current_span("command_generation_span"):
-                    cmds = self.commander(result, initial_heading=start_heading, unit=unit, language=language)
+                    cmds = self.commander(self.nav, result, initial_heading=start_heading, unit=unit, language=language)
 
                 timing_data["command_generation"] = (time.time() - command_generation_start) * 1000
 
