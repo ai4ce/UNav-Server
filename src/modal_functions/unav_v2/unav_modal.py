@@ -18,9 +18,6 @@ from .logic import (
     run_monkey_patch_pose_refinement,
     run_monkey_patch_feature_extractors,
     run_monkey_patch_matching_and_ransac,
-    run_construct_mock_localization_output,
-    run_set_navigation_context,
-    run_safe_serialize,
 )
 
 
@@ -96,45 +93,6 @@ class UnavServer:
         """Update user session with new data"""
         session = self.get_session(user_id)
         session.update(updates)
-
-    def _construct_mock_localization_output(
-        self,
-        x: float,
-        y: float,
-        angle: float,
-        place: str,
-        building: str,
-        floor: str,
-    ) -> dict:
-        return run_construct_mock_localization_output(
-            x=x,
-            y=y,
-            angle=angle,
-            place=place,
-            building=building,
-            floor=floor,
-        )
-
-    def set_navigation_context(
-        self,
-        user_id: str,
-        dest_id: str,
-        target_place: str,
-        target_building: str,
-        target_floor: str,
-        unit: str = "meter",
-        language: str = "en",
-    ):
-        return run_set_navigation_context(
-            server=self,
-            user_id=user_id,
-            dest_id=dest_id,
-            target_place=target_place,
-            target_building=target_building,
-            target_floor=target_floor,
-            unit=unit,
-            language=language,
-        )
 
     @method()
     def start_server(self):
@@ -247,22 +205,5 @@ class UnavServer:
             enable_multifloor=enable_multifloor,
         )
 
-    def get_user_session(self, user_id: str):
-        """Get current user session data"""
-        try:
-            session = self.get_session(user_id)
-            return {"status": "success", "session": run_safe_serialize(session)}
-        except Exception as e:
-            return {"status": "error", "message": str(e), "type": type(e).__name__}
 
-    def clear_user_session(self, user_id: str):
-        """Clear user session data"""
-        try:
-            if user_id in self.user_sessions:
-                del self.user_sessions[user_id]
-            return {
-                "status": "success",
-                "message": f"Session cleared for user {user_id}",
-            }
-        except Exception as e:
-            return {"status": "error", "message": str(e), "type": type(e).__name__}
+# End of file

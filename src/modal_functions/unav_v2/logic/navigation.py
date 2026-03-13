@@ -7,6 +7,8 @@ from typing import Dict, Any, Optional
 from .utils import (
     run_safe_serialize,
     run_convert_navigation_to_trajectory,
+    run_construct_mock_localization_output,
+    run_set_navigation_context,
 )
 from .maps import run_ensure_maps_loaded
 from .vlm import run_vlm_on_image
@@ -116,7 +118,7 @@ def run_planner(
 
                 if should_use_user_provided_coordinate:
                     localization_start = time.time()
-                    output = self._construct_mock_localization_output(x=x, y=y, angle=angle, place=target_place, building=target_building, floor=target_floor)
+                    output = run_construct_mock_localization_output(x=x, y=y, angle=angle, place=target_place, building=target_building, floor=target_floor)
                     timing_data["localization"] = (time.time() - localization_start) * 1000
                 else:
                     localization_start = time.time()
