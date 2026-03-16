@@ -84,10 +84,12 @@ def run_planner(
                         image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
                         if image is None:
                             return {"status": "error", "error": "Failed to decode image", "timing": {"total": (time.time() - start_time) * 1000}}
+                        print(f"📷 [PLANNER] Image metadata: shape={image.shape}, dtype={image.dtype}")
                     except Exception as img_error:
                         return {"status": "error", "error": f"Error: {str(img_error)}", "timing": {"total": (time.time() - start_time) * 1000}}
                 elif isinstance(base_64_image, np.ndarray):
                     image = base_64_image
+                    print(f"📷 [PLANNER] Image metadata: shape={image.shape}, dtype={image.dtype}")
                 else:
                     return {"status": "error", "error": f"Unsupported: {type(base_64_image)}", "timing": {"total": (time.time() - start_time) * 1000}}
 
@@ -347,10 +349,12 @@ def run_localize_user(
             image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
             if image is None:
                 return {"status": "error", "error": "Failed to decode image", "timing": {"total": (time.time() - start_time) * 1000}}
+            print(f"📷 [LOCALIZE_USER] Image metadata: shape={image.shape}, dtype={image.dtype}")
         except Exception as img_error:
             return {"status": "error", "error": f"Error: {str(img_error)}", "timing": {"total": (time.time() - start_time) * 1000}}
     elif isinstance(base_64_image, np.ndarray):
         image = base_64_image
+        print(f"📷 [LOCALIZE_USER] Image metadata: shape={image.shape}, dtype={image.dtype}")
     else:
         return {"status": "error", "error": f"Unsupported: {type(base_64_image)}", "timing": {"total": (time.time() - start_time) * 1000}}
 
