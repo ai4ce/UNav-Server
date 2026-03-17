@@ -8,12 +8,12 @@ import modal
 
 def main():
     # Common parameters
-    BUILDING = "Jubilee"
-    PLACE = "Mahidol_University"
-    FLOOR = "fl2"
-    DESTINATION_ID = "32"
+    BUILDING = "LightHouse"
+    PLACE = "New_York_City"
+    FLOOR = "6_floor"
+    DESTINATION_ID = "40"
     SESSION_ID = "test_session_id_2"
-    IMAGE_PATH = "media/sample_image_20.jpg"
+    IMAGE_PATH = "media/image2.png"
 
     try:
         UnavServer = modal.Cls.lookup("unav-server-v21", "UnavServer")
@@ -54,6 +54,7 @@ def main():
             building=BUILDING,
             floor=FLOOR,
             place=PLACE,
+            enable_multifloor=False,
         )
         print("Planner Result:", planner_result)
 

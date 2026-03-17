@@ -17,6 +17,7 @@ on:
           - t4
           - any
           - a100
+          - h200
       ram_mb:
         description: "RAM reservation in MiB (max in this workflow: 98304)"
         required: true
@@ -58,8 +59,8 @@ jobs:
           if parsed <= 0:
               raise ValueError("scaledown_window must be a positive integer")
           gpu = os.environ["UNAV_GPU_TYPE"].strip().lower()
-          if gpu not in {"a10", "t4", "any", "a100"}:
-              raise ValueError("gpu_type must be one of: a10, t4, any, a100")
+          if gpu not in {"a10", "t4", "any", "a100", "h200"}:
+              raise ValueError("gpu_type must be one of: a10, t4, any, a100, h200")
           ram_mb = int(os.environ["UNAV_RAM_MB"])
           max_ram_mb = 98304
           if ram_mb <= 0:
