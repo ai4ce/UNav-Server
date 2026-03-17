@@ -100,6 +100,25 @@ def run_init_gpu_components(self):
 
     print("✅ UNavLocalizer initialized (maps will load on demand)")
 
+    # Pre-load maps for common places to include in memory snapshot
+    print("🗺️ Pre-loading maps for memory snapshot...")
+    from .maps import run_ensure_maps_loaded
+    
+    # Load all floors for common places
+    PRELOAD_PLACES = [
+        ("New_York_City", "LightHouse", None),  # All floors
+        ("New_York_University", "Langone", None),  # All floors
+    ]
+    
+    for place, building, floor in PRELOAD_PLACES:
+        if floor:
+            print(f"   📦 Pre-loading: {place} / {building} / {floor}")
+        else:
+            print(f"   📦 Pre-loading: {place} / {building} (all floors)")
+        run_ensure_maps_loaded(self, place=place, building=building, floor=floor)
+    
+    print("✅ Maps pre-loaded for snapshot")
+
     self.gpu_components_initialized = True
     print("🎉 Full UNav system initialization complete! Ready for fast inference.")
     print(f"🎉 [Phase 2] Checking for deferred middleware init: _middleware_init_pending={getattr(self, '_middleware_init_pending', 'NOT_SET')}")
