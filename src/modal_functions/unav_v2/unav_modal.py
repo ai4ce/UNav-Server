@@ -25,7 +25,7 @@ from .logic import (
     image=unav_image,
     volumes={"/root/UNav-IO": volume},
     gpu=get_gpu_config(),
-    enable_memory_snapshot=False,
+    enable_memory_snapshot=True,
     memory=get_memory_mb(),
     timeout=600,
     scaledown_window=get_scaledown_window(),
