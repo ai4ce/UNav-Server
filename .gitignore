@@ -1,0 +1,9 @@
+.env
+.env.local
+.env.*
+__pycache__/
+*.pyc
+.vscode/
+db/*.db
+*.jpeg
+*.jpg

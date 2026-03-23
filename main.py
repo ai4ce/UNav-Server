@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from api.user_api import router as user_router
 from api.task_api import router as task_router
+from api.realtime_api import router as realtime_router
 from core.unav_state import cleanup_sessions
 import asyncio
 from contextlib import asynccontextmanager
@@ -23,3 +24,5 @@ app = FastAPI(
 
 app.include_router(user_router, prefix="/api")
 app.include_router(task_router, prefix="/api")
+
+app.include_router(realtime_router, prefix="/api")

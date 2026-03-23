@@ -9,6 +9,7 @@
 
 from core.unav_state import localizer, nav, commander, get_session, LABELS
 from core.i18n_labels import get_label
+from core.destination_display import humanize_destination_name
 from config import DATA_ROOT, PLACES
 
 import numpy as np
@@ -128,7 +129,20 @@ def get_destinations(inputs):
         did_str = str(did)
         key = f"{place}/{building}/{floor}/{did_str}"
         fallback = pf_target.labels[did]
-        name = get_label("destinations", key, lang, fallback=fallback)
+        raw_name = get_label("destinations", key, lang, fallback=fallback)
+        fallback_lower = str(fallback).lower()
+        category = None
+        if any(token in fallback_lower for token in ["elevator", "lift", "电梯", "升降机"]):
+            category = "elevator"
+        elif any(token in fallback_lower for token in ["restroom", "bathroom", "washroom", "toilet", "厕", "洗手间", "卫生间"]):
+            category = "restroom"
+        elif any(token in fallback_lower for token in ["stairs", "stair", "楼梯"]):
+            category = "stairs"
+        elif any(token in fallback_lower for token in ["exit", "door", "出口"]):
+            category = "exit"
+        elif any(token in fallback_lower for token in ["service desk", "front desk", "reception", "服务台", "前台"]):
+            category = "service_desk"
+        name = humanize_destination_name(raw_name, fallback=fallback, category=category, floor=floor, lang=lang)
         rows.append({"id": did_str, "name": name})
 
     # Cache target floor context
