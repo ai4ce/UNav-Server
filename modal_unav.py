@@ -67,7 +67,7 @@ source_mount = Mount.from_local_dir(
     ]
 )
 
-app = App("unav-server")
+app = App("anbang-unav-server")
 
 
 @app.function(
