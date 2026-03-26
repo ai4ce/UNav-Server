@@ -41,11 +41,11 @@ RUN /opt/conda/envs/unav/bin/python -m pip install --no-cache-dir debugpy
 RUN /opt/conda/envs/unav/bin/python -m pip install --no-deps git+https://github.com/cvg/implicit_dist.git
 # ---- before your RUN pip install lines ----
 ARG UNAV_REPO="https://github.com/endeleze/UNav.git"
-# Can be a branch (e.g., "main"), a tag (e.g., "v1.2.3"), or a commit SHA.
-ARG UNAV_REF="main"
+# Can be a branch (e.g., "unav-server"), a tag (e.g., "v1.2.3"), or a commit SHA.
+ARG UNAV_REF="unav-server"
 
 # Always reinstall from the specified ref; --no-cache-dir avoids pip cache inside the layer.
-RUN /opt/conda/envs/unav/bin/python -m pip install --force-reinstall --no-deps --no-cache-dir "git+https://github.com/endeleze/UNav.git@main#egg=unav"
+RUN /opt/conda/envs/unav/bin/python -m pip install --force-reinstall --no-deps --no-cache-dir "git+${UNAV_REPO}@${UNAV_REF}#egg=unav"
 
 
 # 7. Expose the API port

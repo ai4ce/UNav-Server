@@ -12,6 +12,8 @@ From the project root directory (where `Dockerfile` and `environment.yml` are lo
 docker build -t unav-server .
 ```
 
+The Docker build is pinned to install the upstream `UNav` package from the `unav-server` branch.
+
 ---
 
 ## 2️⃣ Configure the Startup Script

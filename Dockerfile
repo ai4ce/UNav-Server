@@ -38,8 +38,10 @@ COPY . /workspace
 RUN rm -f /workspace/config.py
 
 # 6. Install external/private Python packages (no dependency resolution)
+ARG UNAV_REPO="https://github.com/endeleze/UNav.git"
+ARG UNAV_REF="unav-server"
 RUN pip install --no-deps git+https://github.com/cvg/implicit_dist.git
-RUN pip install --no-deps --upgrade git+https://github.com/endeleze/UNav.git
+RUN pip install --no-deps --upgrade --no-cache-dir "git+${UNAV_REPO}@${UNAV_REF}#egg=unav"
 
 # 7. Expose the API port
 EXPOSE 5001

@@ -39,6 +39,10 @@ dependencies:
   - fastapi
   - uvicorn
   - sqlalchemy
+  - requests
+  - python-multipart
+  - email-validator
+  - bcrypt
 
   # ===== Others =====
   - yaml
@@ -47,6 +51,7 @@ dependencies:
 
   # ===== Additional pip dependencies =====
   - pip:
+      - dataloaders==0.0.1
       - einops==0.8.1
       - faiss-gpu-cu12==1.11.0
       - fast-pytorch-kmeans==0.2.2
@@ -54,7 +59,10 @@ dependencies:
       - h5py==3.13.0
       - jupyter-core==5.8.1
       - jupyterlab-widgets==3.0.15
+      - lib==4.0.0
+      - POT==0.9.5
       - PyJWT>=2.0.0
+      - pyimplicitdist==1.1.0
       - kornia==0.8.1
       - lazy-loader==0.4
       - matplotlib==3.10.3
@@ -74,11 +82,14 @@ dependencies:
       - timm==1.0.15
       - tqdm==4.67.1
       - transformers==4.52.4
+      - tyro==0.9.23
       - wandb==0.20.0
       - xformers==0.0.30
 
 # ===== Usage =====
-# 1. Run `conda env create -f environment.yaml` to create the environment.
-# 2. To update, use `conda env update -f environment.yaml`.
+# 1. Run `conda env create -f environment.yml` to create the environment.
+# 2. To update, use `conda env update -f environment.yml`.
 # 3. Make sure the correct CUDA drivers are installed for GPU packages.
-# 4. Use conda for most packages, pip only for those unavailable in conda.
+# 4. The upstream `unav` package is installed separately in Docker with `--no-deps`,
+#    so its runtime dependencies need to stay listed here.
+# 5. Use conda for most packages, pip only for those unavailable in conda.
