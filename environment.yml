@@ -77,6 +77,7 @@ dependencies:
       - wandb==0.20.0
       - xformers==0.0.30
       - protobuf  # Required by Modal SDK runtime
+      - dataloaders  # Required by unav package
 
 # ===== Usage =====
 # 1. Run `conda env create -f environment.yaml` to create the environment.

@@ -8,6 +8,7 @@ Usage:
     modal deploy modal_unav_v2.py       # Deploy to Modal cloud
 """
 import subprocess
+import sys
 
 import modal
 from modal import Image, App, Volume
@@ -47,9 +48,33 @@ app = App("anbang-unav-server-v2")
 )
 @modal.web_server(CONTAINER_PORT)
 def fastapi_app():
+    # Test-mode hotfix: install Modal runtime deps at container start to avoid image rebuilds.
+    subprocess.check_call(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "-q",
+            "aiohttp",
+            "cbor2",
+            "certifi",
+            "click~=8.1",
+            "grpclib>=0.4.7,<0.4.10",
+            "protobuf>=3.19,<7.0,!=4.24.0",
+            "rich>=12",
+            "synchronicity~=0.11.1",
+            "toml",
+            "typer>=0.9",
+            "types-certifi",
+            "types-toml",
+            "watchfiles",
+            "typing_extensions~=4.6",
+        ]
+    )
     subprocess.Popen(
-        "uvicorn main:app --host 0.0.0.0 --port 5001",
-        shell=True,
+        [sys.executable, "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5001"],
+        cwd="/workspace",
     )
 
 
