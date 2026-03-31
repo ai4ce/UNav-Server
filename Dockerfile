@@ -41,6 +41,9 @@ RUN rm -f /workspace/config.py
 RUN pip install --no-deps git+https://github.com/cvg/implicit_dist.git
 RUN pip install --no-deps --upgrade git+https://github.com/endeleze/UNav.git
 
+# Install protobuf for Modal SDK runtime (Modal injects its own Python entrypoint)
+RUN pip install protobuf
+
 # 7. Expose the API port
 EXPOSE 5001
 
