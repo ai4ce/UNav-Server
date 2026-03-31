@@ -45,7 +45,7 @@ app = App("anbang-unav-server-v2")
     timeout=3600,
     scaledown_window=600,
 )
-@modal.web_server(CONTAINER_PORT)
+@modal.web_server(CONTAINER_PORT, startup_timeout=600)
 def fastapi_app():
     subprocess.Popen(
         ["/opt/conda/envs/unav/bin/python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5001"],
