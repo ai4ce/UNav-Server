@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - main
+      - unav-server-modal
 
 jobs:
   build-and-push:
