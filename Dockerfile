@@ -74,6 +74,7 @@ SHELL ["conda", "run", "-n", "unav", "/bin/bash", "-c"]
 WORKDIR /workspace
 COPY . /workspace
 RUN rm -f /workspace/config.py
+RUN rm -f /modal_requirements.txt
 
 # 6. Install external/private Python packages (no dependency resolution)
 RUN pip install --no-deps git+https://github.com/cvg/implicit_dist.git

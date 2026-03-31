@@ -1,12 +1,13 @@
-"""Modal v2 deployment for UNav Server using existing Dockerfile.
+"""Modal v2 deployment for UNav Server using a registry image.
 
-Builds the Modal image from the project Dockerfile and exposes the
+Pulls a prebuilt image (for example from Docker Hub) and exposes the
 existing uvicorn FastAPI server via Modal's web server proxy.
 
 Usage:
     modal run modal_unav_v2.py          # Run locally
     modal deploy modal_unav_v2.py       # Deploy to Modal cloud
 """
+import os
 import subprocess
 
 import modal
@@ -20,12 +21,20 @@ DATA_VOLUME_NAME = "unav-data"
 CONTAINER_PORT = 5001
 
 # ---------------------------------------------------------------------------
-# Image – build from the existing Dockerfile
+# Image – pull from Docker Hub / container registry
 # ---------------------------------------------------------------------------
-image = Image.from_dockerfile(
-    "Dockerfile",
-    context_dir=".",
-).add_local_file("config.py", remote_path="/workspace/config.py")
+REGISTRY_IMAGE = os.getenv("UNAV_IMAGE", "suren17/unav-server:latest").strip()
+
+image = (
+    Image.from_registry(REGISTRY_IMAGE)
+    .run_commands("rm -f /modal_requirements.txt")
+    .env({
+        "PATH": "/opt/conda/bin:/opt/conda/condabin:/usr/local/bin:/usr/bin:/bin",
+        "CONDA_DEFAULT_ENV": "unav"
+    })
+    .run_commands("source /opt/conda/etc/profile.d/conda.sh && conda activate unav")
+    .add_local_file("config.py", remote_path="/workspace/config.py")
+)
 
 # ---------------------------------------------------------------------------
 # Volume for persistent data
@@ -45,7 +54,7 @@ app = App("anbang-unav-server-v2")
     timeout=3600,
     scaledown_window=600,
 )
-@modal.web_server(CONTAINER_PORT)
+@modal.web_server(CONTAINER_PORT, startup_timeout=600)
 def fastapi_app():
     subprocess.Popen(
         ["/opt/conda/envs/unav/bin/python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5001"],
