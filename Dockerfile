@@ -15,7 +15,21 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Modal runtime deps for system Python.
-RUN rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED && pip3 install protobuf grpclib
+RUN rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED && pip3 install \
+    aiohttp \
+    cbor2 \
+    certifi \
+    "click~=8.1" \
+    "grpclib>=0.4.7,<0.4.10" \
+    "protobuf>=3.19,<7.0,!=4.24.0" \
+    "rich>=12" \
+    "synchronicity~=0.11.1" \
+    toml \
+    "typer>=0.9" \
+    types-certifi \
+    types-toml \
+    watchfiles \
+    "typing_extensions~=4.6"
 
 # 2. Install Miniconda to /opt/conda and update PATH
 ENV CONDA_DIR=/opt/conda
@@ -26,7 +40,21 @@ ENV PATH=$CONDA_DIR/bin:$PATH
 
 # Modal runtime resolves "python" from PATH; with conda first in PATH,
 # core Modal deps must exist in conda base.
-RUN /opt/conda/bin/pip install --no-cache-dir protobuf grpclib
+RUN /opt/conda/bin/python -m pip install --no-cache-dir \
+    aiohttp \
+    cbor2 \
+    certifi \
+    "click~=8.1" \
+    "grpclib>=0.4.7,<0.4.10" \
+    "protobuf>=3.19,<7.0,!=4.24.0" \
+    "rich>=12" \
+    "synchronicity~=0.11.1" \
+    toml \
+    "typer>=0.9" \
+    types-certifi \
+    types-toml \
+    watchfiles \
+    "typing_extensions~=4.6"
 
 # 3. Copy Conda environment file
 COPY environment.yml /tmp/environment.yml
@@ -51,11 +79,8 @@ RUN rm -f /workspace/config.py
 RUN pip install --no-deps git+https://github.com/cvg/implicit_dist.git
 RUN pip install --no-deps --upgrade git+https://github.com/endeleze/UNav.git
 
-# Install protobuf for Modal SDK runtime (Modal injects its own Python entrypoint)
-RUN pip install protobuf
-
 # Fail image build early if Modal bootstrap deps are visible.
-RUN /opt/conda/bin/python -c "from google.protobuf.empty_pb2 import Empty; from grpclib import Status; print('modal deps import OK')"
+RUN /opt/conda/bin/python -c "import aiohttp, grpclib; from google.protobuf.empty_pb2 import Empty; print('modal deps import OK')"
 
 # 7. Expose the API port
 EXPOSE 5001
