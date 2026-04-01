@@ -25,6 +25,7 @@ CONTAINER_PORT = 5001
 image = Image.from_dockerfile(
     "Dockerfile",
     context_dir=".",
+    python_version="3.10",
 ).add_local_file("config.py", remote_path="/workspace/config.py")
 
 # ---------------------------------------------------------------------------
