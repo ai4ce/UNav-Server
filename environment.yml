@@ -18,8 +18,8 @@ dependencies:
   - h5py=3.13.0
 
   # ===== Machine/Deep Learning =====
-  - pytorch=2.5.1
-  - torchvision=0.20.1
+  - pytorch=2.4.1
+  - torchvision=0.19.1
   - pytorch-cuda=12.4
   - xformers
   - open3d

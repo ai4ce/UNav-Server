@@ -1,7 +1,7 @@
 don't commit any changes, i have this file @modal_unav_v2.py , there is a .venv which you can activate
 you can server it using modal server {file_name}
 when deploying i got this, issue, i'll paste log
-you job is fix it, run fixes, server the app, hit the url, if there is any issue automatically fix it, then test your changes, once the app is deployed successfully hit the url of fastapi app , if you curl the root url, you can watch for modal fast api logs since you'll be using serve command, based on the error logs , automatically fix the error and retry again
+you job is fix it, run fixes, server the app, hit the url, if there is any issue automatically fix it, then test your changes, once the app is deployed successfully hit the url of fastapi app , if you open the the root url via browser , you can watch for modal fast api logs since you'll be using serve command, based on the error logs , automatically fix the error and retry again
 
 keep doing this untill everything works, stop only if there is anny issue with data_root else if depencendy or anytother issue keep fixing in loop 
 
