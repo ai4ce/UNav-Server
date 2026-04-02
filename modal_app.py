@@ -6,7 +6,6 @@ image = (
         "Dockerfile",
         context_dir=".",
         ignore=[".venv", "__pycache__", ".git", ".modal-cache"],
-        add_python="3.10",
     )
     .run_commands("ln -sf /opt/conda/envs/unav/bin/python3 /usr/bin/python")
     .entrypoint([])
