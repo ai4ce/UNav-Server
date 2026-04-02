@@ -31,9 +31,9 @@ image = (
     )
     # Remove config.py (matches RUN rm -f /workspace/config.py)
     .run_commands("rm -f /workspace/config.py")
-    # Install external packages - use pip directly (like Dockerfile, thanks to SHELL)
-    .run_commands("pip install --no-deps git+https://github.com/cvg/implicit_dist.git")
-    .run_commands("pip install --no-deps --upgrade git+https://github.com/endeleze/UNav.git")
+    # Install external packages - explicitly use Python from unav env
+    .run_commands("/opt/conda/envs/unav/bin/pip install --no-deps git+https://github.com/cvg/implicit_dist.git")
+    .run_commands("/opt/conda/envs/unav/bin/pip install --no-deps --upgrade git+https://github.com/endeleze/UNav.git")
     .env({"LD_LIBRARY_PATH": "/usr/local/cuda/lib64:/opt/conda/envs/unav/lib:$LD_LIBRARY_PATH"})
 )
 
