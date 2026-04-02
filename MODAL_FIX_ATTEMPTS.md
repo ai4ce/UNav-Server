@@ -169,15 +169,15 @@ image = (
 
 ---
 
-## Attempt 18: Removed `add_python`, kept symlink + `.entrypoint([])` (matching Slack thread fix)
+## Attempt 18: Exact Slack thread fix (`ln -s /usr/bin/python3 /usr/bin/python` + `.entrypoint([])`)
 ```python
 image = (
     modal.Image.from_dockerfile("Dockerfile", context_dir=".")
-    .run_commands("ln -sf /opt/conda/envs/unav/bin/python3 /usr/bin/python")
+    .run_commands("ln -s /usr/bin/python3 /usr/bin/python")
     .entrypoint([])
 )
 ```
-**Result:** Pending test. Note: The Slack thread fix was for `from_registry()` (pre-built image), not `from_dockerfile()`.
+**Result:** Failed — same Python detection error. Note: The Slack thread fix was for `from_registry()` (pre-built image with system Python), not `from_dockerfile()` (Conda-based image).
 
 ---
 

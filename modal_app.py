@@ -7,7 +7,7 @@ image = (
         context_dir=".",
         ignore=[".venv", "__pycache__", ".git", ".modal-cache"],
     )
-    .run_commands("ln -sf /opt/conda/envs/unav/bin/python3 /usr/bin/python")
+    .run_commands("ln -s /usr/bin/python3 /usr/bin/python")
     .entrypoint([])
 )
 
