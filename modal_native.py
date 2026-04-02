@@ -28,9 +28,9 @@ image = (
         "conda run -n unav pip install --no-deps git+https://github.com/cvg/implicit_dist.git",
         "conda run -n unav pip install --no-deps --upgrade git+https://github.com/endeleze/UNav.git",
     )
-    # Layer 6: Fix torch/torchvision version mismatch
+    # Layer 6: Fix torch/torchvision version mismatch (use CUDA 12 index)
     .run_commands(
-        "conda run -n unav pip install --no-deps --force-reinstall torch torchvision",
+        "conda run -n unav pip install --no-deps --force-reinstall torch torchvision --index-url https://download.pytorch.org/whl/cu126",
     )
     # Layer 7: Project files (baked into image)
     .add_local_dir(
@@ -42,7 +42,13 @@ image = (
 )
 
 
-@app.function(image=image, gpu="A10")
+@app.function(
+    image=image,
+    gpu="A10",
+    volumes={
+        "/data": modal.Volume.from_name("unav_multifloor"),
+    },
+)
 @modal.web_server(port=5001, startup_timeout=120)
 def web():
     import subprocess
