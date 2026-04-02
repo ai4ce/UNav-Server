@@ -48,7 +48,7 @@ image = (
 
 @app.function(
     image=image,
-    gpu="T4",
+    gpu="t4",
     volumes={
         "/data": modal.Volume.from_name("unav_multifloor"),
     },
