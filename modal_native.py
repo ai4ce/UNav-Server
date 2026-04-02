@@ -34,10 +34,9 @@ image = (
     .run_commands("/opt/conda/envs/unav/bin/pip install --no-deps --upgrade git+https://github.com/endeleze/UNav.git")
     # Verify unav is installed
     .run_commands("/opt/conda/envs/unav/bin/pip list | grep unav")
-    # Fix torch/torchvision - reinstall with CUDA support (explicitly CUDA version)
-    .run_commands("/opt/conda/bin/conda install -n unav --force-reinstall pytorch torchvision -c pytorch -c nvidia -y")
-    # Ensure CUDA version is used
-    .run_commands("/opt/conda/envs/unav/bin/python -c 'import torch; print(torch.cuda.is_available())'")
+    # Fix torch/torchvision - use pip to install CUDA version matching base image (12.6)
+    .run_commands("/opt/conda/envs/unav/bin/pip uninstall -y torch torchvision")
+    .run_commands("/opt/conda/envs/unav/bin/pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126")
     # Keep config.py - it's needed by the code (not removing like Dockerfile)
     .run_commands("ls -la /workspace/config.py || echo 'config.py not found'")
     # List volume structure (for debugging)
@@ -49,12 +48,12 @@ image = (
 
 @app.function(
     image=image,
-    gpu="A10",
+    gpu="T4",
     volumes={
         "/data": modal.Volume.from_name("unav_multifloor"),
     },
 )
-@modal.web_server(port=5001, startup_timeout=120)
+@modal.web_server(port=5001, startup_timeout=600)
 def web():
     import subprocess
     import os
