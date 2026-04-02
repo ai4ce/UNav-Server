@@ -1,7 +1,16 @@
 import modal
 
 app = modal.App("unav-server-anbang-copy")
-image = modal.Image.from_dockerfile("Dockerfile", add_python="3.10").entrypoint([])
+image = (
+    modal.Image.from_dockerfile(
+        "Dockerfile",
+        context_dir=".",
+        ignore=[".venv", "__pycache__", ".git", ".modal-cache"],
+        add_python="3.10",
+    )
+    .run_commands("ln -sf /opt/conda/envs/unav/bin/python3 /usr/bin/python")
+    .entrypoint([])
+)
 
 
 @app.function(image=image, gpu="A10")
