@@ -28,10 +28,11 @@ image = (
         "conda run -n unav pip install --no-deps git+https://github.com/cvg/implicit_dist.git",
         "conda run -n unav pip install --no-deps --upgrade git+https://github.com/endeleze/UNav.git",
     )
-    # Layer 6: Fix torch/torchvision version mismatch (use CUDA 12 index)
+    # Layer 6: Fix torch/torchvision version mismatch (use conda to ensure compatibility)
     .run_commands(
-        "conda run -n unav pip install --no-deps --force-reinstall torch torchvision --index-url https://download.pytorch.org/whl/cu126",
+        "conda install -n unav pytorch torchvision -c pytorch -y",
     )
+    .env({"LD_LIBRARY_PATH": "/usr/local/cuda/lib64:/opt/conda/envs/unav/lib:$LD_LIBRARY_PATH"})
     # Layer 7: Project files (baked into image)
     .add_local_dir(
         ".",
