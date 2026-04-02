@@ -29,12 +29,15 @@ image = (
         copy=True,
         ignore=[".venv", "__pycache__", ".git", ".modal-cache", "*.egg-info", "node_modules", "MODAL_FIX_ATTEMPTS.md", "MODAL_NATIVE_FIXES.md"],
     )
-    # Remove config.py (matches RUN rm -f /workspace/config.py)
-    .run_commands("rm -f /workspace/config.py")
     # Install external packages - explicitly use Python from unav env
     .run_commands("/opt/conda/envs/unav/bin/pip install --no-deps git+https://github.com/cvg/implicit_dist.git")
     .run_commands("/opt/conda/envs/unav/bin/pip install --no-deps --upgrade git+https://github.com/endeleze/UNav.git")
+    # Verify unav is installed
+    .run_commands("/opt/conda/envs/unav/bin/pip list | grep unav")
+    # Keep config.py - it's needed by the code (not removing like Dockerfile)
+    .run_commands("ls -la /workspace/config.py || echo 'config.py not found'")
     .env({"LD_LIBRARY_PATH": "/usr/local/cuda/lib64:/opt/conda/envs/unav/lib:$LD_LIBRARY_PATH"})
+    .env({"PYTHONPATH": "/opt/conda/envs/unav/lib/python3.10/site-packages:/workspace:$PYTHONPATH"})
 )
 
 
