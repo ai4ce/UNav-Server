@@ -34,10 +34,14 @@ image = (
     .run_commands("/opt/conda/envs/unav/bin/pip install --no-deps --upgrade git+https://github.com/endeleze/UNav.git")
     # Verify unav is installed
     .run_commands("/opt/conda/envs/unav/bin/pip list | grep unav")
-    # Fix torch/torchvision - reinstall with CUDA support
+    # Fix torch/torchvision - reinstall with CUDA support (explicitly CUDA version)
     .run_commands("/opt/conda/bin/conda install -n unav --force-reinstall pytorch torchvision -c pytorch -c nvidia -y")
+    # Ensure CUDA version is used
+    .run_commands("/opt/conda/envs/unav/bin/python -c 'import torch; print(torch.cuda.is_available())'")
     # Keep config.py - it's needed by the code (not removing like Dockerfile)
     .run_commands("ls -la /workspace/config.py || echo 'config.py not found'")
+    # List volume structure (for debugging)
+    .run_commands("ls -laR /data 2>/dev/null || echo 'Volume not mounted yet'")
     .env({"LD_LIBRARY_PATH": "/usr/local/cuda/lib64:/opt/conda/envs/unav/lib:$LD_LIBRARY_PATH"})
     .env({"PYTHONPATH": "/opt/conda/envs/unav/lib/python3.10/site-packages:/workspace:$PYTHONPATH"})
 )

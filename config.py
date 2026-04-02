@@ -4,7 +4,7 @@
 # Team members only need to modify this file to adjust deployment or environment settings.
 
 # --- Path Configuration ---
-DATA_ROOT = "/data"
+DATA_ROOT = "/data/data/"
 
 # --- Model Settings ---
 FEATURE_MODEL = "DinoV2Salad"
