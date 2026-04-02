@@ -24,12 +24,15 @@ image = (
         "conda env create -f /tmp/environment.yml && conda clean -afy",
     )
     # Layer 5: External pip packages (cached unless URLs change)
-    # Must use conda run to ensure packages go into the 'unav' env, not Modal's Python
     .run_commands(
         "conda run -n unav pip install --no-deps git+https://github.com/cvg/implicit_dist.git",
         "conda run -n unav pip install --no-deps --upgrade git+https://github.com/endeleze/UNav.git",
     )
-    # Layer 6: Project files (baked into image)
+    # Layer 6: Fix torch/torchvision version mismatch
+    .run_commands(
+        "conda run -n unav pip install --no-deps --force-reinstall torch torchvision",
+    )
+    # Layer 7: Project files (baked into image)
     .add_local_dir(
         ".",
         remote_path="/workspace",
