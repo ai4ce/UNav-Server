@@ -1,4 +1,5 @@
 import modal
+from modal.mount import Mount
 
 app = modal.App("unav-server")
 
@@ -28,28 +29,21 @@ image = (
         "conda run -n unav pip install --no-deps git+https://github.com/cvg/implicit_dist.git",
         "conda run -n unav pip install --no-deps --upgrade git+https://github.com/endeleze/UNav.git",
     )
-    # Layer 6: Project files (last step, deferred to container startup)
+    # Layer 6: Project files (baked into image)
     .add_local_dir(
         ".",
         remote_path="/workspace",
-        ignore=[".venv", "__pycache__", ".git", ".modal-cache", "*.egg-info", "node_modules", "MODAL_FIX_ATTEMPTS.md", "MODAL_NATIVE_FIXES.md", "modal_native.py", "modal_app.py", "modal_sandbox_test.py"],
+        copy=True,
+        ignore=[".venv", "__pycache__", ".git", ".modal-cache", "*.egg-info", "node_modules", "MODAL_FIX_ATTEMPTS.md", "MODAL_NATIVE_FIXES.md"],
     )
 )
 
 
-@app.function(
-    image=image,
-    gpu="A10",
-    mounts=[
-        modal.Mount.from_local_file("config.py", remote_path="/workspace/config.py"),
-    ],
-)
+@app.function(image=image, gpu="A10")
 @modal.web_server(port=5001)
 def web():
     import subprocess
-    import os
 
-    os.chdir("/workspace")
     subprocess.Popen(
         [
             "bash",
