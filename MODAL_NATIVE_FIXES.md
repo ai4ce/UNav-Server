@@ -130,3 +130,10 @@ image = (
 5. **`add_local_file` needs `copy=True`** if followed by `.run_commands()`
 6. **`cd /workspace &&` prefix** needed for uvicorn to find `main.py`
 7. **`LD_LIBRARY_PATH`** must include both `/usr/local/cuda/lib64` and `/opt/conda/envs/unav/lib`
+
+---
+
+### Attempt 10: `FileNotFoundError: /data/parameters/DinoV2Salad/ckpts/dino_salad.ckpt`
+**Status:** New Issue - Model files not on volume
+**Details:** Server started successfully (torch issue resolved!) but model files are missing from the mounted volume `/data`. Need to upload model checkpoints to the volume.
+
