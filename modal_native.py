@@ -40,7 +40,7 @@ image = (
 
 
 @app.function(image=image, gpu="A10")
-@modal.web_server(port=5001)
+@modal.web_server(port=5001, startup_timeout=120)
 def web():
     import subprocess
 
@@ -48,6 +48,6 @@ def web():
         [
             "bash",
             "-c",
-            "source /opt/conda/etc/profile.d/conda.sh && conda activate unav && uvicorn main:app --host 0.0.0.0 --port 5001 --log-level info",
+            "cd /workspace && /opt/conda/envs/unav/bin/uvicorn main:app --host 0.0.0.0 --port 5001 --log-level info 2>&1 | tee /tmp/uvicorn.log",
         ]
     )
