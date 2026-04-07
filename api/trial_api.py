@@ -21,6 +21,19 @@
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, File
 from fastapi.security import OAuth2PasswordBearer
 from config import DATA_ROOT
+import socket as _socket
+
+def _get_site_id():
+    """Auto-detect site from hostname to avoid ID conflicts between servers."""
+    h = _socket.gethostname().lower()
+    if "unav" in h or "nyu" in h:
+        return "nyu"
+    elif "mahidol" in h or "thai" in h:
+        return "mahidol"
+    else:
+        return h.split(".")[0]
+
+SITE_ID = _get_site_id()
 from api.user_api import decode_access_token
 import io
 import logging
@@ -54,7 +67,7 @@ def _sync_trial_to_hf(trial_dir: str, user_id: str, trial_id: str):
             for fname in files:
                 local_path = os.path.join(root, fname)
                 rel_path = os.path.relpath(local_path, trial_dir)
-                repo_path = f"trials/{user_id}/{trial_id}/{rel_path}"
+                repo_path = f"trials/{SITE_ID}/{user_id}/{trial_id}/{rel_path}"
                 try:
                     api.upload_file(
                         path_or_fileobj=local_path,
@@ -145,7 +158,7 @@ async def upload_trial(
     if len(raw) > _MAX_ZIP_BYTES:
         raise HTTPException(status_code=413, detail="upload too large")
 
-    out_dir = os.path.join(DATA_ROOT, "trials", user_id, trial_id)
+    out_dir = os.path.join(DATA_ROOT, "trials", SITE_ID, user_id, trial_id)
     os.makedirs(out_dir, exist_ok=True)
 
     t0 = time.time()
