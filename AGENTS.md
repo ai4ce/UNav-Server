@@ -68,12 +68,11 @@ pytest test_modal_functions.py -v
 
 ### Deployment Commands
 ```bash
-# Deploy to Modal (from unav_v2 directory)
-cd src/modal_functions/unav_v2
-modal deploy unav_modal.py
+# Deploy to Modal (run from repo root)
+modal deploy -m src.modal_functions.unav_v2.unav_modal
 
 # Deploy with custom parameters
-UNAV_SCALEDOWN_WINDOW=600 UNAV_GPU_TYPE=t4 UNAV_RAM_MB=73728 modal deploy unav_modal.py
+UNAV_SCALEDOWN_WINDOW=600 UNAV_GPU_TYPE=t4 UNAV_RAM_MB=73728 modal deploy -m src.modal_functions.unav_v2.unav_modal
 ```
 
 ### GitHub Actions Deployment
@@ -195,4 +194,4 @@ except Exception as e:
 - Code changes may require redeployment to take effect
 - Check TODO.md for technical context on implementation decisions
 - Runtime imports (torch, unav, middleware, google.genai) only exist in Modal container
-- When committing changes, append `Committed by agent (<provider>-<model-name>)` to the commit message (e.g., `Committed by agent (opencode-qwencoder)`, `Committed by agent (claude-code-sonnet)`)
+- When committing changes, prepend `Committed by agent (<provider>-<model-name>)` to the commit message, followed by the actual description (e.g., `Committed by agent (opencode-qwencoder): Fix typo in config`)
