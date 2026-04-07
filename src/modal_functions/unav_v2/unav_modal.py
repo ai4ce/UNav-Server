@@ -159,6 +159,7 @@ class UnavServer:
         y: float = None,
         angle: float = None,
         turn_mode: str = "default",
+        enable_cold_start_bootstrap: bool = False,
     ):
         """Full localization and navigation pipeline."""
         return run_planner(
@@ -180,6 +181,7 @@ class UnavServer:
             y=y,
             angle=angle,
             turn_mode=turn_mode,
+            enable_cold_start_bootstrap=enable_cold_start_bootstrap,
         )
 
     @method()
@@ -193,6 +195,7 @@ class UnavServer:
         top_k: int = None,
         refinement_queue: dict = None,
         enable_multifloor: bool = True,
+        enable_cold_start_bootstrap: bool = False,
     ):
         """Localize user position without navigation planning."""
         return run_localize_user(
@@ -205,6 +208,7 @@ class UnavServer:
             top_k=top_k,
             refinement_queue=refinement_queue,
             enable_multifloor=enable_multifloor,
+            enable_cold_start_bootstrap=enable_cold_start_bootstrap,
         )
 
 

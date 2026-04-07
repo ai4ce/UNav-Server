@@ -195,3 +195,4 @@ except Exception as e:
 - Code changes may require redeployment to take effect
 - Check TODO.md for technical context on implementation decisions
 - Runtime imports (torch, unav, middleware, google.genai) only exist in Modal container
+- When committing changes, append `Committed by agent (opencode-qwencoder)` to the commit message
