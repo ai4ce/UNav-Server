@@ -8,7 +8,7 @@ DATA_ROOT = "/data"
 
 # --- Model Settings ---
 FEATURE_MODEL = "DinoV2Salad"
-LOCAL_FEATURE_MODEL = "superpoint+lightglue"
+LOCAL_FEATURE_MODEL = "mast3r"
 
 # --- Place/Building/Floor Structure ---
 # Add or modify locations, buildings, and available floors as needed.

@@ -13,15 +13,8 @@ IMAGE_NAME="unav-server"
 HOST_PORT=5001
 CONTAINER_PORT=5001
 
-# Absolute path of this script's directory — so `api/`, `main.py`, `core/`
-# etc. can be bind-mounted into /workspace inside the container. This lets
-# us ship backend code changes (e.g. api/trial_api.py for the research
-# TrialRecorder endpoint) without rebuilding the Docker image.
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 echo "Launching Docker container: ${IMAGE_NAME}"
 echo "Mounting local data directory: ${DATA_ROOT} -> /data (in container)"
-echo "Mounting backend source: ${SCRIPT_DIR}/{api,main.py,core,db,models} -> /workspace/..."
 echo "Exposing port: ${HOST_PORT} -> ${CONTAINER_PORT}"
 
 ENV_ARGS=()
@@ -36,17 +29,7 @@ ENV_ARGS=()
 
 docker run --gpus device=1 --rm -it \
   -p "${HOST_PORT}:${CONTAINER_PORT}" \
-  -v "${SCRIPT_DIR}/config.py:/workspace/config.py" \
-  -v "${SCRIPT_DIR}/api:/workspace/api" \
-  -v "${SCRIPT_DIR}/main.py:/workspace/main.py" \
-  -v "${SCRIPT_DIR}/core:/workspace/core" \
-  -v "${SCRIPT_DIR}/db:/workspace/db" \
-  -v "${SCRIPT_DIR}/models:/workspace/models" \
+  -v ./config.py:/workspace/config.py \
   -v "${DATA_ROOT}:/data" \
-  -v "/mnt/data/UNav-IO/temp:/mnt/data/UNav-IO/temp:ro" \
-  -v "/home/unav/Desktop/unav/unav:/opt/conda/envs/unav/lib/python3.10/site-packages/unav" \
-  -v "/home/unav/Desktop/mast3r:/workspace/mast3r" \
   "${ENV_ARGS[@]}" \
-  -e PYTHONPATH=/workspace/mast3r \
-  "${IMAGE_NAME}" \
-  bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate unav && cd /workspace && PYTHONPATH=/workspace/mast3r uvicorn main:app --host 0.0.0.0 --port ${CONTAINER_PORT}"
+  "${IMAGE_NAME}"

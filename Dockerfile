@@ -42,6 +42,7 @@ ARG UNAV_REPO="https://github.com/endeleze/UNav.git"
 ARG UNAV_REF="unav-server"
 RUN pip install --no-deps git+https://github.com/cvg/implicit_dist.git
 RUN pip install --no-deps --upgrade --no-cache-dir "git+${UNAV_REPO}@${UNAV_REF}#egg=unav"
+RUN pip install --no-cache-dir huggingface_hub>=0.20.0
 
 # 7. Expose the API port
 EXPOSE 5001

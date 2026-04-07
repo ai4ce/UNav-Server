@@ -308,13 +308,17 @@ def unav_navigation(inputs):
     key = query_img.shape[:2]
     top_k = inputs.get("top_k", None)
 
+    # RESEARCH MODE: disable multi-frame refinement queue.
+    # Each query is independent (single-frame PnP only).
+    # This makes analysis cleaner — no hidden state between taps.
+    # To re-enable: uncomment the block below.
     refinement_queue = {}
-    if (
-        "refinement_queue" in session
-        and session["refinement_queue"] is not None
-        and key in session["refinement_queue"]
-    ):
-        refinement_queue = session["refinement_queue"][key]
+    # if (
+    #     "refinement_queue" in session
+    #     and session["refinement_queue"] is not None
+    #     and key in session["refinement_queue"]
+    # ):
+    #     refinement_queue = session["refinement_queue"][key]
 
     # -------- Localization --------
     output = localizer.localize(query_img, refinement_queue, top_k=top_k)
@@ -382,6 +386,24 @@ def unav_navigation(inputs):
         "best_map_key": safe_serialize(source_key),
         "floorplan_pose": safe_serialize(floorplan_pose),
         "turn_mode": turn_mode,
+        # Localization quality signals (for uncertainty estimation research)
+        "total_inliers": sum(
+            r.get("inliers", 0)
+            for r in (output.get("results") or [])
+            if isinstance(r, dict)
+        ),
+        "per_candidate_inliers": safe_serialize([
+            {
+                "ref": r.get("ref_image_name"),
+                "score": r.get("score"),
+                "inliers": r.get("inliers", 0),
+            }
+            for r in (output.get("results") or [])
+            if isinstance(r, dict)
+        ]),
+        "timings": output.get("timings"),
+        "top_candidates": output.get("top_candidates"),
+        "local_feature_model": "mast3r" if hasattr(localizer, "use_mast3r") and localizer.use_mast3r else "superpoint+lightglue",
     }
 
 
