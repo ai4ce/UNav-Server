@@ -181,6 +181,20 @@ unav_image = (
         "pip install . --no-deps",
         "pip freeze",
     )
+    # MASt3R Integration Approaches (see MAST3R_INTEGRATION.md for tracking)
+    # Option A: pip install -e .[mast3r] (simplified - try first) ❌ FAILED - no PyPI package
+    # Option B: Clone mast3r from GitHub and install dependencies (current approach)
+    # Option C: pip install from mast3r GitHub repo directly
+    # Currently trying: Option B - git clone https://github.com/naver/mast3r
+    # Install mast3r from GitHub (Option B)
+    .run_commands("cd /root && git clone --recursive https://github.com/naver/mast3r")
+    .workdir("/root/mast3r")
+    .run_commands("pip install -r requirements.txt")
+    .run_commands("pip install -r dust3r/requirements.txt")
+    .run_commands("pip install poselib")
+    # Reinstall faiss-gpu after numpy upgrade from mast3r requirements
+    .run_commands("pip install --no-deps faiss-gpu")
+    .workdir("/root")
     .pip_install_private_repos(
         "github.com/ai4ce/unav",
         git_user="surendharpalanisamy",
