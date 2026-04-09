@@ -192,14 +192,14 @@ unav_image = (
     .run_commands("pip install -r requirements.txt")
     .run_commands("pip install -r dust3r/requirements.txt")
     .run_commands("pip install poselib")
-    .run_commands("pip install --no-deps -e .")
-    # Reinstall numpy<2 and faiss-gpu-cu12 (CUDA 12) for compatibility
+    # Add mast3r to PYTHONPATH and reinstall numpy<2 and faiss-gpu-cu12 for compatibility
     .run_commands(
         "pip install 'numpy<2.0.0'", "pip install --no-deps faiss-gpu-cu12==1.11.0"
     )
+    .env({"PYTHONPATH": "/root/mast3r:$PYTHONPATH"})
     .workdir("/root")
     .pip_install_private_repos(
-        "github.com/ai4ce/unav",
+        "github.com/endeleze/UNav.git",
         git_user="surendharpalanisamy",
         secrets=[github_secret],
         extra_options="--no-deps",
