@@ -192,8 +192,8 @@ unav_image = (
     .run_commands("pip install -r requirements.txt")
     .run_commands("pip install -r dust3r/requirements.txt")
     .run_commands("pip install poselib")
-    # Reinstall faiss-gpu after numpy upgrade from mast3r requirements
-    .run_commands("pip install --no-deps faiss-gpu")
+    # Reinstall faiss-gpu and numpy<2 after mast3r requirements upgrade numpy
+    .run_commands("pip install 'numpy<2.0.0'", "pip install --no-deps faiss-gpu")
     .workdir("/root")
     .pip_install_private_repos(
         "github.com/ai4ce/unav",
