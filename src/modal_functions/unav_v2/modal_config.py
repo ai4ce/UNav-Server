@@ -241,7 +241,7 @@ unav_image = (
         "tyro",
         "wandb==0.20.0",
         "xformers==0.0.30",
-        "psutil==7.1.0",
+        "psutil",
         "opencv-python==4.11.0.86",
         "requests",
         "google-ai-generativelanguage",
