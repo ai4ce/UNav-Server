@@ -192,7 +192,7 @@ unav_image = (
     .run_commands("pip install -r requirements.txt")
     .run_commands("pip install -r dust3r/requirements.txt")
     .run_commands("pip install poselib")
-    .run_commands("pip install -e .")
+    .run_commands("pip install --no-deps -e .")
     # Reinstall numpy<2 and faiss-gpu-cu12 (CUDA 12) for compatibility
     .run_commands(
         "pip install 'numpy<2.0.0'", "pip install --no-deps faiss-gpu-cu12==1.11.0"
