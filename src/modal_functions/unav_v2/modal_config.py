@@ -192,8 +192,10 @@ unav_image = (
     .run_commands("pip install -r requirements.txt")
     .run_commands("pip install -r dust3r/requirements.txt")
     .run_commands("pip install poselib")
-    # Reinstall faiss-gpu and numpy<2 after mast3r requirements upgrade numpy
-    .run_commands("pip install 'numpy<2.0.0'", "pip install --no-deps faiss-gpu")
+    # Reinstall numpy<2 and faiss-gpu-cu12 (CUDA 12) for compatibility
+    .run_commands(
+        "pip install 'numpy<2.0.0'", "pip install --no-deps faiss-gpu-cu12==1.11.0"
+    )
     .workdir("/root")
     .pip_install_private_repos(
         "github.com/ai4ce/unav",
@@ -212,39 +214,36 @@ unav_image = (
     )
     .run_commands("pip freeze")
     .pip_install(
-        "torch>=2.4.0",
-        "torchvision>=0.19.0",
-        "dataloaders>=0.0.1",
-        "einops>=0.8.1",
-        "faiss-gpu>=1.7.2",
-        "fast-pytorch-kmeans>=0.2.0.1",
-        "h5py>=3.7.0",
-        "joblib>=1.1.1",
-        "kornia>=0.6.12",
-        "lib>=4.0.0",
-        "matplotlib>=3.7.1",
-        "open3d>=0.19.0",
-        "Pillow>=10.0.0",
-        "poselib>=2.0.0",
-        "POT>=0.9.0",
-        "prettytable<=3.11.0",
-        "pytorch-lightning>=2.0.6",
-        "pytorch-metric-learning>=2.3.0",
-        "PyYAML>=6.0",
-        "scikit-image>=0.19.2",
-        "scikit-learn>=1.2.1",
-        "scipy>=1.10.0",
-        "Shapely>=2.0.7",
-        "timm>=0.4.12",
-        "tqdm>=4.65.0",
-        "transformers>=4.45.0",
-        "tyro>=0.9.22",
-        "wandb>=0.19.11",
-        "xformers>=0.0.28",
-        "psutil",
-        "opencv-python==4.10.0.84",
+        "numpy<2.0.0",
+        "torch==2.7.0",
+        "torchvision",
+        "faiss-gpu-cu12==1.11.0",
+        "fast_pytorch_kmeans==0.2.2",
+        "h5py",
+        "joblib",
+        "kornia",
+        "matplotlib",
+        "open3d==0.19.0",
+        "Pillow",
+        "poselib==2.0.4",
+        "POT",
+        "prettytable",
+        "pytorch-lightning==2.5.1.post0",
+        "pytorch-metric-learning==2.8.1",
+        "PyYAML",
+        "scikit-image",
+        "scikit-learn",
+        "scipy",
+        "Shapely",
+        "timm==1.0.15",
+        "tqdm",
+        "transformers==4.52.4",
+        "tyro",
+        "wandb==0.20.0",
+        "xformers==0.0.30",
+        "psutil==7.1.0",
+        "opencv-python==4.11.0.86",
         "requests",
-        "pyYAML",
         "google-ai-generativelanguage",
         "google-genai",
         "middleware-io",
