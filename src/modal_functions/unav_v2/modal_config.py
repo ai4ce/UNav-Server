@@ -1,5 +1,6 @@
-from modal import App, Image, Volume, Secret
 from pathlib import Path
+
+from modal import App, Image, Secret, Volume
 
 volume = Volume.from_name("unav_multifloor")
 
@@ -8,6 +9,7 @@ LIGHTGLUE_URL = "https://github.com/cvg/LightGlue/releases/download/v0.1_arxiv/s
 DINOSALAD_URL = (
     "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitb14/dinov2_vitb14_pretrain.pth"
 )
+MAST3R_REPO_URL = "https://github.com/naver/mast3r.git"
 # Get the current file's directory
 current_dir = Path(__file__).resolve().parent
 
@@ -186,6 +188,22 @@ unav_image = (
         git_user="surendharpalanisamy",
         secrets=[github_secret],
         extra_options="--no-deps",
+    )
+    .workdir("/root")
+    .run_commands(
+        f"git clone --recursive {MAST3R_REPO_URL} mast3r",
+    )
+    .workdir("/root/mast3r")
+    .run_commands(
+        "pip install -r requirements.txt",
+        "pip install -r dust3r/requirements.txt",
+        "pip install poselib",
+        (
+            "if command -v nvcc >/dev/null 2>&1; then "
+            "cd dust3r/croco/models/curope && python setup.py build_ext --inplace; "
+            "else echo '⚠️ nvcc not found; skipping optional CUDA RoPE build'; "
+            "fi"
+        ),
     )
     .workdir("/root")
     .run_commands("git clone https://github.com/ai4ce/UNav-Server.git unav_server_v2")
