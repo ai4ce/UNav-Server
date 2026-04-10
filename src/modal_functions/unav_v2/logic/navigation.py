@@ -172,6 +172,21 @@ def run_planner(
                         queue_key = _get_queue_key_for_image_shape(image.shape)
                         is_cold_start = len(refinement_queue) == 0
                         print(f"🔍 Cold start: {is_cold_start}, refinement_queue size: {len(refinement_queue)}")
+                        local_extractor = getattr(localizer_to_use, "local_extractor", None)
+                        local_matcher = getattr(localizer_to_use, "local_matcher", None)
+                        global_extractor = getattr(localizer_to_use, "global_extractor", None)
+                        local_feature_model = getattr(
+                            getattr(localizer_to_use, "config", None),
+                            "local_feature_model",
+                            getattr(self, "LOCAL_FEATURE_MODEL", "unknown"),
+                        )
+                        print(
+                            "🧪 [LOCALIZER DEBUG] "
+                            f"local_feature_model={local_feature_model}, "
+                            f"local_extractor={type(local_extractor).__name__}(callable={callable(local_extractor)}), "
+                            f"local_matcher={type(local_matcher).__name__}(callable={callable(local_matcher)}), "
+                            f"global_extractor={type(global_extractor).__name__}(callable={callable(global_extractor)})"
+                        )
 
                         if is_cold_start:
                             bootstrap_outputs = []
@@ -179,7 +194,18 @@ def run_planner(
                             for bootstrap_pass in range(2):
                                 print(f"🔄 Bootstrap pass {bootstrap_pass + 1}/2...")
                                 bootstrap_output = localizer_to_use.localize(image, empty_queue, top_k=top_k)
-                                print(f"   Bootstrap output: {bootstrap_output}")
+                                if bootstrap_output is None:
+                                    print("   Bootstrap summary: output=None")
+                                else:
+                                    print(
+                                        "   Bootstrap summary: "
+                                        f"success={bootstrap_output.get('success')}, "
+                                        f"stage={bootstrap_output.get('stage')}, "
+                                        f"reason={bootstrap_output.get('reason')}, "
+                                        f"best_map_key={bootstrap_output.get('best_map_key')}, "
+                                        f"top_candidates={len(bootstrap_output.get('top_candidates', []))}, "
+                                        f"results={len(bootstrap_output.get('results', []))}"
+                                    )
                                 if bootstrap_output and bootstrap_output.get("success"):
                                     bootstrap_outputs.append(bootstrap_output)
                                     best_map_key = bootstrap_output.get("best_map_key")
