@@ -139,7 +139,7 @@ def download_torch_hub_weights():
 
 
 app = App(
-    name="unav-server-v21",
+    name="unav-server-v21-mast3r",
     # mounts removed as deprecated
 )
 

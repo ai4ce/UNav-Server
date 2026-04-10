@@ -16,7 +16,7 @@ def main():
     IMAGE_PATH = "media/image2.png"
 
     try:
-        UnavServer = modal.Cls.lookup("unav-server-v21", "UnavServer")
+        UnavServer = modal.Cls.lookup("unav-server-v21-mast3r", "UnavServer")
         unav_server = UnavServer()
         current_directory = os.getcwd()
         full_image_path = os.path.join(current_directory, IMAGE_PATH)
@@ -32,17 +32,17 @@ def main():
         )
         print("Result:", result)
 
-        print("\n" + "="*50)
-        print("Testing localize_user...")
-        print("="*50)
-        localize_result = unav_server.localize_user.remote(
-            session_id=SESSION_ID,
-            base_64_image=base64_encoded,
-            place=PLACE,
-            building=BUILDING,
-            floor=FLOOR,
-        )
-        print("Localization Result:", localize_result)
+        # print("\n" + "="*50)
+        # print("Testing localize_user...")
+        # print("="*50)
+        # localize_result = unav_server.localize_user.remote(
+        #     session_id=SESSION_ID,
+        #     base_64_image=base64_encoded,
+        #     place=PLACE,
+        #     building=BUILDING,
+        #     floor=FLOOR,
+        # )
+        # print("Localization Result:", localize_result)
 
         print("\n" + "="*50)
         print("Testing planner (full navigation)...")
@@ -58,26 +58,26 @@ def main():
         )
         print("Planner Result:", planner_result)
 
-        print("\n" + "="*50)
-        print("Testing planner with user-provided coordinates (skip localization)...")
-        print("="*50)
-        # Test planner with user-provided coordinates
-        # These coordinates match the localization result from the previous test
-        planner_with_coords_result = unav_server.planner.remote(
-            session_id=SESSION_ID + "_coords",
-            base_64_image=None,  # Optional when using provided coordinates
-            destination_id=DESTINATION_ID,
-            place=PLACE,
-            building=BUILDING,
-            floor=FLOOR,
-            should_use_user_provided_coordinate=True,
-            x=2022.320618102614,
-            y=439.39776200033907,
-            angle=298.4154661831644,
-            unit="meter",
-            language="en"
-        )
-        print("Planner with Coordinates Result:", planner_with_coords_result)
+        # print("\n" + "="*50)
+        # print("Testing planner with user-provided coordinates (skip localization)...")
+        # print("="*50)
+        # # Test planner with user-provided coordinates
+        # # These coordinates match the localization result from the previous test
+        # planner_with_coords_result = unav_server.planner.remote(
+        #     session_id=SESSION_ID + "_coords",
+        #     base_64_image=None,  # Optional when using provided coordinates
+        #     destination_id=DESTINATION_ID,
+        #     place=PLACE,
+        #     building=BUILDING,
+        #     floor=FLOOR,
+        #     should_use_user_provided_coordinate=True,
+        #     x=2022.320618102614,
+        #     y=439.39776200033907,
+        #     angle=298.4154661831644,
+        #     unit="meter",
+        #     language="en"
+        # )
+        # print("Planner with Coordinates Result:", planner_with_coords_result)
 
  
     except Exception as e:
