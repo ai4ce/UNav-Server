@@ -179,6 +179,7 @@ def run_planner(
                             for bootstrap_pass in range(2):
                                 print(f"🔄 Bootstrap pass {bootstrap_pass + 1}/2...")
                                 bootstrap_output = localizer_to_use.localize(image, empty_queue, top_k=top_k)
+                                print(f"   Bootstrap output: {bootstrap_output}")
                                 if bootstrap_output and bootstrap_output.get("success"):
                                     bootstrap_outputs.append(bootstrap_output)
                                     best_map_key = bootstrap_output.get("best_map_key")
