@@ -248,6 +248,29 @@ def run_planner(
 
                 if output is None or "floorplan_pose" not in output:
                     print("❌ Localization failed, no pose found.")
+                    local_feature_model_name = getattr(self, "LOCAL_FEATURE_MODEL", "unknown")
+                    if "localizer_to_use" in locals():
+                        local_feature_model_name = getattr(
+                            getattr(localizer_to_use, "config", None),
+                            "local_feature_model",
+                            local_feature_model_name,
+                        )
+                    failed_results = []
+                    if isinstance(output, dict):
+                        raw_results = output.get("results") or []
+                        failed_results = [r for r in raw_results if isinstance(r, dict)]
+                    max_inliers = max((r.get("inliers", 0) for r in failed_results), default=0)
+                    print(
+                        "❌ [PLANNER RESULT] "
+                        f"status=error, "
+                        f"stage={(output or {}).get('stage') if isinstance(output, dict) else 'no_output'}, "
+                        f"reason={(output or {}).get('reason') if isinstance(output, dict) else 'no_output'}, "
+                        f"best_map_key={(output or {}).get('best_map_key') if isinstance(output, dict) else None}, "
+                        f"local_feature_model={local_feature_model_name}, "
+                        f"top_candidates_count={len((output or {}).get('top_candidates', []) if isinstance(output, dict) else [])}, "
+                        f"results_count={len(failed_results)}, "
+                        f"max_inliers={max_inliers}"
+                    )
                     if is_vlm_extraction_enabled:
                         try:
                             extracted_text = run_vlm_on_image(server=self, image=image)
