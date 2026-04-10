@@ -216,11 +216,12 @@ unav_image = (
     )
     .run_commands("pip freeze")
     .pip_install(
+        "numpy==1.26.4",
         "torch>=2.4.0",
         "torchvision>=0.19.0",
         "dataloaders>=0.0.1",
         "einops>=0.8.1",
-        "faiss-gpu>=1.7.2",
+        "faiss-gpu-cu12==1.11.0",
         "fast-pytorch-kmeans>=0.2.0.1",
         "h5py>=3.7.0",
         "joblib>=1.1.1",
@@ -253,6 +254,9 @@ unav_image = (
         "google-genai",
         "middleware-io",
         "middleware-io[profiling]",
+    )
+    .run_commands(
+        "python -c \"import numpy, faiss; print('numpy', numpy.__version__)\"",
     )
     .run_function(download_torch_hub_weights)
     .env(
