@@ -189,55 +189,9 @@ def run_planner(
                         )
 
                         if is_cold_start:
-                            bootstrap_outputs = []
-                            empty_queue = refinement_queue.copy()
-                            for bootstrap_pass in range(2):
-                                print(f"🔄 Bootstrap pass {bootstrap_pass + 1}/2...")
-                                bootstrap_output = localizer_to_use.localize(image, empty_queue, top_k=top_k)
-                                if bootstrap_output is None:
-                                    print("   Bootstrap summary: output=None")
-                                else:
-                                    print(
-                                        "   Bootstrap summary: "
-                                        f"success={bootstrap_output.get('success')}, "
-                                        f"stage={bootstrap_output.get('stage')}, "
-                                        f"reason={bootstrap_output.get('reason')}, "
-                                        f"best_map_key={bootstrap_output.get('best_map_key')}, "
-                                        f"top_candidates={len(bootstrap_output.get('top_candidates', []))}, "
-                                        f"results={len(bootstrap_output.get('results', []))}"
-                                    )
-                                if bootstrap_output and bootstrap_output.get("success"):
-                                    bootstrap_outputs.append(bootstrap_output)
-                                    best_map_key = bootstrap_output.get("best_map_key")
-                                    print(f"   ✅ Pass {bootstrap_pass + 1}: best_map_key={best_map_key}")
-                                    new_queue = bootstrap_output.get("refinement_queue", {})
-                                    if best_map_key and new_queue:
-                                        empty_queue = _update_refinement_queue(empty_queue, best_map_key, queue_key, new_queue.get(best_map_key, {}).get(queue_key, {"pairs": [], "initial_poses": [], "pps": []}))
-
-                            if len(bootstrap_outputs) >= 2:
-                                xy_sum = [0.0, 0.0]
-                                ang_sum = 0.0
-                                for bo in bootstrap_outputs:
-                                    fp = bo.get("floorplan_pose", {})
-                                    xy = fp.get("xy", [0, 0])
-                                    xy_sum[0] += xy[0]
-                                    xy_sum[1] += xy[1]
-                                    ang_sum += fp.get("ang", 0)
-                                avg_xy = [xy_sum[0] / len(bootstrap_outputs), xy_sum[1] / len(bootstrap_outputs)]
-                                avg_ang = ang_sum / len(bootstrap_outputs)
-                                output = bootstrap_outputs[-1].copy()
-                                output["floorplan_pose"] = {"xy": avg_xy, "ang": avg_ang}
-                                output["bootstrap_mode"] = "mean_all_passes"
-                                output["bootstrap_passes"] = len(bootstrap_outputs)
-                            elif bootstrap_outputs:
-                                output = bootstrap_outputs[-1]
-                                output["bootstrap_mode"] = "single_pass"
-                            else:
-                                output = localizer_to_use.localize(image, refinement_queue, top_k=top_k)
-                                output["bootstrap_mode"] = "none"
-                        else:
-                            output = localizer_to_use.localize(image, refinement_queue, top_k=top_k)
-                            output["bootstrap_mode"] = "none"
+                            print("⏭️ Cold-start bootstrap disabled; running single-pass localization.")
+                        output = localizer_to_use.localize(image, refinement_queue, top_k=top_k)
+                        output["bootstrap_mode"] = "none"
 
                         output["map_scope"] = "building_level_multifloor" if enable_multifloor else "floor_locked"
                         output["queue_key"] = queue_key
