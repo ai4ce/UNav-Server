@@ -58,6 +58,12 @@ def run_ensure_maps_loaded(
     import time
 
     selective_localizer = UNavLocalizer(selective_config.localizer_config)
+    try:
+        from .init import _apply_mast3r_extraction_fallback
+
+        _apply_mast3r_extraction_fallback(server, selective_localizer)
+    except Exception as e:
+        print(f"⚠️ Failed to apply MASt3R fallback on selective localizer: {e}")
 
     if hasattr(server, "tracer") and server.tracer:
         try:
