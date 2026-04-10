@@ -197,6 +197,8 @@ unav_image = (
     .run_commands(
         "pip install -r requirements.txt",
         "pip install -r dust3r/requirements.txt",
+        "pip install -e dust3r",
+        "pip install -e .",
         "pip install poselib",
         (
             "if command -v nvcc >/dev/null 2>&1; then "
@@ -204,6 +206,7 @@ unav_image = (
             "else echo '⚠️ nvcc not found; skipping optional CUDA RoPE build'; "
             "fi"
         ),
+        "python -c \"from mast3r.model import AsymmetricMASt3R; print('mast3r import ok')\"",
     )
     .workdir("/root")
     .run_commands("git clone https://github.com/ai4ce/UNav-Server.git unav_server_v2")
