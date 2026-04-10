@@ -11,9 +11,9 @@ def main():
     BUILDING = "LightHouse"
     PLACE = "New_York_City"
     FLOOR = "6_floor"
-    DESTINATION_ID = "40"
+    DESTINATION_ID = "50"
     SESSION_ID = "test_session_id_2"
-    IMAGE_PATH = "media/image2.png"
+    IMAGE_PATH = "media/sample_image_4.jpg"
 
     try:
         UnavServer = modal.Cls.lookup("unav-server-v21-mast3r", "UnavServer")
