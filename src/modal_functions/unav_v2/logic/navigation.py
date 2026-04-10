@@ -313,16 +313,54 @@ def run_planner(
                 timing_data["total"] = (time.time() - start_time) * 1000
                 print(f"⏱️ Total Navigation Time: {timing_data['total']:.2f}ms")
 
+                local_feature_model_name = getattr(self, "LOCAL_FEATURE_MODEL", "unknown")
+                if "localizer_to_use" in locals():
+                    local_feature_model_name = getattr(
+                        getattr(localizer_to_use, "config", None),
+                        "local_feature_model",
+                        local_feature_model_name,
+                    )
+                localization_results = output.get("results") or []
+
                 result = {
                     "status": "success",
                     "result": serialized_result,
                     "cmds": serialized_cmds,
                     "best_map_key": serialized_source_key,
                     "floorplan_pose": serialized_floorplan_pose,
+                    "turn_mode": turn_mode,
+                    "total_inliers": sum(
+                        r.get("inliers", 0)
+                        for r in localization_results
+                        if isinstance(r, dict)
+                    ),
+                    "per_candidate_inliers": run_safe_serialize(
+                        [
+                            {
+                                "ref": r.get("ref_image_name"),
+                                "score": r.get("score"),
+                                "inliers": r.get("inliers", 0),
+                            }
+                            for r in localization_results
+                            if isinstance(r, dict)
+                        ]
+                    ),
+                    "timings": output.get("timings"),
+                    "top_candidates": run_safe_serialize(output.get("top_candidates")),
+                    "local_feature_model": local_feature_model_name,
                     "navigation_info": {"start_location": f"{start_place}/{start_building}/{start_floor}", "destination": f"{target_place}/{target_building}/{target_floor}", "dest_id": dest_id, "unit": unit, "language": language},
                     "timing": timing_data,
                     "debug_info": {"map_scope": output.get("map_scope", "unknown"), "bootstrap_mode": output.get("bootstrap_mode", "none"), "bootstrap_passes": output.get("bootstrap_passes"), "queue_key": output.get("queue_key", "unknown"), "n_frames": output.get("n_frames"), "top_candidates_count": len(output.get("top_candidates", []))},
                 }
+                print(
+                    "✅ [PLANNER RESULT] "
+                    f"status={result.get('status')}, "
+                    f"best_map_key={result.get('best_map_key')}, "
+                    f"floorplan_pose={result.get('floorplan_pose')}, "
+                    f"local_feature_model={result.get('local_feature_model')}, "
+                    f"total_inliers={result.get('total_inliers')}, "
+                    f"top_candidates_count={len(result.get('top_candidates') or [])}"
+                )
 
                 return run_convert_navigation_to_trajectory(result)
 
