@@ -143,7 +143,7 @@ def _override_mast3r_config(localizer):
         if isinstance(mast3r_cfg, dict):
             if "max_nn_dist" in mast3r_cfg:
                 old_val = mast3r_cfg["max_nn_dist"]
-                mast3r_cfg["max_nn_dist"] = 100.0
+                mast3r_cfg["max_nn_dist"] = 80.0
                 print(f"🔧 [CONFIG OVERRIDE] max_nn_dist: {old_val} -> 100.0")
                 overridden.append("max_nn_dist")
             if "max_candidates" in mast3r_cfg:
@@ -745,6 +745,57 @@ def _patch_mast3r_matching_debug():
         tried_imports.append(f"FAILED: {e}")
 
     print(f"🔍 [MASt3R DEBUG] Import attempts: {tried_imports}")
+
+    try:
+        from unav.core.feature.local_extractor import MASt3RExtractor
+
+        _patch_mast3r_extractor_class(MASt3RExtractor)
+    except ImportError as e:
+        print(f"⚠️ [MASt3R DEBUG] Could not import MASt3RExtractor: {e}")
+
+
+def _patch_mast3r_extractor_class(cls):
+    """Patch MASt3RExtractor.__call__ to log raw matching output."""
+    import functools
+
+    if getattr(cls, "__mast3r_extractor_patched__", False):
+        print("ℹ️ [MAST3R EXT] Already patched")
+        return
+
+    original_call = cls.__call__ if hasattr(cls, "__call__") else None
+
+    if original_call and not getattr(original_call, "__mast3r_patched__", False):
+
+        @functools.wraps(original_call)
+        def patched_call(self, *args, **kwargs):
+            print(f"🔍 [MAST3R.forward] MASt3RExtractor.__call__ invoked")
+            print(f"   self type: {type(self).__name__}")
+            if args:
+                print(
+                    f"   arg[0]: {type(args[0]).__name__}"
+                    + (f", shape={args[0].shape}" if hasattr(args[0], "shape") else "")
+                )
+            result = original_call(self, *args, **kwargs)
+            print(f"🔍 [MAST3R.forward] raw result type: {type(result).__name__}")
+            if isinstance(result, dict):
+                for k, v in result.items():
+                    shape_str = f", shape={v.shape}" if hasattr(v, "shape") else ""
+                    len_str = (
+                        f", len={len(v)}"
+                        if hasattr(v, "__len__") and not hasattr(v, "shape")
+                        else ""
+                    )
+                    print(f"   [{k}]: {type(v).__name__}{shape_str}{len_str}")
+            elif hasattr(result, "shape"):
+                print(f"   result shape: {result.shape}")
+            return result
+
+        patched_call.__mast3r_patched__ = True
+        cls.__call__ = patched_call
+        cls.__mast3r_extractor_patched__ = True
+        print("🔧 [MAST3R EXT] Patched MASt3RExtractor.__call__")
+    else:
+        print(f"⚠️ [MAST3R EXT] Could not patch MASt3RExtractor.__call__")
 
 
 def run_monkey_patch_localizer_methods(self, localizer, method_names=None):
