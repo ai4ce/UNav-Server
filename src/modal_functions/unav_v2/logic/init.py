@@ -169,11 +169,26 @@ def _override_mast3r_config(localizer):
                 loc["topk"] = 50
                 print(f"🔧 [CONFIG OVERRIDE] topk: {old_val} -> 50")
                 overridden.append("topk")
-            if loc.get("min_inliers", 50) > 10:
+            if loc.get("max_candidates", 10) < 50:
+                old_val = loc.get("max_candidates", 10)
+                loc["max_candidates"] = 50
+                print(
+                    f"🔧 [CONFIG OVERRIDE] max_candidates (localization): {old_val} -> 50"
+                )
+                overridden.append("max_candidates")
+            if loc.get("min_inliers", 50) > 5:
                 old_val = loc.get("min_inliers", 50)
-                loc["min_inliers"] = 10
-                print(f"🔧 [CONFIG OVERRIDE] min_inliers: {old_val} -> 10")
+                loc["min_inliers"] = 5
+                print(f"🔧 [CONFIG OVERRIDE] min_inliers: {old_val} -> 5")
                 overridden.append("min_inliers")
+            if (
+                "early_stop_inliers" not in loc
+                or loc.get("early_stop_inliers", 0) < 200
+            ):
+                old_val = loc.get("early_stop_inliers", "not set")
+                loc["early_stop_inliers"] = 200
+                print(f"🔧 [CONFIG OVERRIDE] early_stop_inliers: {old_val} -> 200")
+                overridden.append("early_stop_inliers")
             if "feature_score_threshold" in loc:
                 old_val = loc["feature_score_threshold"]
                 loc["feature_score_threshold"] = 0.01
@@ -494,119 +509,242 @@ def _add_localizer_debug_logging(localizer):
     print("🔧 Patched localizer methods for debug logging")
 
 
+def _patch_matcher_module(module):
+    """Patch functions inside unav.localizer.tools.matcher."""
+    import functools
+
+    if getattr(module, "__mast3r_debug_patched__", False):
+        print("ℹ️ [MATCHER DEBUG] Already patched")
+        return
+
+    avail = [a for a in dir(module) if not a.startswith("_")]
+    print(f"🔍 [MATCHER DEBUG] Available in matcher module: {avail}")
+
+    target_funcs = [
+        "batch_local_matching_and_ransac",
+        "mast3r_matching_and_pnp",
+        "match_query_to_database",
+        "ransac_filter",
+        "mast3r_retrieve_matches_and_pnp",
+    ]
+
+    FORCE_MIN_INLIERS = 5
+    FORCE_EARLY_STOP = 200
+
+    for fname in target_funcs:
+        if hasattr(module, fname):
+            orig = getattr(module, fname)
+            if not callable(orig):
+                continue
+
+            @functools.wraps(orig)
+            def make_wrapper(f, name):
+                def wrapper(*args, **kwargs):
+                    if name == "mast3r_matching_and_pnp":
+                        kwargs["min_inliers"] = FORCE_MIN_INLIERS
+                        kwargs["early_stop_inliers"] = FORCE_EARLY_STOP
+                        print(
+                            f"🔧 [MATCHER.{name}] FORCED min_inliers={FORCE_MIN_INLIERS}, early_stop_inliers={FORCE_EARLY_STOP}"
+                        )
+                    print(
+                        f"🔍 [MATCHER.{name}] called — args={len(args)}, kwargs={list(kwargs.keys())}"
+                    )
+                    for i, a in enumerate(args):
+                        t = type(a).__name__
+                        print(
+                            f"   arg[{i}]: {t}"
+                            + (
+                                f", shape={a.shape}"
+                                if hasattr(a, "shape")
+                                else (
+                                    f", len={len(a)}" if hasattr(a, "__len__") else ""
+                                )
+                            )
+                        )
+                    for k, v in kwargs.items():
+                        print(
+                            f"   {k}={type(v).__name__}"
+                            + (
+                                f", shape={v.shape}"
+                                if hasattr(v, "shape")
+                                else (
+                                    f", val={v}"
+                                    if isinstance(v, (int, float, str))
+                                    else ""
+                                )
+                            )
+                        )
+                    result = f(*args, **kwargs)
+                    if isinstance(result, tuple) and len(result) == 3:
+                        bmk, pairs, res = result
+                        pairs_info = "N/A"
+                        if isinstance(pairs, dict):
+                            pair_shapes = {}
+                            for k, v in pairs.items():
+                                if hasattr(v, "shape"):
+                                    pair_shapes[k] = f"shape={v.shape}"
+                                elif hasattr(v, "__len__"):
+                                    pair_shapes[k] = f"len={len(v)}"
+                                else:
+                                    pair_shapes[k] = type(v).__name__
+                            pairs_info = str(pair_shapes)
+                        print(
+                            f"🔍 [MATCHER.{name}] result: best={bmk}, pairs={pairs_info}, results={len(res) if res else 0}"
+                        )
+                        if res and len(res) > 0:
+                            for ri, ritem in enumerate(res[:5]):
+                                print(f"   result[{ri}]: {ritem}")
+                    elif isinstance(result, dict):
+                        print(
+                            f"🔍 [MATCHER.{name}] result dict keys: {list(result.keys())[:10]}"
+                        )
+                    elif result is None:
+                        print(f"🔍 [MATCHER.{name}] result: None")
+                    else:
+                        print(f"🔍 [MATCHER.{name}] result: {type(result).__name__}")
+                    return result
+
+                return wrapper
+
+            wrapped = make_wrapper(orig, fname)
+            setattr(module, fname, wrapped)
+            print(f"🔧 [MATCHER DEBUG] Patched {fname}")
+
+    module.__mast3r_debug_patched__ = True
+
+
+def _patch_local_extractor_module(module):
+    """Patch MASt3RExtractor and related functions in local_extractor."""
+    import functools
+
+    if getattr(module, "__mast3r_debug_patched__", False):
+        print("ℹ️ [LOCAL_EXT DEBUG] Already patched")
+        return
+
+    avail = [a for a in dir(module) if not a.startswith("_")]
+    print(f"🔍 [LOCAL_EXT DEBUG] Available: {avail}")
+
+    for attr_name in avail:
+        attr = getattr(module, attr_name)
+        if callable(attr) and (
+            "mast3r" in attr_name.lower()
+            or "matcher" in attr_name.lower()
+            or "extractor" in attr_name.lower()
+        ):
+
+            @functools.wraps(attr)
+            def make_ext_wrapper(f, name):
+                def wrapper(*args, **kwargs):
+                    print(f"🔍 [LOCAL_EXT.{name}] called")
+                    result = f(*args, **kwargs)
+                    print(
+                        f"🔍 [LOCAL_EXT.{name}] result type: {type(result).__name__}"
+                        + (
+                            f", shape={result.shape}"
+                            if hasattr(result, "shape")
+                            else ""
+                        )
+                    )
+                    return result
+
+                return wrapper
+
+            wrapped = make_ext_wrapper(attr, attr_name)
+            setattr(module, attr_name, wrapped)
+            print(f"🔧 [LOCAL_EXT DEBUG] Patched {attr_name}")
+
+    module.__mast3r_debug_patched__ = True
+
+
+def _patch_feature_extractor_module(module):
+    """Patch feature_extractor module functions."""
+    import functools
+
+    if getattr(module, "__mast3r_debug_patched__", False):
+        return
+
+    avail = [a for a in dir(module) if not a.startswith("_")]
+    print(f"🔍 [FEAT_EXT DEBUG] Available: {avail}")
+
+    for attr_name in avail:
+        attr = getattr(module, attr_name)
+        if callable(attr):
+
+            @functools.wraps(attr)
+            def make_fe_wrapper(f, name):
+                def wrapper(*args, **kwargs):
+                    print(f"🔍 [FEAT_EXT.{name}] called")
+                    result = f(*args, **kwargs)
+                    if isinstance(result, tuple):
+                        print(f"🔍 [FEAT_EXT.{name}] returned tuple len={len(result)}")
+                        for i, r in enumerate(result):
+                            print(
+                                f"   [{i}]: {type(r).__name__}"
+                                + (
+                                    f", shape={r.shape}"
+                                    if hasattr(r, "shape")
+                                    else (
+                                        f", is dict={isinstance(r, dict)}"
+                                        if isinstance(r, dict)
+                                        else ""
+                                    )
+                                )
+                            )
+                            if isinstance(r, dict) and len(r) <= 3:
+                                for k, v in list(r.items())[:3]:
+                                    print(
+                                        f"      [{k}]: {type(v).__name__}"
+                                        + (
+                                            f", shape={v.shape}"
+                                            if hasattr(v, "shape")
+                                            else ""
+                                        )
+                                    )
+                    return result
+
+                return wrapper
+
+            wrapped = make_fe_wrapper(attr, attr_name)
+            setattr(module, attr_name, wrapped)
+            print(f"🔧 [FEAT_EXT DEBUG] Patched {attr_name}")
+
+    module.__mast3r_debug_patched__ = True
+
+
 def _patch_mast3r_matching_debug():
     """Monkey-patch the unav matching module to log MASt3R matching details."""
     import functools
 
-    try:
-        from unav.core.feature import local_extractor as local_ext_module
-    except ImportError:
-        try:
-            from unav.core.feature.local_extractor import MASt3RExtractor
-
-            local_ext_module = None
-        except ImportError:
-            print("⚠️ [MASt3R DEBUG] Could not import local_extractor module")
-            return
-
-    if (
-        getattr(local_ext_module, "__mast3r_debug_patched__", False)
-        if local_ext_module
-        else False
-    ):
-        print("ℹ️ [MASt3R DEBUG] Already patched")
-        return
-
-    if local_ext_module is not None:
-        for attr_name in dir(local_ext_module):
-            attr = getattr(local_ext_module, attr_name)
-            if callable(attr) and "mast3r" in attr_name.lower():
-                print(
-                    f"🔍 [MASt3R DEBUG] Found callable in local_extractor: {attr_name}"
-                )
+    tried_imports = []
 
     try:
         from unav.localizer.tools import matcher as matcher_module
 
-        if getattr(matcher_module, "__mast3r_debug_patched__", False):
-            print("ℹ️ [MASt3R DEBUG] matcher module already patched")
-            return
-
-        if hasattr(matcher_module, "batch_local_matching_and_ransac"):
-            orig_batch_fn = matcher_module.batch_local_matching_and_ransac
-
-            @functools.wraps(orig_batch_fn)
-            def debug_batch_fn(*args, **kwargs):
-                print(
-                    f"🔍 [MATCHER DEBUG] matcher.batch_local_matching_and_ransac called"
-                )
-                print(
-                    f"   positional args count: {len(args)}, kwargs: {list(kwargs.keys())}"
-                )
-                for i, arg in enumerate(args):
-                    arg_type = type(arg).__name__
-                    if hasattr(arg, "shape"):
-                        print(f"   arg[{i}]: {arg_type}, shape={arg.shape}")
-                    elif isinstance(arg, dict):
-                        print(f"   arg[{i}]: {arg_type}, len={len(arg)}")
-                        if len(arg) <= 5:
-                            for k, v in list(arg.items())[:3]:
-                                v_type = type(v).__name__
-                                print(f"      [{k}]: {v_type}")
-                    elif arg is None:
-                        print(f"   arg[{i}]: None")
-                    else:
-                        print(f"   arg[{i}]: {arg_type}")
-                for k, v in kwargs.items():
-                    print(f"   kwarg[{k}]: {type(v).__name__} = {v}")
-
-                result = orig_batch_fn(*args, **kwargs)
-
-                if result is not None:
-                    if isinstance(result, tuple) and len(result) == 3:
-                        best_map_key, pnp_pairs, results = result
-                        print(
-                            f"🔍 [MATCHER DEBUG] result: best_map_key={best_map_key}, results={len(results) if results else 0}"
-                        )
-                        if pnp_pairs:
-                            if isinstance(pnp_pairs, dict):
-                                print(
-                                    f"   pnp_pairs keys: {list(pnp_pairs.keys())[:5]}"
-                                )
-                                for k, v in list(pnp_pairs.items())[:2]:
-                                    if hasattr(v, "shape"):
-                                        print(f"   pnp_pairs[{k}]: shape={v.shape}")
-                                    elif isinstance(v, dict):
-                                        print(
-                                            f"   pnp_pairs[{k}]: dict with keys {list(v.keys())[:5]}"
-                                        )
-                        if results:
-                            for i, r in enumerate(results[:3]):
-                                if isinstance(r, dict):
-                                    print(f"   result[{i}]: {r}")
-                        else:
-                            print(f"   No results returned from matching pipeline")
-                    else:
-                        print(
-                            f"🔍 [MATCHER DEBUG] result type: {type(result).__name__}"
-                        )
-                else:
-                    print(f"🔍 [MATCHER DEBUG] result is None")
-
-                return result
-
-            matcher_module.batch_local_matching_and_ransac = debug_batch_fn
-            matcher_module.__mast3r_debug_patched__ = True
-            print("🔧 [MASt3R DEBUG] Patched matcher.batch_local_matching_and_ransac")
-        else:
-            print(
-                "⚠️ [MASt3R DEBUG] batch_local_matching_and_ransac not found in matcher module"
-            )
-            avail = [a for a in dir(matcher_module) if not a.startswith("_")]
-            print(f"⚠️ [MASt3R DEBUG] Available: {avail}")
-
+        tried_imports.append("unav.localizer.tools.matcher")
+        _patch_matcher_module(matcher_module)
     except ImportError as e:
-        print(f"⚠️ [MASt3R DEBUG] Could not import matcher module: {e}")
+        print(f"⚠️ [MASt3R DEBUG] Could not import matcher: {e}")
+        tried_imports.append(f"FAILED: {e}")
+
+    try:
+        from unav.core.feature import local_extractor as local_ext_module
+
+        tried_imports.append("unav.core.feature.local_extractor")
+        _patch_local_extractor_module(local_ext_module)
+    except ImportError as e:
+        print(f"⚠️ [MASt3R DEBUG] Could not import local_extractor: {e}")
+        tried_imports.append(f"FAILED: {e}")
+
+    try:
+        from unav.localizer.tools import feature_extractor as feat_ext_module
+
+        tried_imports.append("unav.localizer.tools.feature_extractor")
+        _patch_feature_extractor_module(feat_ext_module)
+    except ImportError as e:
+        print(f"⚠️ [MASt3R DEBUG] Could not import feature_extractor: {e}")
+        tried_imports.append(f"FAILED: {e}")
+
+    print(f"🔍 [MASt3R DEBUG] Import attempts: {tried_imports}")
 
 
 def run_monkey_patch_localizer_methods(self, localizer, method_names=None):
