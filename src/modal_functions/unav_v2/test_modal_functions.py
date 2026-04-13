@@ -16,7 +16,7 @@ def main():
     IMAGE_PATH = "media/sample_image_4.jpg"
 
     try:
-        UnavServer = modal.Cls.lookup("unav-server-v21-mast3r", "UnavServer")
+        UnavServer = modal.Cls.lookup("unav-server-v21-pure-mast3r", "UnavServer")
         unav_server = UnavServer()
         current_directory = os.getcwd()
         full_image_path = os.path.join(current_directory, IMAGE_PATH)
