@@ -10,6 +10,7 @@ DINOSALAD_URL = (
     "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitb14/dinov2_vitb14_pretrain.pth"
 )
 MAST3R_REPO_URL = "https://github.com/naver/mast3r.git"
+MAST3R_HF_MODEL_ID = "naver/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric"
 # Get the current file's directory
 current_dir = Path(__file__).resolve().parent
 
@@ -140,6 +141,27 @@ def download_torch_hub_weights():
     print("🎉 All torch hub models predownloaded successfully!")
 
 
+def download_mast3r_weights():
+    import os
+    from huggingface_hub import snapshot_download
+
+    hf_token = os.environ.get("HF_TOKEN")
+    os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
+
+    print(f"📦 Predownloading MASt3R model weights from HuggingFace Hub...")
+    cache_dir = os.environ.get("HF_HOME", os.path.expanduser("~/.cache/huggingface"))
+    print(f"   Cache directory: {cache_dir}")
+    if hf_token:
+        print(f"   Using authenticated download (HF_TOKEN present)")
+
+    local_dir = snapshot_download(
+        MAST3R_HF_MODEL_ID,
+        cache_dir=cache_dir,
+        token=hf_token,
+    )
+    print(f"✅ MASt3R model weights cached at: {local_dir}")
+
+
 app = App(
     name="unav-server-v21-pure-mast3r",
     # mounts removed as deprecated
@@ -149,6 +171,7 @@ app = App(
 github_secret = Secret.from_name("github-read-private")
 gemini_secret = Secret.from_name("gemini-api-key")
 middleware_secret = Secret.from_name("middleware")
+huggingface_secret = Secret.from_name("huggingface-secret")
 
 unav_image = (
     Image.debian_slim(python_version="3.10")
@@ -198,12 +221,9 @@ unav_image = (
         "pip install -r requirements.txt",
         "pip install -r dust3r/requirements.txt",
         "pip install poselib",
-        (
-            "if command -v nvcc >/dev/null 2>&1; then "
-            "cd dust3r/croco/models/curope && python setup.py build_ext --inplace; "
-            "else echo '⚠️ nvcc not found; skipping optional CUDA RoPE build'; "
-            "fi"
-        ),
+    )
+    .run_commands(
+        "cd /root/mast3r/dust3r/croco/models/curope && python setup.py build_ext --inplace && ls -la *.so 2>/dev/null || echo 'RoPE .so build may have failed'",
     )
     .workdir("/root")
     .run_commands("git clone https://github.com/ai4ce/UNav-Server.git unav_server_v2")
@@ -252,6 +272,8 @@ unav_image = (
         "google-genai",
         "middleware-io",
         "middleware-io[profiling]",
+        "huggingface-hub>=0.23.0",
+        "hf_transfer>=0.1.0",
     )
     .run_commands(
         "pip install 'numpy==1.26.4'",
@@ -260,6 +282,7 @@ unav_image = (
         "PYTHONPATH=/root/mast3r:/root/mast3r/dust3r python -c \"from mast3r.model import AsymmetricMASt3R; print('mast3r import ok')\"",
     )
     .run_function(download_torch_hub_weights)
+    .run_function(download_mast3r_weights, secrets=[huggingface_secret])
     .env(
         {
             "MW_SERVICE_NAME": "UNav-Server",
@@ -268,6 +291,8 @@ unav_image = (
             "MW_CONSOLE_EXPORTER": "false",
             "OTEL_SERVICE_NAME": "modal-unav-server",
             "PYTHONPATH": "/root/mast3r:/root/mast3r/dust3r",
+            "HF_HOME": "/root/.cache/huggingface",
+            "HF_HUB_ENABLE_HF_TRANSFER": "1",
         }
     )
     .run_commands(
