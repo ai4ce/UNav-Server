@@ -69,10 +69,8 @@ def run_init_cpu_components(self):
 def _apply_mast3r_config_to_unav_config(config, local_feature_model):
     """Mutate mast3r config inside UNavConfig BEFORE localizer is created.
 
-    UNavConfig stores its config inside config.localizer_config
-    (an UNavLocalizationConfig instance), which has:
-      - localizer_config.feature_extraction_config["local_extractor_config"]["mast3r"]
-      - localizer_config.localization_config
+    Only overrides max_nn_dist to match what the agent-smart-mode branch
+    confirmed working (default unav config + just max_nn_dist change).
     """
     if local_feature_model != "mast3r":
         return
@@ -80,41 +78,23 @@ def _apply_mast3r_config_to_unav_config(config, local_feature_model):
     try:
         loc_config = getattr(config, "localizer_config", None)
         if loc_config is None:
-            print("⚠️ [MAST3R CONFIG] No localizer_config on UNavConfig, skipping")
             return
 
         feat_cfg = getattr(loc_config, "feature_extraction_config", {})
         if not isinstance(feat_cfg, dict):
-            print("⚠️ [MAST3R CONFIG] feature_extraction_config is not a dict, skipping")
             return
 
         local_ext_cfg = feat_cfg.get("local_extractor_config", {})
         if not isinstance(local_ext_cfg, dict):
-            print("⚠️ [MAST3R CONFIG] local_extractor_config is not a dict, skipping")
             return
 
         mast3r_cfg = local_ext_cfg.get("mast3r", local_ext_cfg.get("MASt3R", {}))
         if not isinstance(mast3r_cfg, dict):
-            print("⚠️ [MAST3R CONFIG] mast3r config not found or not a dict, skipping")
             return
 
         old_val = mast3r_cfg.get("max_nn_dist", "not set")
         mast3r_cfg["max_nn_dist"] = 100.0
-        print(
-            f"🔧 [MAST3R CONFIG] max_nn_dist: {old_val} -> 100.0 (applied to UNavConfig)"
-        )
-
-        loc_cfg = getattr(loc_config, "localization_config", {})
-        if isinstance(loc_cfg, dict):
-            if loc_cfg.get("topk", 5) < 50:
-                loc_cfg["topk"] = 50
-                print("🔧 [MAST3R CONFIG] topk: -> 50")
-            if loc_cfg.get("max_candidates", 10) < 50:
-                loc_cfg["max_candidates"] = 50
-                print("🔧 [MAST3R CONFIG] max_candidates: -> 50")
-            if loc_cfg.get("min_inliers", 50) > 5:
-                loc_cfg["min_inliers"] = 5
-                print("🔧 [MAST3R CONFIG] min_inliers: -> 5")
+        print(f"🔧 [MAST3R CONFIG] max_nn_dist: {old_val} -> 100.0")
     except Exception as e:
         print(f"⚠️ [MAST3R CONFIG] Error applying config: {e}")
 
@@ -174,12 +154,8 @@ def _debug_print_localizer_config(localizer):
 
 def _override_mast3r_config(localizer):
     config = localizer.config
-    overridden = []
 
     try:
-        loc_cfg = (
-            config.localization_config if hasattr(config, "localization_config") else {}
-        )
         feat_cfg = (
             config.feature_extraction_config
             if hasattr(config, "feature_extraction_config")
@@ -195,69 +171,10 @@ def _override_mast3r_config(localizer):
             "mast3r",
             local_ext_cfg.get("MASt3R", local_ext_cfg.get("mast3r_matching", {})),
         )
-        if isinstance(mast3r_cfg, dict):
-            if "max_nn_dist" in mast3r_cfg:
-                old_val = mast3r_cfg["max_nn_dist"]
-                mast3r_cfg["max_nn_dist"] = 80.0
-                print(f"🔧 [CONFIG OVERRIDE] max_nn_dist: {old_val} -> 80.0")
-                overridden.append("max_nn_dist")
-            if "max_candidates" in mast3r_cfg:
-                old_val = mast3r_cfg["max_candidates"]
-                mast3r_cfg["max_candidates"] = 50
-                print(f"🔧 [CONFIG OVERRIDE] max_candidates: {old_val} -> 50")
-                overridden.append("max_candidates")
-            if "subsample" in mast3r_cfg:
-                old_val = mast3r_cfg["subsample"]
-                if old_val != 1:
-                    mast3r_cfg["subsample"] = 1
-                    print(
-                        f"🔧 [CONFIG OVERRIDE] subsample: {old_val} -> 1 (use all dense matches)"
-                    )
-                    overridden.append("subsample")
-
-        if hasattr(config, "localization_config") and isinstance(
-            config.localization_config, dict
-        ):
-            loc = config.localization_config
-            if loc.get("topk", 5) < 50:
-                old_val = loc.get("topk", 5)
-                loc["topk"] = 50
-                print(f"🔧 [CONFIG OVERRIDE] topk: {old_val} -> 50")
-                overridden.append("topk")
-            if loc.get("max_candidates", 10) < 50:
-                old_val = loc.get("max_candidates", 10)
-                loc["max_candidates"] = 50
-                print(
-                    f"🔧 [CONFIG OVERRIDE] max_candidates (localization): {old_val} -> 50"
-                )
-                overridden.append("max_candidates")
-            if loc.get("min_inliers", 50) > 5:
-                old_val = loc.get("min_inliers", 50)
-                loc["min_inliers"] = 5
-                print(f"🔧 [CONFIG OVERRIDE] min_inliers: {old_val} -> 5")
-                overridden.append("min_inliers")
-            if (
-                "early_stop_inliers" not in loc
-                or loc.get("early_stop_inliers", 0) < 200
-            ):
-                old_val = loc.get("early_stop_inliers", "not set")
-                loc["early_stop_inliers"] = 200
-                print(f"🔧 [CONFIG OVERRIDE] early_stop_inliers: {old_val} -> 200")
-                overridden.append("early_stop_inliers")
-            if "feature_score_threshold" in loc:
-                old_val = loc["feature_score_threshold"]
-                loc["feature_score_threshold"] = 0.01
-                print(
-                    f"🔧 [CONFIG OVERRIDE] feature_score_threshold: {old_val} -> 0.01"
-                )
-                overridden.append("feature_score_threshold")
-
-        if overridden:
-            print(f"✅ [CONFIG OVERRIDE] Overridden: {overridden}")
-        else:
-            print(
-                "ℹ️ [CONFIG OVERRIDE] No overrides needed (config keys not found or already optimal)"
-            )
+        if isinstance(mast3r_cfg, dict) and "max_nn_dist" in mast3r_cfg:
+            old_val = mast3r_cfg["max_nn_dist"]
+            mast3r_cfg["max_nn_dist"] = 100.0
+            print(f"🔧 [CONFIG OVERRIDE] max_nn_dist: {old_val} -> 100.0")
     except Exception as e:
         print(f"⚠️ [CONFIG OVERRIDE] Error: {e}")
 
@@ -458,21 +375,8 @@ def _add_localizer_debug_logging(localizer):
 
         @functools.wraps(orig_vpr)
         def debug_vpr_retrieve(global_feat, top_k=None, **kwargs):
-            config_topk = 50
-            cfg = getattr(localizer, "config", None)
-            if cfg and hasattr(cfg, "localization_config"):
-                config_topk = cfg.localization_config.get("topk", 50)
-            effective_topk = (
-                max(config_topk, top_k if top_k else 0) if top_k else config_topk
-            )
-            if top_k and top_k < config_topk:
-                print(
-                    f"🔧 [VPR OVERRIDE] top_k {top_k} -> {effective_topk} (config_topk={config_topk})"
-                )
-            print(
-                f"🔍 [VPR DEBUG] vpr_retrieve called with top_k={top_k}, effective_topk={effective_topk}"
-            )
-            results = orig_vpr(global_feat, top_k=effective_topk, **kwargs)
+            print(f"🔍 [VPR DEBUG] vpr_retrieve called with top_k={top_k}")
+            results = orig_vpr(global_feat, top_k=top_k, **kwargs)
             print(f"🔍 [VPR DEBUG] vpr_retrieve returned {len(results)} candidates")
             for i, item in enumerate(results):
                 if isinstance(item, (list, tuple)) and len(item) >= 3:
@@ -583,9 +487,6 @@ def _patch_matcher_module(module):
         "mast3r_retrieve_matches_and_pnp",
     ]
 
-    FORCE_MIN_INLIERS = 5
-    FORCE_EARLY_STOP = 200
-
     for fname in target_funcs:
         if hasattr(module, fname):
             orig = getattr(module, fname)
@@ -595,12 +496,6 @@ def _patch_matcher_module(module):
             @functools.wraps(orig)
             def make_wrapper(f, name):
                 def wrapper(*args, **kwargs):
-                    if name == "mast3r_matching_and_pnp":
-                        kwargs["min_inliers"] = FORCE_MIN_INLIERS
-                        kwargs["early_stop_inliers"] = FORCE_EARLY_STOP
-                        print(
-                            f"🔧 [MATCHER.{name}] FORCED min_inliers={FORCE_MIN_INLIERS}, early_stop_inliers={FORCE_EARLY_STOP}"
-                        )
                     print(
                         f"🔍 [MATCHER.{name}] called — args={len(args)}, kwargs={list(kwargs.keys())}"
                     )
