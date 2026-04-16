@@ -24,13 +24,13 @@ def main():
             image_data = image_file.read()
             base64_encoded = base64.b64encode(image_data).decode("utf-8")
 
-        # print("Testing get_destinations_list...")
-        # result = unav_server.get_destinations_list.remote(
-        #     floor=FLOOR,
-        #     place=PLACE,
-        #     building=BUILDING,
-        # )
-        # print("Result:", result)
+        print("Testing get_destinations_list...")
+        result = unav_server.get_destinations_list.remote(
+            floor=FLOOR,
+            place=PLACE,
+            building=BUILDING,
+        )
+        print("Result:", result)
 
         # print("\n" + "="*50)
         # print("Testing localize_user...")
