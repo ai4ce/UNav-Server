@@ -54,6 +54,10 @@ def run_ensure_maps_loaded(
         local_feature_model=server.LOCAL_FEATURE_MODEL,
     )
 
+    from .init import _apply_mast3r_config_to_unav_config
+
+    _apply_mast3r_config_to_unav_config(selective_config, server.LOCAL_FEATURE_MODEL)
+
     from unav.localizer.localizer import UNavLocalizer
     import time
 

@@ -49,6 +49,8 @@ def run_init_cpu_components(self):
     )
     print("✅ UNavConfig initialized successfully")
 
+    _apply_mast3r_config_to_unav_config(self.config, self.LOCAL_FEATURE_MODEL)
+
     self.localizor_config = self.config.localizer_config
     self.navigator_config = self.config.navigator_config
     print("✅ Config objects extracted successfully")
@@ -62,6 +64,59 @@ def run_init_cpu_components(self):
     self.selective_localizers = {}
     self.cpu_components_initialized = True
     print("📸 CPU components ready for snapshotting!")
+
+
+def _apply_mast3r_config_to_unav_config(config, local_feature_model):
+    """Mutate mast3r config inside UNavConfig BEFORE localizer is created.
+
+    UNavConfig stores its config inside config.localizer_config
+    (an UNavLocalizationConfig instance), which has:
+      - localizer_config.feature_extraction_config["local_extractor_config"]["mast3r"]
+      - localizer_config.localization_config
+    """
+    if local_feature_model != "mast3r":
+        return
+
+    try:
+        loc_config = getattr(config, "localizer_config", None)
+        if loc_config is None:
+            print("⚠️ [MAST3R CONFIG] No localizer_config on UNavConfig, skipping")
+            return
+
+        feat_cfg = getattr(loc_config, "feature_extraction_config", {})
+        if not isinstance(feat_cfg, dict):
+            print("⚠️ [MAST3R CONFIG] feature_extraction_config is not a dict, skipping")
+            return
+
+        local_ext_cfg = feat_cfg.get("local_extractor_config", {})
+        if not isinstance(local_ext_cfg, dict):
+            print("⚠️ [MAST3R CONFIG] local_extractor_config is not a dict, skipping")
+            return
+
+        mast3r_cfg = local_ext_cfg.get("mast3r", local_ext_cfg.get("MASt3R", {}))
+        if not isinstance(mast3r_cfg, dict):
+            print("⚠️ [MAST3R CONFIG] mast3r config not found or not a dict, skipping")
+            return
+
+        old_val = mast3r_cfg.get("max_nn_dist", "not set")
+        mast3r_cfg["max_nn_dist"] = 100.0
+        print(
+            f"🔧 [MAST3R CONFIG] max_nn_dist: {old_val} -> 100.0 (applied to UNavConfig)"
+        )
+
+        loc_cfg = getattr(loc_config, "localization_config", {})
+        if isinstance(loc_cfg, dict):
+            if loc_cfg.get("topk", 5) < 50:
+                loc_cfg["topk"] = 50
+                print("🔧 [MAST3R CONFIG] topk: -> 50")
+            if loc_cfg.get("max_candidates", 10) < 50:
+                loc_cfg["max_candidates"] = 50
+                print("🔧 [MAST3R CONFIG] max_candidates: -> 50")
+            if loc_cfg.get("min_inliers", 50) > 5:
+                loc_cfg["min_inliers"] = 5
+                print("🔧 [MAST3R CONFIG] min_inliers: -> 5")
+    except Exception as e:
+        print(f"⚠️ [MAST3R CONFIG] Error applying config: {e}")
 
 
 def _debug_print_localizer_config(localizer):
@@ -144,7 +199,7 @@ def _override_mast3r_config(localizer):
             if "max_nn_dist" in mast3r_cfg:
                 old_val = mast3r_cfg["max_nn_dist"]
                 mast3r_cfg["max_nn_dist"] = 80.0
-                print(f"🔧 [CONFIG OVERRIDE] max_nn_dist: {old_val} -> 100.0")
+                print(f"🔧 [CONFIG OVERRIDE] max_nn_dist: {old_val} -> 80.0")
                 overridden.append("max_nn_dist")
             if "max_candidates" in mast3r_cfg:
                 old_val = mast3r_cfg["max_candidates"]
