@@ -10,7 +10,7 @@ def main():
     # Common parameters
     BUILDING = "Langone"
     PLACE = "New_York_University"
-    FLOOR = "6_floor"
+    FLOOR = "17_floor"
     DESTINATION_ID = "50"
     SESSION_ID = "test_session_id_2"
     IMAGE_PATH = "media/vinay_sample.jpeg"
