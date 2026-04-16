@@ -34,7 +34,7 @@ def run_init_cpu_components(self):
 
     self.DATA_ROOT = "/root/UNav-IO/data"
     self.FEATURE_MODEL = "DinoV2Salad"
-    self.LOCAL_FEATURE_MODEL = "superpoint+lightglue"
+    self.LOCAL_FEATURE_MODEL = "mast3r"
     self.PLACES = run_get_places(self)
 
     print("🔧 Initializing UNavConfig...")
