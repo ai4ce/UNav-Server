@@ -8,12 +8,12 @@ import modal
 
 def main():
     # Common parameters
-    BUILDING = "LightHouse"
-    PLACE = "New_York_City"
+    BUILDING = "Langone"
+    PLACE = "New_York_University"
     FLOOR = "6_floor"
     DESTINATION_ID = "50"
     SESSION_ID = "test_session_id_2"
-    IMAGE_PATH = "media/sample_image_4.jpg"
+    IMAGE_PATH = "media/vinay_sample.jpeg"
 
     try:
         UnavServer = modal.Cls.lookup("pure-mast3r-clean-install", "UnavServer")
