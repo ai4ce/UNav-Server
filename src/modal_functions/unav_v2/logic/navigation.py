@@ -172,6 +172,21 @@ def run_planner(
                         queue_key = _get_queue_key_for_image_shape(image.shape)
                         is_cold_start = len(refinement_queue) == 0
                         print(f"🔍 Cold start: {is_cold_start}, refinement_queue size: {len(refinement_queue)}")
+                        local_extractor = getattr(localizer_to_use, "local_extractor", None)
+                        local_matcher = getattr(localizer_to_use, "local_matcher", None)
+                        global_extractor = getattr(localizer_to_use, "global_extractor", None)
+                        local_feature_model = getattr(
+                            getattr(localizer_to_use, "config", None),
+                            "local_feature_model",
+                            getattr(self, "LOCAL_FEATURE_MODEL", "unknown"),
+                        )
+                        print(
+                            "🧪 [LOCALIZER DEBUG] "
+                            f"local_feature_model={local_feature_model}, "
+                            f"local_extractor={type(local_extractor).__name__}(callable={callable(local_extractor)}), "
+                            f"local_matcher={type(local_matcher).__name__}(callable={callable(local_matcher)}), "
+                            f"global_extractor={type(global_extractor).__name__}(callable={callable(global_extractor)})"
+                        )
 
                         if is_cold_start:
                             bootstrap_outputs = []
@@ -179,6 +194,18 @@ def run_planner(
                             for bootstrap_pass in range(2):
                                 print(f"🔄 Bootstrap pass {bootstrap_pass + 1}/2...")
                                 bootstrap_output = localizer_to_use.localize(image, empty_queue, top_k=top_k)
+                                if bootstrap_output is None:
+                                    print("   Bootstrap summary: output=None")
+                                else:
+                                    print(
+                                        "   Bootstrap summary: "
+                                        f"success={bootstrap_output.get('success')}, "
+                                        f"stage={bootstrap_output.get('stage')}, "
+                                        f"reason={bootstrap_output.get('reason')}, "
+                                        f"best_map_key={bootstrap_output.get('best_map_key')}, "
+                                        f"top_candidates={len(bootstrap_output.get('top_candidates', []))}, "
+                                        f"results={len(bootstrap_output.get('results', []))}"
+                                    )
                                 if bootstrap_output and bootstrap_output.get("success"):
                                     bootstrap_outputs.append(bootstrap_output)
                                     best_map_key = bootstrap_output.get("best_map_key")
@@ -221,6 +248,29 @@ def run_planner(
 
                 if output is None or "floorplan_pose" not in output:
                     print("❌ Localization failed, no pose found.")
+                    local_feature_model_name = getattr(self, "LOCAL_FEATURE_MODEL", "unknown")
+                    if "localizer_to_use" in locals():
+                        local_feature_model_name = getattr(
+                            getattr(localizer_to_use, "config", None),
+                            "local_feature_model",
+                            local_feature_model_name,
+                        )
+                    failed_results = []
+                    if isinstance(output, dict):
+                        raw_results = output.get("results") or []
+                        failed_results = [r for r in raw_results if isinstance(r, dict)]
+                    max_inliers = max((r.get("inliers", 0) for r in failed_results), default=0)
+                    print(
+                        "❌ [PLANNER RESULT] "
+                        f"status=error, "
+                        f"stage={(output or {}).get('stage') if isinstance(output, dict) else 'no_output'}, "
+                        f"reason={(output or {}).get('reason') if isinstance(output, dict) else 'no_output'}, "
+                        f"best_map_key={(output or {}).get('best_map_key') if isinstance(output, dict) else None}, "
+                        f"local_feature_model={local_feature_model_name}, "
+                        f"top_candidates_count={len((output or {}).get('top_candidates', []) if isinstance(output, dict) else [])}, "
+                        f"results_count={len(failed_results)}, "
+                        f"max_inliers={max_inliers}"
+                    )
                     if is_vlm_extraction_enabled:
                         try:
                             extracted_text = run_vlm_on_image(server=self, image=image)
@@ -286,16 +336,54 @@ def run_planner(
                 timing_data["total"] = (time.time() - start_time) * 1000
                 print(f"⏱️ Total Navigation Time: {timing_data['total']:.2f}ms")
 
+                local_feature_model_name = getattr(self, "LOCAL_FEATURE_MODEL", "unknown")
+                if "localizer_to_use" in locals():
+                    local_feature_model_name = getattr(
+                        getattr(localizer_to_use, "config", None),
+                        "local_feature_model",
+                        local_feature_model_name,
+                    )
+                localization_results = output.get("results") or []
+
                 result = {
                     "status": "success",
                     "result": serialized_result,
                     "cmds": serialized_cmds,
                     "best_map_key": serialized_source_key,
                     "floorplan_pose": serialized_floorplan_pose,
+                    "turn_mode": turn_mode,
+                    "total_inliers": sum(
+                        r.get("inliers", 0)
+                        for r in localization_results
+                        if isinstance(r, dict)
+                    ),
+                    "per_candidate_inliers": run_safe_serialize(
+                        [
+                            {
+                                "ref": r.get("ref_image_name"),
+                                "score": r.get("score"),
+                                "inliers": r.get("inliers", 0),
+                            }
+                            for r in localization_results
+                            if isinstance(r, dict)
+                        ]
+                    ),
+                    "timings": output.get("timings"),
+                    "top_candidates": run_safe_serialize(output.get("top_candidates")),
+                    "local_feature_model": local_feature_model_name,
                     "navigation_info": {"start_location": f"{start_place}/{start_building}/{start_floor}", "destination": f"{target_place}/{target_building}/{target_floor}", "dest_id": dest_id, "unit": unit, "language": language},
                     "timing": timing_data,
                     "debug_info": {"map_scope": output.get("map_scope", "unknown"), "bootstrap_mode": output.get("bootstrap_mode", "none"), "bootstrap_passes": output.get("bootstrap_passes"), "queue_key": output.get("queue_key", "unknown"), "n_frames": output.get("n_frames"), "top_candidates_count": len(output.get("top_candidates", []))},
                 }
+                print(
+                    "✅ [PLANNER RESULT] "
+                    f"status={result.get('status')}, "
+                    f"best_map_key={result.get('best_map_key')}, "
+                    f"floorplan_pose={result.get('floorplan_pose')}, "
+                    f"local_feature_model={result.get('local_feature_model')}, "
+                    f"total_inliers={result.get('total_inliers')}, "
+                    f"top_candidates_count={len(result.get('top_candidates') or [])}"
+                )
 
                 return run_convert_navigation_to_trajectory(result)
 

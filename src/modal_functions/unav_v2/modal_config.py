@@ -1,5 +1,6 @@
-from modal import App, Image, Volume, Secret
 from pathlib import Path
+
+from modal import App, Image, Secret, Volume
 
 volume = Volume.from_name("unav_multifloor")
 
@@ -8,6 +9,8 @@ LIGHTGLUE_URL = "https://github.com/cvg/LightGlue/releases/download/v0.1_arxiv/s
 DINOSALAD_URL = (
     "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitb14/dinov2_vitb14_pretrain.pth"
 )
+MAST3R_REPO_URL = "https://github.com/naver/mast3r.git"
+MAST3R_HF_MODEL_ID = "naver/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric"
 # Get the current file's directory
 current_dir = Path(__file__).resolve().parent
 
@@ -138,8 +141,29 @@ def download_torch_hub_weights():
     print("🎉 All torch hub models predownloaded successfully!")
 
 
+def download_mast3r_weights():
+    import os
+    from huggingface_hub import snapshot_download
+
+    hf_token = os.environ.get("HF_TOKEN")
+    os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
+
+    print(f"📦 Predownloading MASt3R model weights from HuggingFace Hub...")
+    cache_dir = os.environ.get("HF_HOME", os.path.expanduser("~/.cache/huggingface"))
+    print(f"   Cache directory: {cache_dir}")
+    if hf_token:
+        print(f"   Using authenticated download (HF_TOKEN present)")
+
+    local_dir = snapshot_download(
+        MAST3R_HF_MODEL_ID,
+        cache_dir=cache_dir,
+        token=hf_token,
+    )
+    print(f"✅ MASt3R model weights cached at: {local_dir}")
+
+
 app = App(
-    name="unav-server-v21",
+    name="unav-server-v21-pure-mast3r",
     # mounts removed as deprecated
 )
 
@@ -147,6 +171,7 @@ app = App(
 github_secret = Secret.from_name("github-read-private")
 gemini_secret = Secret.from_name("gemini-api-key")
 middleware_secret = Secret.from_name("middleware")
+huggingface_secret = Secret.from_name("huggingface-secret")
 
 unav_image = (
     Image.debian_slim(python_version="3.10")
@@ -182,10 +207,23 @@ unav_image = (
         "pip freeze",
     )
     .pip_install_private_repos(
-        "github.com/ai4ce/unav",
+        "github.com/endeleze/UNav.git",
         git_user="surendharpalanisamy",
         secrets=[github_secret],
         extra_options="--no-deps",
+    )
+    .workdir("/root")
+    .run_commands(
+        f"git clone --recursive {MAST3R_REPO_URL} mast3r",
+    )
+    .workdir("/root/mast3r")
+    .run_commands(
+        "pip install -r requirements.txt",
+        "pip install -r dust3r/requirements.txt",
+        "pip install poselib",
+    )
+    .run_commands(
+        "cd /root/mast3r/dust3r/croco/models/curope && python setup.py build_ext --inplace && ls -la *.so 2>/dev/null || echo 'RoPE .so build may have failed'",
     )
     .workdir("/root")
     .run_commands("git clone https://github.com/ai4ce/UNav-Server.git unav_server_v2")
@@ -202,7 +240,6 @@ unav_image = (
         "torchvision>=0.19.0",
         "dataloaders>=0.0.1",
         "einops>=0.8.1",
-        "faiss-gpu>=1.7.2",
         "fast-pytorch-kmeans>=0.2.0.1",
         "h5py>=3.7.0",
         "joblib>=1.1.1",
@@ -235,8 +272,17 @@ unav_image = (
         "google-genai",
         "middleware-io",
         "middleware-io[profiling]",
+        "huggingface-hub>=0.23.0",
+        "hf_transfer>=0.1.0",
+    )
+    .run_commands(
+        "pip install 'numpy==1.26.4'",
+        "pip install 'faiss-gpu-cu12==1.11.0'",
+        "python -c \"import numpy, faiss; print('numpy', numpy.__version__, 'faiss', faiss.__version__)\"",
+        "PYTHONPATH=/root/mast3r:/root/mast3r/dust3r python -c \"from mast3r.model import AsymmetricMASt3R; print('mast3r import ok')\"",
     )
     .run_function(download_torch_hub_weights)
+    .run_function(download_mast3r_weights, secrets=[huggingface_secret])
     .env(
         {
             "MW_SERVICE_NAME": "UNav-Server",
@@ -244,6 +290,9 @@ unav_image = (
             "MW_TRACKER": "true",
             "MW_CONSOLE_EXPORTER": "false",
             "OTEL_SERVICE_NAME": "modal-unav-server",
+            "PYTHONPATH": "/root/mast3r:/root/mast3r/dust3r",
+            "HF_HOME": "/root/.cache/huggingface",
+            "HF_HUB_ENABLE_HF_TRANSFER": "1",
         }
     )
     .run_commands(

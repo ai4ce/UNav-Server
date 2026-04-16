@@ -6,7 +6,14 @@ import os
 from typing import Dict, List, Any, Optional
 
 from .deploy_config import get_scaledown_window, get_gpu_config, get_memory_mb
-from .modal_config import app, unav_image, volume, gemini_secret, middleware_secret
+from .modal_config import (
+    app,
+    unav_image,
+    volume,
+    gemini_secret,
+    middleware_secret,
+    huggingface_secret,
+)
 from .destinations_service import get_destinations_list_impl
 from .logic import (
     run_planner,
@@ -29,7 +36,7 @@ from .logic import (
     memory=get_memory_mb(),
     timeout=600,
     scaledown_window=get_scaledown_window(),
-    secrets=[gemini_secret, middleware_secret],
+    secrets=[gemini_secret, middleware_secret, huggingface_secret],
 )
 class UnavServer:
     # Initialize session storage for user contexts

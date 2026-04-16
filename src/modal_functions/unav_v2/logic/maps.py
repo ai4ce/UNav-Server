@@ -54,10 +54,26 @@ def run_ensure_maps_loaded(
         local_feature_model=server.LOCAL_FEATURE_MODEL,
     )
 
+    from .init import _apply_mast3r_config_to_unav_config
+
+    _apply_mast3r_config_to_unav_config(selective_config, server.LOCAL_FEATURE_MODEL)
+
     from unav.localizer.localizer import UNavLocalizer
     import time
 
     selective_localizer = UNavLocalizer(selective_config.localizer_config)
+    try:
+        from .init import (
+            _apply_mast3r_extraction_fallback,
+            _debug_print_localizer_config,
+            _override_mast3r_config,
+        )
+
+        _apply_mast3r_extraction_fallback(server, selective_localizer)
+        _debug_print_localizer_config(selective_localizer)
+        _override_mast3r_config(selective_localizer)
+    except Exception as e:
+        print(f"⚠️ Failed to apply MASt3R config overrides on selective localizer: {e}")
 
     if hasattr(server, "tracer") and server.tracer:
         try:
