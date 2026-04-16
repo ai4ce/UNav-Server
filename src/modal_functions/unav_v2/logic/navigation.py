@@ -172,45 +172,26 @@ def run_planner(
                         queue_key = _get_queue_key_for_image_shape(image.shape)
                         is_cold_start = len(refinement_queue) == 0
                         print(f"🔍 Cold start: {is_cold_start}, refinement_queue size: {len(refinement_queue)}")
+                        local_extractor = getattr(localizer_to_use, "local_extractor", None)
+                        local_matcher = getattr(localizer_to_use, "local_matcher", None)
+                        global_extractor = getattr(localizer_to_use, "global_extractor", None)
+                        local_feature_model = getattr(
+                            getattr(localizer_to_use, "config", None),
+                            "local_feature_model",
+                            getattr(self, "LOCAL_FEATURE_MODEL", "unknown"),
+                        )
+                        print(
+                            "🧪 [LOCALIZER DEBUG] "
+                            f"local_feature_model={local_feature_model}, "
+                            f"local_extractor={type(local_extractor).__name__}(callable={callable(local_extractor)}), "
+                            f"local_matcher={type(local_matcher).__name__}(callable={callable(local_matcher)}), "
+                            f"global_extractor={type(global_extractor).__name__}(callable={callable(global_extractor)})"
+                        )
 
                         if is_cold_start:
-                            bootstrap_outputs = []
-                            empty_queue = refinement_queue.copy()
-                            for bootstrap_pass in range(2):
-                                print(f"🔄 Bootstrap pass {bootstrap_pass + 1}/2...")
-                                bootstrap_output = localizer_to_use.localize(image, empty_queue, top_k=top_k)
-                                if bootstrap_output and bootstrap_output.get("success"):
-                                    bootstrap_outputs.append(bootstrap_output)
-                                    best_map_key = bootstrap_output.get("best_map_key")
-                                    print(f"   ✅ Pass {bootstrap_pass + 1}: best_map_key={best_map_key}")
-                                    new_queue = bootstrap_output.get("refinement_queue", {})
-                                    if best_map_key and new_queue:
-                                        empty_queue = _update_refinement_queue(empty_queue, best_map_key, queue_key, new_queue.get(best_map_key, {}).get(queue_key, {"pairs": [], "initial_poses": [], "pps": []}))
-
-                            if len(bootstrap_outputs) >= 2:
-                                xy_sum = [0.0, 0.0]
-                                ang_sum = 0.0
-                                for bo in bootstrap_outputs:
-                                    fp = bo.get("floorplan_pose", {})
-                                    xy = fp.get("xy", [0, 0])
-                                    xy_sum[0] += xy[0]
-                                    xy_sum[1] += xy[1]
-                                    ang_sum += fp.get("ang", 0)
-                                avg_xy = [xy_sum[0] / len(bootstrap_outputs), xy_sum[1] / len(bootstrap_outputs)]
-                                avg_ang = ang_sum / len(bootstrap_outputs)
-                                output = bootstrap_outputs[-1].copy()
-                                output["floorplan_pose"] = {"xy": avg_xy, "ang": avg_ang}
-                                output["bootstrap_mode"] = "mean_all_passes"
-                                output["bootstrap_passes"] = len(bootstrap_outputs)
-                            elif bootstrap_outputs:
-                                output = bootstrap_outputs[-1]
-                                output["bootstrap_mode"] = "single_pass"
-                            else:
-                                output = localizer_to_use.localize(image, refinement_queue, top_k=top_k)
-                                output["bootstrap_mode"] = "none"
-                        else:
-                            output = localizer_to_use.localize(image, refinement_queue, top_k=top_k)
-                            output["bootstrap_mode"] = "none"
+                            print("⏭️ Cold-start bootstrap disabled; running single-pass localization.")
+                        output = localizer_to_use.localize(image, refinement_queue, top_k=top_k)
+                        output["bootstrap_mode"] = "none"
 
                         output["map_scope"] = "building_level_multifloor" if enable_multifloor else "floor_locked"
                         output["queue_key"] = queue_key
@@ -221,6 +202,29 @@ def run_planner(
 
                 if output is None or "floorplan_pose" not in output:
                     print("❌ Localization failed, no pose found.")
+                    local_feature_model_name = getattr(self, "LOCAL_FEATURE_MODEL", "unknown")
+                    if "localizer_to_use" in locals():
+                        local_feature_model_name = getattr(
+                            getattr(localizer_to_use, "config", None),
+                            "local_feature_model",
+                            local_feature_model_name,
+                        )
+                    failed_results = []
+                    if isinstance(output, dict):
+                        raw_results = output.get("results") or []
+                        failed_results = [r for r in raw_results if isinstance(r, dict)]
+                    max_inliers = max((r.get("inliers", 0) for r in failed_results), default=0)
+                    print(
+                        "❌ [PLANNER RESULT] "
+                        f"status=error, "
+                        f"stage={(output or {}).get('stage') if isinstance(output, dict) else 'no_output'}, "
+                        f"reason={(output or {}).get('reason') if isinstance(output, dict) else 'no_output'}, "
+                        f"best_map_key={(output or {}).get('best_map_key') if isinstance(output, dict) else None}, "
+                        f"local_feature_model={local_feature_model_name}, "
+                        f"top_candidates_count={len((output or {}).get('top_candidates', []) if isinstance(output, dict) else [])}, "
+                        f"results_count={len(failed_results)}, "
+                        f"max_inliers={max_inliers}"
+                    )
                     if is_vlm_extraction_enabled:
                         try:
                             extracted_text = run_vlm_on_image(server=self, image=image)
@@ -286,16 +290,54 @@ def run_planner(
                 timing_data["total"] = (time.time() - start_time) * 1000
                 print(f"⏱️ Total Navigation Time: {timing_data['total']:.2f}ms")
 
+                local_feature_model_name = getattr(self, "LOCAL_FEATURE_MODEL", "unknown")
+                if "localizer_to_use" in locals():
+                    local_feature_model_name = getattr(
+                        getattr(localizer_to_use, "config", None),
+                        "local_feature_model",
+                        local_feature_model_name,
+                    )
+                localization_results = output.get("results") or []
+
                 result = {
                     "status": "success",
                     "result": serialized_result,
                     "cmds": serialized_cmds,
                     "best_map_key": serialized_source_key,
                     "floorplan_pose": serialized_floorplan_pose,
+                    "turn_mode": turn_mode,
+                    "total_inliers": sum(
+                        r.get("inliers", 0)
+                        for r in localization_results
+                        if isinstance(r, dict)
+                    ),
+                    "per_candidate_inliers": run_safe_serialize(
+                        [
+                            {
+                                "ref": r.get("ref_image_name"),
+                                "score": r.get("score"),
+                                "inliers": r.get("inliers", 0),
+                            }
+                            for r in localization_results
+                            if isinstance(r, dict)
+                        ]
+                    ),
+                    "timings": output.get("timings"),
+                    "top_candidates": run_safe_serialize(output.get("top_candidates")),
+                    "local_feature_model": local_feature_model_name,
                     "navigation_info": {"start_location": f"{start_place}/{start_building}/{start_floor}", "destination": f"{target_place}/{target_building}/{target_floor}", "dest_id": dest_id, "unit": unit, "language": language},
                     "timing": timing_data,
                     "debug_info": {"map_scope": output.get("map_scope", "unknown"), "bootstrap_mode": output.get("bootstrap_mode", "none"), "bootstrap_passes": output.get("bootstrap_passes"), "queue_key": output.get("queue_key", "unknown"), "n_frames": output.get("n_frames"), "top_candidates_count": len(output.get("top_candidates", []))},
                 }
+                print(
+                    "✅ [PLANNER RESULT] "
+                    f"status={result.get('status')}, "
+                    f"best_map_key={result.get('best_map_key')}, "
+                    f"floorplan_pose={result.get('floorplan_pose')}, "
+                    f"local_feature_model={result.get('local_feature_model')}, "
+                    f"total_inliers={result.get('total_inliers')}, "
+                    f"top_candidates_count={len(result.get('top_candidates') or [])}"
+                )
 
                 return run_convert_navigation_to_trajectory(result)
 
@@ -395,39 +437,9 @@ def run_localize_user(
                 print(f"🔍 Cold start: {is_cold_start}, refinement_queue size: {len(refinement_queue)}")
 
                 if is_cold_start:
-                    bootstrap_outputs = []
-                    empty_queue = refinement_queue.copy()
-                    for bootstrap_pass in range(2):
-                        print(f"🔄 Bootstrap pass {bootstrap_pass + 1}/2...")
-                        bootstrap_output = localizer.localize(image, empty_queue, top_k=top_k)
-                        if bootstrap_output and bootstrap_output.get("success"):
-                            bootstrap_outputs.append(bootstrap_output)
-                            best_map_key = bootstrap_output.get("best_map_key")
-                            print(f"   ✅ Pass {bootstrap_pass + 1}: best_map_key={best_map_key}")
-
-                    if len(bootstrap_outputs) >= 2:
-                        xy_sum = [0.0, 0.0]
-                        ang_sum = 0.0
-                        for bo in bootstrap_outputs:
-                            fp = bo.get("floorplan_pose", {})
-                            xy = fp.get("xy", [0, 0])
-                            xy_sum[0] += xy[0]
-                            xy_sum[1] += xy[1]
-                            ang_sum += fp.get("ang", 0)
-                        avg_xy = [xy_sum[0] / len(bootstrap_outputs), xy_sum[1] / len(bootstrap_outputs)]
-                        avg_ang = ang_sum / len(bootstrap_outputs)
-                        output = bootstrap_outputs[-1].copy()
-                        output["floorplan_pose"] = {"xy": avg_xy, "ang": avg_ang}
-                        output["bootstrap_mode"] = "mean_all_passes"
-                    elif bootstrap_outputs:
-                        output = bootstrap_outputs[-1]
-                        output["bootstrap_mode"] = "single_pass"
-                    else:
-                        output = localizer.localize(image, refinement_queue, top_k=top_k)
-                        output["bootstrap_mode"] = "none"
-                else:
-                    output = localizer.localize(image, refinement_queue, top_k=top_k)
-                    output["bootstrap_mode"] = "none"
+                    print("⏭️ Cold-start bootstrap disabled; running single-pass localization.")
+                output = localizer.localize(image, refinement_queue, top_k=top_k)
+                output["bootstrap_mode"] = "none"
 
                 output["map_scope"] = "building_level_multifloor" if enable_multifloor else "floor_locked"
                 output["queue_key"] = queue_key

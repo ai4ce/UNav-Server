@@ -90,6 +90,7 @@ def run_init_gpu_components(self):
 
     print("🤖 Initializing UNavLocalizer (GPU-dependent)...")
     self.localizer = UNavLocalizer(self.localizor_config)
+    _apply_mast3r_extraction_fallback(self, self.localizer)
 
     try:
         self._monkey_patch_localizer_methods(self.localizer)
@@ -169,6 +170,65 @@ def _configure_middleware_tracing(self):
         print(f"⚠️ [CONFIGURE] Tracer set to None due to error")
 
 
+def _apply_mast3r_extraction_fallback(server, localizer):
+    """
+    Patch localizer.extract_query_features for MASt3R compatibility.
+
+    Some UNav/MASt3R combinations expose a callable local_extractor that
+    internally fails with "'NoneType' object is not callable". In that case,
+    retry using local_matcher as the local-feature callable.
+    """
+    import functools
+
+    if getattr(localizer, "__mast3r_fallback_patched__", False):
+        return
+
+    original_extract = getattr(localizer, "extract_query_features", None)
+    if not callable(original_extract):
+        return
+
+    @functools.wraps(original_extract)
+    def _patched_extract_query_features(query_img):
+        try:
+            return original_extract(query_img)
+        except TypeError as exc:
+            error_message = str(exc)
+            local_model = str(
+                getattr(
+                    getattr(localizer, "config", None),
+                    "local_feature_model",
+                    getattr(server, "LOCAL_FEATURE_MODEL", ""),
+                )
+            ).lower()
+            if local_model != "mast3r":
+                raise
+            if "NoneType" not in error_message or "callable" not in error_message:
+                raise
+
+            print(
+                "⚠️ MASt3R extract_query_features failed with NoneType callable; "
+                "retrying with local_matcher fallback."
+            )
+            local_matcher = getattr(localizer, "local_matcher", None)
+            if not callable(local_matcher):
+                print("❌ local_matcher fallback unavailable or not callable.")
+                raise
+
+            from unav.localizer.tools.feature_extractor import extract_query_features
+
+            return extract_query_features(
+                query_img,
+                localizer.global_extractor,
+                local_matcher,
+                localizer.config.global_descriptor_model,
+                localizer.device,
+            )
+
+    localizer.extract_query_features = _patched_extract_query_features
+    localizer.__mast3r_fallback_patched__ = True
+    print("🔧 Applied MASt3R extract_query_features fallback patch")
+
+
 def run_monkey_patch_localizer_methods(self, localizer, method_names=None):
     """Add spans to internal UNavLocalizer methods by monkey-patching."""
     import os
@@ -187,13 +247,12 @@ def run_monkey_patch_localizer_methods(self, localizer, method_names=None):
         "multi_frame_pose_refine",
         "transform_pose_to_floorplan",
     ]
-    internal_components = ["global_extractor", "local_extractor", "local_matcher"]
 
     override = os.getenv("MW_UNAV_TRACE_METHODS")
     if override:
         method_names = [m.strip() for m in override.split(",") if m.strip()]
     else:
-        method_names = method_names or (default_candidates + internal_components)
+        method_names = method_names or default_candidates
 
     def _wrap(orig, name):
         if getattr(orig, "__mw_wrapped__", False):
@@ -225,6 +284,9 @@ def run_monkey_patch_localizer_methods(self, localizer, method_names=None):
         if hasattr(localizer, mname):
             try:
                 orig = getattr(localizer, mname)
+                if not callable(orig):
+                    print(f"ℹ️ Skipping non-callable localizer attribute: {mname}")
+                    continue
                 wrapped = _wrap(orig, mname)
                 setattr(localizer, mname, wrapped)
                 patched.append(mname)

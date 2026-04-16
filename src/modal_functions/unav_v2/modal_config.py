@@ -1,5 +1,6 @@
-from modal import App, Image, Volume, Secret
 from pathlib import Path
+
+from modal import App, Image, Secret, Volume
 
 volume = Volume.from_name("unav_multifloor")
 
@@ -8,6 +9,7 @@ LIGHTGLUE_URL = "https://github.com/cvg/LightGlue/releases/download/v0.1_arxiv/s
 DINOSALAD_URL = (
     "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitb14/dinov2_vitb14_pretrain.pth"
 )
+MAST3R_REPO_URL = "https://github.com/naver/mast3r.git"
 # Get the current file's directory
 current_dir = Path(__file__).resolve().parent
 
@@ -139,7 +141,7 @@ def download_torch_hub_weights():
 
 
 app = App(
-    name="unav-server-v21",
+    name="unav-server-v21-mast3r",
     # mounts removed as deprecated
 )
 
@@ -182,10 +184,26 @@ unav_image = (
         "pip freeze",
     )
     .pip_install_private_repos(
-        "github.com/ai4ce/unav",
+        "github.com/endeleze/UNav.git",
         git_user="surendharpalanisamy",
         secrets=[github_secret],
         extra_options="--no-deps",
+    )
+    .workdir("/root")
+    .run_commands(
+        f"git clone --recursive {MAST3R_REPO_URL} mast3r",
+    )
+    .workdir("/root/mast3r")
+    .run_commands(
+        "pip install -r requirements.txt",
+        "pip install -r dust3r/requirements.txt",
+        "pip install poselib",
+        (
+            "if command -v nvcc >/dev/null 2>&1; then "
+            "cd dust3r/croco/models/curope && python setup.py build_ext --inplace; "
+            "else echo '⚠️ nvcc not found; skipping optional CUDA RoPE build'; "
+            "fi"
+        ),
     )
     .workdir("/root")
     .run_commands("git clone https://github.com/ai4ce/UNav-Server.git unav_server_v2")
@@ -202,7 +220,6 @@ unav_image = (
         "torchvision>=0.19.0",
         "dataloaders>=0.0.1",
         "einops>=0.8.1",
-        "faiss-gpu>=1.7.2",
         "fast-pytorch-kmeans>=0.2.0.1",
         "h5py>=3.7.0",
         "joblib>=1.1.1",
@@ -236,6 +253,12 @@ unav_image = (
         "middleware-io",
         "middleware-io[profiling]",
     )
+    .run_commands(
+        "pip install 'numpy==1.26.4'",
+        "pip install 'faiss-gpu-cu12==1.11.0'",
+        "python -c \"import numpy, faiss; print('numpy', numpy.__version__, 'faiss', faiss.__version__)\"",
+        "PYTHONPATH=/root/mast3r:/root/mast3r/dust3r python -c \"from mast3r.model import AsymmetricMASt3R; print('mast3r import ok')\"",
+    )
     .run_function(download_torch_hub_weights)
     .env(
         {
@@ -244,6 +267,7 @@ unav_image = (
             "MW_TRACKER": "true",
             "MW_CONSOLE_EXPORTER": "false",
             "OTEL_SERVICE_NAME": "modal-unav-server",
+            "PYTHONPATH": "/root/mast3r:/root/mast3r/dust3r",
         }
     )
     .run_commands(
