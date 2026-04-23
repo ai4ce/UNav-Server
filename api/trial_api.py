@@ -216,3 +216,77 @@ async def upload_trial(
         "zip_bytes": len(raw),
         "hf_sync": "started",
     }
+
+
+# ---------- Upload-attempt debug log ----------
+# Clients report each stage of the upload pipeline (zip_started,
+# upload_started, done, failed) so we have server-side visibility even when
+# the zip or HTTP transfer fails silently on the device.
+#
+# Log file: <DATA_ROOT>/trials/_upload_attempts.jsonl
+# View last N: GET /api/trials/upload_log?n=50
+
+import json as _json
+from datetime import datetime as _datetime
+
+_ATTEMPT_LOG_LOCK = threading.Lock()
+
+def _append_attempt_log(entry: dict):
+    log_path = os.path.join(DATA_ROOT, "trials", "_upload_attempts.jsonl")
+    line = _json.dumps(entry, ensure_ascii=False)
+    with _ATTEMPT_LOG_LOCK:
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+
+
+@router.post("/trials/upload_attempt")
+async def log_upload_attempt(
+    trial_id: str = Form(...),
+    stage: str = Form(...),     # zip_started | upload_started | done | failed
+    error: str = Form(""),
+    zip_bytes: int = Form(0),
+    token: str = Depends(oauth2_scheme),
+):
+    """Client-side upload pipeline heartbeat for server-side debugging."""
+    user_id = _get_user_id(token)
+    entry = {
+        "ts": _datetime.utcnow().isoformat() + "Z",
+        "user_id": user_id,
+        "trial_id": trial_id,
+        "stage": stage,
+        "zip_bytes": zip_bytes,
+        "error": error,
+    }
+    try:
+        _append_attempt_log(entry)
+    except Exception as e:
+        logger.warning("[trial_upload_attempt] failed to write log: %s", e)
+    logger.info("[trial_upload_attempt] %s", _json.dumps(entry, ensure_ascii=False))
+    return {"ok": True}
+
+
+@router.get("/trials/upload_log")
+async def get_upload_log(
+    n: int = 50,
+    token: str = Depends(oauth2_scheme),
+):
+    """Return the last N upload attempt log entries (newest first)."""
+    _get_user_id(token)  # auth check only
+    log_path = os.path.join(DATA_ROOT, "trials", "_upload_attempts.jsonl")
+    if not os.path.exists(log_path):
+        return {"entries": [], "total": 0}
+    with _ATTEMPT_LOG_LOCK:
+        with open(log_path, encoding="utf-8") as f:
+            lines = f.readlines()
+    entries = []
+    for line in reversed(lines):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entries.append(_json.loads(line))
+        except Exception:
+            pass
+        if len(entries) >= n:
+            break
+    return {"entries": entries, "total": len(lines)}
