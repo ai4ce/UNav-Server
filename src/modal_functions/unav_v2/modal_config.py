@@ -151,10 +151,11 @@ gemini_secret = Secret.from_name("gemini-api-key")
 middleware_secret = Secret.from_name("middleware")
 
 unav_image = (
-    Image.debian_slim(python_version="3.10")
+    Image.from_registry("ubuntu:22.04", add_python="3.10")
     .run_commands(
         "apt-get update",
-        "apt-get install -y cmake git libgl1-mesa-glx libceres-dev libsuitesparse-dev libgoogle-glog-dev libgflags-dev libopenblas-dev libeigen3-dev liblapack-dev",
+        "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git cmake libceres-dev libsuitesparse-dev libeigen3-dev libgoogle-glog-dev libgflags-dev libopenblas-dev liblapack-dev libgl1-mesa-glx build-essential ca-certificates",
+        "rm -rf /var/lib/apt/lists/*",
     )
     .workdir("/")
     .run_commands(
@@ -165,15 +166,9 @@ unav_image = (
     )
     .workdir("/implicit_dist")
     .run_commands(
-        "ls",
-        "pip install pybind11 numpy",
-        "sed -i 's/\\(\"-DCMAKE_BUILD_TYPE=\" *+ *cfg\\)/\\1, \"-DBLA_STATIC=OFF\"/' setup.py",
-        "sed -i 's/env=env/env=os.environ/' setup.py",
+        "pip install 'numpy<2.0.0' pybind11",
         "sed -i 's/-Werror/-Wno-error/g' CMakeLists.txt",
-        "sed -i \"s/\\'-DCMAKE_BUILD_TYPE=\\' + cfg/\\'-DCMAKE_BUILD_TYPE=\\' + cfg, \\'-DCMAKE_FIND_LIBRARY_SUFFIXES=.so\\'/g\" setup.py",
-        "python setup.py build_ext --inplace 2>&1 || (cat /implicit_dist/build/temp.linux-x86_64-cpython-310/CMakeFiles/CMakeError.log 2>/dev/null; cat /implicit_dist/build/temp.linux-x86_64-cpython-310/CMakeFiles/CMakeOutput.log 2>/dev/null; exit 1)",
-        "python setup.py install --no-deps",
-        "pip freeze",
+        "pip install . --no-deps",
     )
     .pip_install_private_repos(
         "github.com/endeleze/UNav.git",
