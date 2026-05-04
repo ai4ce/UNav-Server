@@ -370,31 +370,23 @@ unav_image = (
 
 ### ✅ Resolved
 - [x] Fixed Modal import error (removed `gpu`)
-- [x] OpenBLAS replaces ATLAS (solves gfortran static lib dep issue)
-- [x] System Eigen instead of building from source (version mismatch fixed)
-- [x] Deprecated Ceres API warnings suppressed (removed `-Werror` from CMakeLists.txt)
-- [x] LTO disabled (linker error with static libraries)
-- [ ] `-fPIC` issue with SuiteSparse static libs unresolved
+- [x] Fixed SuiteSparse `-fPIC` issue by switching to **Ubuntu 22.04** base (`add_python="3.10"`)
+- [x] Deprecated Ceres API warnings → `-Wno-error` in CMakeLists.txt
+- [x] Replaced ATLAS with OpenBLAS (avoids Fortran static lib issue)
 
-### Decision: Switch to 2024.10 Image Builder
-After 9+ attempts with the 2025.06 image builder, the core issue is:
-- **2025.06 builder** causes SuiteSparse static libs to be linked into shared Python modules, but they lack `-fPIC`
-- **2025.06 builder** has different CMake search paths and library discovery behavior
-- **2024.10 builder** works correctly with these libraries
+### Root Cause
+Debian Bookworm's `libsuitesparse-dev` static libraries lack `-fPIC`, preventing them from being linked into a shared Python module. Ubuntu 22.04's SuiteSparse packages compile with `-fPIC`.
 
-**Deploy command:**
+### Final Changes
+- `unav_modal.py`: `from modal import method, enter` (removed `gpu`)
+- `modal_config.py`:
+  - Base: `Image.from_registry("ubuntu:22.04", add_python="3.10")` instead of `Image.debian_slim()`
+  - Packages: `libceres-dev libsuitesparse-dev libeigen3-dev libopenblas-dev` etc.
+  - Removed: custom Eigen build from source, virtual environments, setup.py patching
+  - Only patch needed: `sed -i 's/-Werror/-Wno-error/g' CMakeLists.txt`
+  - Build: `pip install . --no-deps`
+
+### Deploy
 ```bash
 MODAL_IMAGE_BUILDER_VERSION=2024.10 modal deploy -m src.modal_functions.unav_v2.unav_modal
 ```
-
-### All Changes Made (Final State)
-- `unav_modal.py`: Removed `gpu` from import
-- `modal_config.py`: 
-  - Replaced ATLAS + libblas-dev with `libopenblas-dev`
-  - Removed custom Eigen build (uses system package `libeigen3-dev`)
-  - Removed virtual env creation
-  - Setup.py patched: `env=env` → `env=os.environ`
-  - CMakeLists.txt patched: `-Werror` → `-Wno-error` (disables warnings-as-errors for deprecated Ceres API)
-  - `-flto` removed from CMakeLists.txt
-
-**Last Updated:** 2026-05-04

@@ -239,6 +239,7 @@ unav_image = (
         "google-genai",
         "middleware-io",
         "middleware-io[profiling]",
+        force_build=True,
     )
     .run_commands(
         "pip install 'numpy==1.26.4'",
