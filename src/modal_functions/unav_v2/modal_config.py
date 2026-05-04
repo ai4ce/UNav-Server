@@ -263,5 +263,6 @@ unav_image = (
         "echo 'exec middleware-run \"$@\"' >> /root/run.sh",
         "chmod +x /root/run.sh",
     )
+    .pip_install("grpclib")
     .dockerfile_commands('ENTRYPOINT ["/root/run.sh"]')
 )
