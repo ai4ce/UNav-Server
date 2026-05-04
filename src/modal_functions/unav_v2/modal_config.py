@@ -154,7 +154,7 @@ unav_image = (
     Image.debian_slim(python_version="3.10")
     .run_commands(
         "apt-get update",
-        "apt-get install -y cmake git libgl1-mesa-glx libceres-dev libsuitesparse-dev libgoogle-glog-dev libgflags-dev libatlas-base-dev libeigen3-dev",
+        "apt-get install -y cmake git libgl1-mesa-glx libceres-dev libsuitesparse-dev libgoogle-glog-dev libgflags-dev libatlas-base-dev libeigen3-dev libblas-dev liblapack-dev gfortran",
     )
     .run_commands("git clone https://gitlab.com/libeigen/eigen.git eigen")
     .workdir("/eigen")
@@ -178,9 +178,11 @@ unav_image = (
     .workdir("/implicit_dist")
     .run_commands(
         "ls",
-        "python3 -m venv .venv",
-        ". .venv/bin/activate",
-        "pip install . --no-deps",
+        "pip install pybind11 numpy",
+        "sed -i 's/\\(\"-DCMAKE_BUILD_TYPE=\" *+ *cfg\\)/\\1, \"-DBLA_STATIC=OFF\"/' setup.py",
+        "sed -i 's/env=env/env=os.environ/' setup.py",
+        "python setup.py build_ext --inplace 2>&1 || (cat /implicit_dist/build/temp.linux-x86_64-cpython-310/CMakeFiles/CMakeError.log 2>/dev/null; cat /implicit_dist/build/temp.linux-x86_64-cpython-310/CMakeFiles/CMakeOutput.log 2>/dev/null; exit 1)",
+        "python setup.py install --no-deps",
         "pip freeze",
     )
     .pip_install_private_repos(
