@@ -394,6 +394,7 @@ MODAL_IMAGE_BUILDER_VERSION=2024.10 modal deploy -m src.modal_functions.unav_v2.
   - Removed custom Eigen build (uses system package `libeigen3-dev`)
   - Removed virtual env creation
   - Setup.py patched: `env=env` → `env=os.environ`
-  - CMakeLists.txt patched: removed `-Werror` and `-flto`
+  - CMakeLists.txt patched: `-Werror` → `-Wno-error` (disables warnings-as-errors for deprecated Ceres API)
+  - `-flto` removed from CMakeLists.txt
 
 **Last Updated:** 2026-05-04

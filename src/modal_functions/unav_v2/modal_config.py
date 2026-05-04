@@ -154,19 +154,7 @@ unav_image = (
     Image.debian_slim(python_version="3.10")
     .run_commands(
         "apt-get update",
-        "apt-get install -y cmake git libgl1-mesa-glx libceres-dev libsuitesparse-dev libgoogle-glog-dev libgflags-dev libatlas-base-dev libeigen3-dev libblas-dev liblapack-dev gfortran",
-    )
-    .run_commands("git clone https://gitlab.com/libeigen/eigen.git eigen")
-    .workdir("/eigen")
-    .run_commands(
-        "git checkout 3.4",
-        "mkdir build",
-    )
-    .workdir("/eigen/build")
-    .run_commands(
-        "cmake ..",
-        "make",
-        "make install",
+        "apt-get install -y cmake git libgl1-mesa-glx libceres-dev libsuitesparse-dev libgoogle-glog-dev libgflags-dev libopenblas-dev libeigen3-dev liblapack-dev",
     )
     .workdir("/")
     .run_commands(
@@ -181,6 +169,8 @@ unav_image = (
         "pip install pybind11 numpy",
         "sed -i 's/\\(\"-DCMAKE_BUILD_TYPE=\" *+ *cfg\\)/\\1, \"-DBLA_STATIC=OFF\"/' setup.py",
         "sed -i 's/env=env/env=os.environ/' setup.py",
+        "sed -i 's/-Werror/-Wno-error/g' CMakeLists.txt",
+        "sed -i \"s/\\'-DCMAKE_BUILD_TYPE=\\' + cfg/\\'-DCMAKE_BUILD_TYPE=\\' + cfg, \\'-DCMAKE_FIND_LIBRARY_SUFFIXES=.so\\'/g\" setup.py",
         "python setup.py build_ext --inplace 2>&1 || (cat /implicit_dist/build/temp.linux-x86_64-cpython-310/CMakeFiles/CMakeError.log 2>/dev/null; cat /implicit_dist/build/temp.linux-x86_64-cpython-310/CMakeFiles/CMakeOutput.log 2>/dev/null; exit 1)",
         "python setup.py install --no-deps",
         "pip freeze",
