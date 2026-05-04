@@ -239,7 +239,6 @@ unav_image = (
         "google-genai",
         "middleware-io",
         "middleware-io[profiling]",
-        force_build=True,
     )
     .run_commands(
         "pip install 'numpy==1.26.4'",
@@ -247,7 +246,7 @@ unav_image = (
         "python -c \"import numpy, faiss; print('numpy', numpy.__version__, 'faiss', faiss.__version__)\"",
         "PYTHONPATH=/root/mast3r:/root/mast3r/dust3r python -c \"from mast3r.model import AsymmetricMASt3R; print('mast3r import ok')\"",
     )
-    .run_function(download_torch_hub_weights)
+    # .run_function(download_torch_hub_weights)
     .env(
         {
             "MW_SERVICE_NAME": "UNav-Server",
