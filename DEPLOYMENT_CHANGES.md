@@ -368,26 +368,32 @@ unav_image = (
 
 ## Status
 
-- [x] Fixed Modal import error
-- [x] Added BLAS/LAPACK libraries
-- [x] Added CMAKE environment variables (Attempt 1 - Failed)
-- [x] Added inline environment variables (Attempt 2 - Failed)
-- [x] Added export statements (Attempt 3 - Failed)
-- [x] Added PKG_CONFIG files (Attempt 4 - Failed - Shell syntax error)
-- [x] Fixed PKG_CONFIG creation with printf (Attempt 5 - Testing)
-- [ ] Deployment test pending
-- [ ] Verification pending
+### ✅ Resolved
+- [x] Fixed Modal import error (removed `gpu`)
+- [x] OpenBLAS replaces ATLAS (solves gfortran static lib dep issue)
+- [x] System Eigen instead of building from source (version mismatch fixed)
+- [x] Deprecated Ceres API warnings suppressed (removed `-Werror` from CMakeLists.txt)
+- [x] LTO disabled (linker error with static libraries)
+- [ ] `-fPIC` issue with SuiteSparse static libs unresolved
+
+### Decision: Switch to 2024.10 Image Builder
+After 9+ attempts with the 2025.06 image builder, the core issue is:
+- **2025.06 builder** causes SuiteSparse static libs to be linked into shared Python modules, but they lack `-fPIC`
+- **2025.06 builder** has different CMake search paths and library discovery behavior
+- **2024.10 builder** works correctly with these libraries
+
+**Deploy command:**
+```bash
+MODAL_IMAGE_BUILDER_VERSION=2024.10 modal deploy -m src.modal_functions.unav_v2.unav_modal
+```
+
+### All Changes Made (Final State)
+- `unav_modal.py`: Removed `gpu` from import
+- `modal_config.py`: 
+  - Replaced ATLAS + libblas-dev with `libopenblas-dev`
+  - Removed custom Eigen build (uses system package `libeigen3-dev`)
+  - Removed virtual env creation
+  - Setup.py patched: `env=env` → `env=os.environ`
+  - CMakeLists.txt patched: removed `-Werror` and `-flto`
 
 **Last Updated:** 2026-05-04
-**Next Review:** After successful deployment
-
----
-
-## Troubleshooting Summary
-
-### Attempts Made:
-1. **CMAKE_ARGS env var** - pip config-settings approach failed
-2. **Inline env vars** - Variables not passed to subprocess
-3. **Export statements** - Setup.py spawns subprocess with explicit env dict
-4. **PKG_CONFIG (echo)** - Shell syntax error with newlines
-5. **PKG_CONFIG (printf)** - Using printf for reliable file creation
