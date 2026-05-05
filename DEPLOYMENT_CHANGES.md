@@ -386,6 +386,35 @@ Debian Bookworm's `libsuitesparse-dev` static libraries lack `-fPIC`, preventing
   - Only patch needed: `sed -i 's/-Werror/-Wno-error/g' CMakeLists.txt`
   - Build: `pip install . --no-deps`
 
+---
+
+## Outstanding Issues (2026-05-05)
+
+### MASt3R Symlink Workaround (data_temp_root / data_final_root paths)
+
+**Problem:** MASt3R's internal pip package (installed from source) contains hardcoded paths pointing to `/mnt/data/UNav-IO/...` for perspective image lookup. These paths are embedded in compiled/serialized code and cannot be overridden by passing `data_temp_root` to `UNavConfig` or setting it on `localizor_config`.
+
+**Current workaround:** A symlink `/mnt/data/UNav-IO` → `/root/UNav-IO/mnt/data/UNav-IO` is created at runtime in `_setup_mast3r_symlink()` (`logic/init.py:11`). Since Modal volumes are mounted at `/root/UNav-IO` and the volume's internal structure is `mnt/data/UNav-IO/...`, this symlink bridges the gap.
+
+**Attempted alternative (failed):** Passing `data_temp_root="/root/UNav-IO/mnt/data/UNav-IO/temp"` to the `UNavConfig` constructor does NOT fix the issue because MASt3R's compiled code bypasses the config lookup and reads directly from `/mnt/data/UNav-IO/...`.
+
+**For a future developer to properly fix:**
+1. Investigate where in the MASt3R source (`/root/mast3r`) the `/mnt/data/UNav-IO` path is hardcoded — likely in `dust3r/` or `mast3r/` model weight loading or dataset code.
+2. Options:
+   - Patch the MASt3R source to use a configurable path (cleanest fix)
+   - Keep the symlink (simplest, but fragile)
+   - Modify the Modal volume mount point to `/mnt/data/UNav-IO` instead of `/root/UNav-IO` (would break other code expecting `/root/UNav-IO`)
+
+### UNavConfig Default Config Trap
+
+**Problem:** `UNavConfig` (in `unav/unav/config.py`) defaults to `mapping_floor="3_floor"`, `mapping_place="New_York_City"`, `mapping_building="LightHouse"`, and `data_temp_root="/mnt/data/UNav-IO/temp"`. If `data_temp_root` is not explicitly passed, the config constructs video paths for `3_floor.mp4` even when the runtime floor is `17_floor` — causing a `FileNotFoundError`.
+
+**Current mitigation (applied):** `data_temp_root` is now passed explicitly to `UNavConfig()` as `data_temp_root="/root/UNav-IO/mnt/data/UNav-IO/temp"` to prevent fallback to defaults.
+
+**For a future developer:**
+- If adding new floors or places, ensure `data_temp_root` is always passed explicitly
+- The `UNavConfig` defaults are a trap — never rely on them at runtime
+
 ### Deploy
 ```bash
 MODAL_IMAGE_BUILDER_VERSION=2024.10 modal deploy -m src.modal_functions.unav_v2.unav_modal
