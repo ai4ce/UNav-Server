@@ -66,13 +66,14 @@ def run_init_cpu_components(self):
     self.FEATURE_MODEL = "DinoV2Salad"
     self.LOCAL_FEATURE_MODEL = "mast3r"
 
-    _setup_mast3r_symlink(self.DATA_ROOT)
+    # _setup_mast3r_symlink(self.DATA_ROOT)
 
     self.PLACES = run_get_places(self)
 
     print("🔧 Initializing UNavConfig...")
     self.config = UNavConfig(
         data_final_root=self.DATA_ROOT,
+        data_temp_root="/root/UNav-IO/mnt/data/UNav-IO/temp",
         places=self.PLACES,
         global_descriptor_model=self.FEATURE_MODEL,
         local_feature_model=self.LOCAL_FEATURE_MODEL,
