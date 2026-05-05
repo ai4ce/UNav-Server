@@ -8,6 +8,33 @@ from modal import enter
 from .places import run_get_places
 
 
+def _setup_mast3r_symlink(data_root: str):
+    import os
+
+    target_path = "/mnt/data/UNav-IO"
+    source_path = "/root/UNav-IO/mnt/data/UNav-IO"
+
+    if os.path.islink(target_path):
+        print(f"✅ MASt3R symlink already exists: {target_path} -> {os.readlink(target_path)}")
+        return
+
+    parent_dir = os.path.dirname(target_path)
+    if not os.path.exists(parent_dir):
+        try:
+            os.makedirs(parent_dir, exist_ok=True)
+            print(f"Created parent directory: {parent_dir}")
+        except Exception as e:
+            print(f"Could not create parent directory {parent_dir}: {e}")
+
+    try:
+        os.symlink(source_path, target_path)
+        print(f"✅ Created MASt3R symlink: {target_path} -> {source_path}")
+    except FileExistsError:
+        print(f"Path already exists (not a symlink): {target_path}")
+    except Exception as e:
+        print(f"Failed to create MASt3R symlink: {e}")
+
+
 def run_init_middleware(self):
     """Initialize Middleware.io tracking for profiling and telemetry."""
     print("🔧 [Phase 0] Initializing Middleware.io...")
@@ -38,6 +65,8 @@ def run_init_cpu_components(self):
     self.DATA_ROOT = "/root/UNav-IO/data"
     self.FEATURE_MODEL = "DinoV2Salad"
     self.LOCAL_FEATURE_MODEL = "mast3r"
+
+    _setup_mast3r_symlink(self.DATA_ROOT)
 
     self.PLACES = run_get_places(self)
 
