@@ -200,7 +200,7 @@ def _configure_middleware_tracing(self):
                 console_exporter=False,
                 log_level="INFO",
                 collect_profiling=True,
-                collect_traces=True,
+                collect_traces=False,
                 collect_metrics=True,
             )
         )
