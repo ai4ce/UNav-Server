@@ -23,14 +23,14 @@ def main():
             image_data = image_file.read()
             base64_encoded = base64.b64encode(image_data).decode("utf-8")
 
-        # print("Testing get_destinations_list...")
-        # result = unav_server.get_destinations_list.remote(
-        #     floor=FLOOR,
-        #     place=PLACE,
-        #     building=BUILDING,
+        print("Testing get_destinations_list...")
+        result = unav_server.get_destinations_list.remote(
+            floor=FLOOR,
+            place=PLACE,
+            building=BUILDING,
         
-        # )
-        # print("Result:", result)
+        )
+        print("Result:", result)
 
         # print("\n" + "="*50)
         # print("Testing localize_user...")
@@ -54,7 +54,7 @@ def main():
             building=BUILDING,
             floor=FLOOR,
             place=PLACE,
-            enable_multifloor=False,
+            enable_multifloor=True,
         )
         print("Planner Result:", planner_result)
 
