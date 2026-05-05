@@ -8,29 +8,29 @@ import modal
 
 def main():
     # Common parameters
-    BUILDING = "LightHouse"
-    PLACE = "New_York_City"
-    FLOOR = "6_floor"
+    BUILDING = "Langone"
+    PLACE = "New_York_University"
+    FLOOR = "17_floor"
     DESTINATION_ID = "50"
     SESSION_ID = "test_session_id_2"
-    IMAGE_PATH = "media/sample_image_4.jpg"
+    IMAGE_PATH = os.path.join(os.path.dirname(__file__), "media", "vinay_sample.jpeg")
 
     try:
-        UnavServer = modal.Cls.lookup("unav-server-v21-mast3r", "UnavServer")
+        UnavServer = modal.Cls.from_name("pure-mast3r-clean-install", "UnavServer")
         unav_server = UnavServer()
-        current_directory = os.getcwd()
-        full_image_path = os.path.join(current_directory, IMAGE_PATH)
+        full_image_path = IMAGE_PATH
         with open(full_image_path, "rb") as image_file:
             image_data = image_file.read()
             base64_encoded = base64.b64encode(image_data).decode("utf-8")
 
-        # print("Testing get_destinations_list...")
-        # result = unav_server.get_destinations_list.remote(
-        #     floor=FLOOR,
-        #     place=PLACE,
-        #     building=BUILDING,
-        # )
-        # print("Result:", result)
+        print("Testing get_destinations_list...")
+        result = unav_server.get_destinations_list.remote(
+            floor=FLOOR,
+            place=PLACE,
+            building=BUILDING,
+        
+        )
+        print("Result:", result)
 
         # print("\n" + "="*50)
         # print("Testing localize_user...")
@@ -54,7 +54,7 @@ def main():
             building=BUILDING,
             floor=FLOOR,
             place=PLACE,
-            enable_multifloor=False,
+            enable_multifloor=True,
         )
         print("Planner Result:", planner_result)
 

@@ -2,16 +2,46 @@
 Initialization and setup methods for UnavServer.
 These are called during container startup.
 """
+
 from modal import enter
 
 from .places import run_get_places
+
+
+def _setup_mast3r_symlink(data_root: str):
+    import os
+
+    target_path = "/mnt/data/UNav-IO"
+    source_path = "/root/UNav-IO/mnt/data/UNav-IO"
+
+    if os.path.islink(target_path):
+        print(f"✅ MASt3R symlink already exists: {target_path} -> {os.readlink(target_path)}")
+        return
+
+    parent_dir = os.path.dirname(target_path)
+    if not os.path.exists(parent_dir):
+        try:
+            os.makedirs(parent_dir, exist_ok=True)
+            print(f"Created parent directory: {parent_dir}")
+        except Exception as e:
+            print(f"Could not create parent directory {parent_dir}: {e}")
+
+    try:
+        os.symlink(source_path, target_path)
+        print(f"✅ Created MASt3R symlink: {target_path} -> {source_path}")
+    except FileExistsError:
+        print(f"Path already exists (not a symlink): {target_path}")
+    except Exception as e:
+        print(f"Failed to create MASt3R symlink: {e}")
 
 
 def run_init_middleware(self):
     """Initialize Middleware.io tracking for profiling and telemetry."""
     print("🔧 [Phase 0] Initializing Middleware.io...")
     print(f"🔧 [Phase 0] Current tracer state: {getattr(self, 'tracer', 'NOT_SET')}")
-    print(f"🔧 [Phase 0] Middleware init pending: {getattr(self, '_middleware_init_pending', 'NOT_SET')}")
+    print(
+        f"🔧 [Phase 0] Middleware init pending: {getattr(self, '_middleware_init_pending', 'NOT_SET')}"
+    )
 
     if not _gpu_available():
         print("⏸️ GPU not yet available; deferring Middleware.io initialization...")
@@ -34,12 +64,16 @@ def run_init_cpu_components(self):
 
     self.DATA_ROOT = "/root/UNav-IO/data"
     self.FEATURE_MODEL = "DinoV2Salad"
-    self.LOCAL_FEATURE_MODEL = "superpoint+lightglue"
+    self.LOCAL_FEATURE_MODEL = "mast3r"
+
+    _setup_mast3r_symlink(self.DATA_ROOT)
+
     self.PLACES = run_get_places(self)
 
     print("🔧 Initializing UNavConfig...")
     self.config = UNavConfig(
         data_final_root=self.DATA_ROOT,
+        # data_temp_root="/root/UNav-IO/mnt/data/UNav-IO/temp",
         places=self.PLACES,
         global_descriptor_model=self.FEATURE_MODEL,
         local_feature_model=self.LOCAL_FEATURE_MODEL,
@@ -47,6 +81,8 @@ def run_init_cpu_components(self):
     print("✅ UNavConfig initialized successfully")
 
     self.localizor_config = self.config.localizer_config
+    # Configure MASt3R DB image lookup path (perspectives live in temp folder)
+    self.localizor_config.data_temp_root = "/root/UNav-IO/mnt/data/UNav-IO/temp"
     self.navigator_config = self.config.navigator_config
     print("✅ Config objects extracted successfully")
 
@@ -67,6 +103,7 @@ def run_init_gpu_components(self):
 
     try:
         import torch
+
         cuda_available = torch.cuda.is_available()
         print(f"[GPU DEBUG] torch.cuda.is_available(): {cuda_available}")
 
@@ -76,7 +113,9 @@ def run_init_gpu_components(self):
 
         print(f"[GPU DEBUG] torch.cuda.device_count(): {torch.cuda.device_count()}")
         print(f"[GPU DEBUG] torch.cuda.current_device(): {torch.cuda.current_device()}")
-        print(f"[GPU DEBUG] torch.cuda.get_device_name(0): {torch.cuda.get_device_name(0)}")
+        print(
+            f"[GPU DEBUG] torch.cuda.get_device_name(0): {torch.cuda.get_device_name(0)}"
+        )
     except Exception as gpu_debug_exc:
         print(f"[GPU DEBUG] Error printing GPU info: {gpu_debug_exc}")
         if "GPU not available when required" in str(gpu_debug_exc):
@@ -103,7 +142,9 @@ def run_init_gpu_components(self):
 
     self.gpu_components_initialized = True
     print("🎉 Full UNav system initialization complete! Ready for fast inference.")
-    print(f"🎉 [Phase 2] Checking for deferred middleware init: _middleware_init_pending={getattr(self, '_middleware_init_pending', 'NOT_SET')}")
+    print(
+        f"🎉 [Phase 2] Checking for deferred middleware init: _middleware_init_pending={getattr(self, '_middleware_init_pending', 'NOT_SET')}"
+    )
 
     if getattr(self, "_middleware_init_pending", False):
         print("🔁 GPU acquired; completing deferred Middleware.io initialization...")
@@ -124,6 +165,7 @@ def _gpu_available() -> bool:
     """Utility to detect whether CUDA GPUs are currently accessible."""
     try:
         import torch
+
         available = torch.cuda.is_available()
         print(f"[GPU CHECK] torch.cuda.is_available(): {available}")
         return available
@@ -143,7 +185,9 @@ def _configure_middleware_tracing(self):
     target = os.environ.get("MW_TARGET")
 
     if not api_key or not target:
-        print("⚠️ Warning: MW_API_KEY and MW_TARGET not set. Skipping middleware initialization.")
+        print(
+            "⚠️ Warning: MW_API_KEY and MW_TARGET not set. Skipping middleware initialization."
+        )
         self.tracer = None
         return
 
@@ -174,14 +218,27 @@ def _apply_mast3r_extraction_fallback(server, localizer):
     """
     Patch localizer.extract_query_features for MASt3R compatibility.
 
-    Some UNav/MASt3R combinations expose a callable local_extractor that
-    internally fails with "'NoneType' object is not callable". In that case,
-    retry using local_matcher as the local-feature callable.
+    MASt3RExtractor is not callable by default - we need to add __call__ method
+    to make it work with the feature extraction pipeline.
     """
     import functools
 
     if getattr(localizer, "__mast3r_fallback_patched__", False):
         return
+
+    # Monkey-patch MASt3RExtractor class to add __call__ method
+    local_matcher = getattr(localizer, "local_matcher", None)
+    if local_matcher is not None:
+        matcher_class = type(local_matcher)
+        # Check if MASt3RExtractor and doesn't have __call__
+        if matcher_class.__name__ == "MASt3RExtractor" and not callable(local_matcher):
+            # Add __call__ method to the class that returns None (MASt3R does joint extraction)
+            def _mast3r_call(self, image):
+                """Make MASt3RExtractor callable - returns None as MASt3R does joint extraction+matching."""
+                return None
+
+            matcher_class.__call__ = _mast3r_call
+            print(f"🔧 Added __call__ method to {matcher_class.__name__}")
 
     original_extract = getattr(localizer, "extract_query_features", None)
     if not callable(original_extract):
@@ -259,6 +316,7 @@ def run_monkey_patch_localizer_methods(self, localizer, method_names=None):
             return orig
 
         if inspect.iscoroutinefunction(orig):
+
             async def _async_wrapper(*args, **kwargs):
                 with tracer.start_as_current_span(f"unav.{name}") as span:
                     try:
@@ -266,9 +324,11 @@ def run_monkey_patch_localizer_methods(self, localizer, method_names=None):
                     except Exception as exc:
                         span.record_exception(exc)
                         raise
+
             _async_wrapper.__mw_wrapped__ = True
             return functools.wraps(orig)(_async_wrapper)
         else:
+
             def _sync_wrapper(*args, **kwargs):
                 with tracer.start_as_current_span(f"unav.{name}") as span:
                     try:
@@ -276,6 +336,7 @@ def run_monkey_patch_localizer_methods(self, localizer, method_names=None):
                     except Exception as exc:
                         span.record_exception(exc)
                         raise
+
             _sync_wrapper.__mw_wrapped__ = True
             return functools.wraps(orig)(_sync_wrapper)
 
@@ -308,6 +369,7 @@ def run_monkey_patch_pose_refinement(self):
 
     try:
         import poselib
+
         if not getattr(poselib, "__mw_patched__", False):
             original_estimate = poselib.estimate_1D_radial_absolute_pose
 
@@ -324,12 +386,15 @@ def run_monkey_patch_pose_refinement(self):
 
     try:
         import pyimplicitdist
+
         if not getattr(pyimplicitdist, "__mw_patched__", False):
             original_refine_1d = pyimplicitdist.pose_refinement_1D_radial
 
             @functools.wraps(original_refine_1d)
             def traced_refine_1d(*args, **kwargs):
-                with tracer.start_as_current_span("unav.pyimplicitdist.pose_refinement_1D_radial"):
+                with tracer.start_as_current_span(
+                    "unav.pyimplicitdist.pose_refinement_1D_radial"
+                ):
                     return original_refine_1d(*args, **kwargs)
 
             pyimplicitdist.pose_refinement_1D_radial = traced_refine_1d
@@ -338,7 +403,9 @@ def run_monkey_patch_pose_refinement(self):
 
             @functools.wraps(original_build_cm)
             def traced_build_cm(*args, **kwargs):
-                with tracer.start_as_current_span("unav.pyimplicitdist.build_cost_matrix_multi"):
+                with tracer.start_as_current_span(
+                    "unav.pyimplicitdist.build_cost_matrix_multi"
+                ):
                     return original_build_cm(*args, **kwargs)
 
             pyimplicitdist.build_cost_matrix_multi = traced_build_cm
@@ -347,7 +414,9 @@ def run_monkey_patch_pose_refinement(self):
 
             @functools.wraps(original_refine_multi)
             def traced_refine_multi(*args, **kwargs):
-                with tracer.start_as_current_span("unav.pyimplicitdist.pose_refinement_multi"):
+                with tracer.start_as_current_span(
+                    "unav.pyimplicitdist.pose_refinement_multi"
+                ):
                     return original_refine_multi(*args, **kwargs)
 
             pyimplicitdist.pose_refinement_multi = traced_refine_multi
@@ -372,9 +441,17 @@ def run_monkey_patch_feature_extractors(self):
             original_extract = feature_extractor.extract_query_features
 
             @functools.wraps(original_extract)
-            def traced_extract_query_features(query_img, global_extractor, local_extractor, global_model_name, device):
+            def traced_extract_query_features(
+                query_img, global_extractor, local_extractor, global_model_name, device
+            ):
                 with tracer.start_as_current_span("unav.extract_query_features"):
-                    return original_extract(query_img, global_extractor, local_extractor, global_model_name, device)
+                    return original_extract(
+                        query_img,
+                        global_extractor,
+                        local_extractor,
+                        global_model_name,
+                        device,
+                    )
 
             feature_extractor.extract_query_features = traced_extract_query_features
             feature_extractor.__mw_patched__ = True
@@ -390,7 +467,9 @@ def run_monkey_patch_feature_extractors(self):
 
             @functools.wraps(original_call)
             def traced_global_call(self, request_model, images):
-                with tracer.start_as_current_span(f"unav.global_extractor.{request_model}.model_forward"):
+                with tracer.start_as_current_span(
+                    f"unav.global_extractor.{request_model}.model_forward"
+                ):
                     return original_call(self, request_model, images)
 
             GlobalExtractors.__call__ = traced_global_call

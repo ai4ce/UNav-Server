@@ -141,7 +141,7 @@ def download_torch_hub_weights():
 
 
 app = App(
-    name="unav-server-v21-mast3r",
+    name="pure-mast3r-clean-install",
     # mounts removed as deprecated
 )
 
@@ -151,22 +151,11 @@ gemini_secret = Secret.from_name("gemini-api-key")
 middleware_secret = Secret.from_name("middleware")
 
 unav_image = (
-    Image.debian_slim(python_version="3.10")
+    Image.from_registry("ubuntu:22.04", add_python="3.10")
     .run_commands(
         "apt-get update",
-        "apt-get install -y cmake git libgl1-mesa-glx libceres-dev libsuitesparse-dev libgoogle-glog-dev libgflags-dev libatlas-base-dev libeigen3-dev",
-    )
-    .run_commands("git clone https://gitlab.com/libeigen/eigen.git eigen")
-    .workdir("/eigen")
-    .run_commands(
-        "git checkout 3.4",
-        "mkdir build",
-    )
-    .workdir("/eigen/build")
-    .run_commands(
-        "cmake ..",
-        "make",
-        "make install",
+        "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git cmake libceres-dev libsuitesparse-dev libeigen3-dev libgoogle-glog-dev libgflags-dev libopenblas-dev liblapack-dev libgl1-mesa-glx build-essential ca-certificates",
+        "rm -rf /var/lib/apt/lists/*",
     )
     .workdir("/")
     .run_commands(
@@ -177,11 +166,9 @@ unav_image = (
     )
     .workdir("/implicit_dist")
     .run_commands(
-        "ls",
-        "python3 -m venv .venv",
-        ". .venv/bin/activate",
+        "pip install 'numpy<2.0.0' pybind11",
+        "sed -i 's/-Werror/-Wno-error/g' CMakeLists.txt",
         "pip install . --no-deps",
-        "pip freeze",
     )
     .pip_install_private_repos(
         "github.com/endeleze/UNav.git",
@@ -259,7 +246,7 @@ unav_image = (
         "python -c \"import numpy, faiss; print('numpy', numpy.__version__, 'faiss', faiss.__version__)\"",
         "PYTHONPATH=/root/mast3r:/root/mast3r/dust3r python -c \"from mast3r.model import AsymmetricMASt3R; print('mast3r import ok')\"",
     )
-    .run_function(download_torch_hub_weights)
+    # .run_function(download_torch_hub_weights)
     .env(
         {
             "MW_SERVICE_NAME": "UNav-Server",
@@ -276,5 +263,6 @@ unav_image = (
         "echo 'exec middleware-run \"$@\"' >> /root/run.sh",
         "chmod +x /root/run.sh",
     )
+    .pip_install("grpclib")
     .dockerfile_commands('ENTRYPOINT ["/root/run.sh"]')
 )
