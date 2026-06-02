@@ -1,7 +1,4 @@
 #!/bin/bash
-set -a
-[ -f .env.local ] && source ./.env.local
-set +a
 
 # Path to the local data directory to be mounted inside the container
 DATA_ROOT="/mnt/data/UNav-IO/data"
@@ -24,15 +21,13 @@ echo "Mounting local data directory: ${DATA_ROOT} -> /data (in container)"
 echo "Mounting backend source: ${SCRIPT_DIR}/{api,main.py,core,db,models} -> /workspace/..."
 echo "Exposing port: ${HOST_PORT} -> ${CONTAINER_PORT}"
 
-ENV_ARGS=()
-[ -n "${OPENAI_API_KEY:-}" ] && ENV_ARGS+=( -e OPENAI_API_KEY="$OPENAI_API_KEY" )
-[ -n "${OPENAI_MODEL:-}" ] && ENV_ARGS+=( -e OPENAI_MODEL="$OPENAI_MODEL" )
-[ -n "${GEMINI_API_KEY:-}" ] && ENV_ARGS+=( -e GEMINI_API_KEY="$GEMINI_API_KEY" )
-[ -n "${GEMINI_MODEL:-}" ] && ENV_ARGS+=( -e GEMINI_MODEL="$GEMINI_MODEL" )
-[ -n "${LLM_PROVIDER:-}" ] && ENV_ARGS+=( -e LLM_PROVIDER="$LLM_PROVIDER" )
-[ -n "${LLM_FALLBACK_PROVIDER:-}" ] && ENV_ARGS+=( -e LLM_FALLBACK_PROVIDER="$LLM_FALLBACK_PROVIDER" )
-[ -n "${OPENAI_API_URL:-}" ] && ENV_ARGS+=( -e OPENAI_API_URL="$OPENAI_API_URL" )
-[ -n "${GEMINI_API_URL:-}" ] && ENV_ARGS+=( -e GEMINI_API_URL="$GEMINI_API_URL" )
+ENV_FILE="${SCRIPT_DIR}/.env.local"
+ENV_FILE_ARGS=()
+if [ -f "${ENV_FILE}" ]; then
+  ENV_FILE_ARGS+=( --env-file "${ENV_FILE}" )
+else
+  echo "Warning: ${ENV_FILE} not found; LLM providers will only use container defaults." >&2
+fi
 
 docker run --gpus device=1 --rm -it \
   -p "${HOST_PORT}:${CONTAINER_PORT}" \
@@ -46,7 +41,7 @@ docker run --gpus device=1 --rm -it \
   -v "/mnt/data/UNav-IO/temp:/mnt/data/UNav-IO/temp:ro" \
   -v "/home/unav/Desktop/unav/unav:/opt/conda/envs/unav/lib/python3.10/site-packages/unav" \
   -v "/home/unav/Desktop/mast3r:/workspace/mast3r" \
-  "${ENV_ARGS[@]}" \
+  "${ENV_FILE_ARGS[@]}" \
   -e PYTHONPATH=/workspace/mast3r \
   "${IMAGE_NAME}" \
-  bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate unav && cd /workspace && PYTHONPATH=/workspace/mast3r uvicorn main:app --host 0.0.0.0 --port ${CONTAINER_PORT}"
+  bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate unav && pip install 'bcrypt<4.0.0' -q && cd /workspace && PYTHONPATH=/workspace/mast3r uvicorn main:app --host 0.0.0.0 --port ${CONTAINER_PORT}"

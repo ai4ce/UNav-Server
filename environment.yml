@@ -42,7 +42,7 @@ dependencies:
   - requests
   - python-multipart
   - email-validator
-  - bcrypt
+  - bcrypt<4.0.0
 
   # ===== Others =====
   - yaml
@@ -62,7 +62,6 @@ dependencies:
       - lib==4.0.0
       - POT==0.9.5
       - PyJWT>=2.0.0
-      - pyimplicitdist==1.1.0
       - kornia==0.8.1
       - lazy-loader==0.4
       - matplotlib==3.10.3

@@ -404,8 +404,26 @@ def unav_navigation(inputs):
         "timings": output.get("timings"),
         "top_candidates": output.get("top_candidates"),
         "local_feature_model": "mast3r" if hasattr(localizer, "use_mast3r") and localizer.use_mast3r else "superpoint+lightglue",
+        "route_segments": nav.get_floor_route_segments(start_place, start_building, start_floor),
     }
 
+
+
+
+def get_route_segments(inputs):
+    """
+    Return the route-network segments for a given floor.
+
+    Args:
+        inputs (dict): {place, building, floor}
+
+    Returns:
+        dict: {route_segments: [{from: [x,y], to: [x,y]}, ...]}
+    """
+    place = inputs["place"]
+    building = inputs["building"]
+    floor = inputs["floor"]
+    return {"route_segments": nav.get_floor_route_segments(place, building, floor)}
 
 # Register all UNav-related tasks in a dictionary
 UNAV_TASKS = {
@@ -418,4 +436,5 @@ UNAV_TASKS = {
     "get_scale": get_scale,
     "select_turn_mode": select_turn_mode,
     "unav_navigation": unav_navigation,
+    "get_route_segments": get_route_segments,
 }

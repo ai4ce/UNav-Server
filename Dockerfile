@@ -9,6 +9,7 @@ RUN apt-get update && \
         cmake \
         libeigen3-dev \
         libceres-dev \
+        libmetis-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # 2. Install Miniconda to /opt/conda and update PATH
@@ -39,8 +40,10 @@ RUN rm -f /workspace/config.py
 
 # 6. Install external/private Python packages (no dependency resolution)
 ARG UNAV_REPO="https://github.com/endeleze/UNav.git"
-ARG UNAV_REF="unav-server"
-RUN pip install --no-deps git+https://github.com/cvg/implicit_dist.git
+ARG UNAV_REF="main"
+# Copy pre-built pyimplicitdist (building from source is brittle on this host)
+COPY pyimplicitdist.cpython-310-x86_64-linux-gnu.so /opt/conda/envs/unav/lib/python3.10/site-packages/
+COPY pyimplicitdist-1.1.0.dist-info /opt/conda/envs/unav/lib/python3.10/site-packages/pyimplicitdist-1.1.0.dist-info
 RUN pip install --no-deps --upgrade --no-cache-dir "git+${UNAV_REPO}@${UNAV_REF}#egg=unav"
 RUN pip install --no-cache-dir huggingface_hub>=0.20.0
 
