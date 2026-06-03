@@ -32,6 +32,16 @@ def main():
         )
         print("Result:", result)
 
+        print("\n" + "="*50)
+        print("Testing get_route_segments...")
+        print("="*50)
+        route_segments_result = unav_server.get_route_segments.remote(
+            place=PLACE,
+            building=BUILDING,
+            floor=FLOOR,
+        )
+        print("Route Segments Result:", route_segments_result)
+
         # print("\n" + "="*50)
         # print("Testing localize_user...")
         # print("="*50)

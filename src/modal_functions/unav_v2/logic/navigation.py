@@ -14,6 +14,21 @@ from .maps import run_ensure_maps_loaded
 from .vlm import run_vlm_on_image
 
 
+def _extract_route_segments(nav, place: str, building: str, floor: str) -> list:
+    """Extract walkable graph edges for a floor as coordinate pairs."""
+    pf = nav.pf_map.get((place, building, floor))
+    if pf is None:
+        return []
+    segments = []
+    for u, v, data in pf.G.edges(data=True):
+        if u in pf.nodes and v in pf.nodes:
+            segments.append({
+                "from": list(pf.nodes[u]),
+                "to": list(pf.nodes[v]),
+            })
+    return segments
+
+
 def run_planner(
     self,
     session_id: str,
@@ -325,6 +340,9 @@ def run_planner(
                     "timings": output.get("timings"),
                     "top_candidates": run_safe_serialize(output.get("top_candidates")),
                     "local_feature_model": local_feature_model_name,
+                    "route_segments": run_safe_serialize(
+                        _extract_route_segments(self.nav, start_place, start_building, start_floor)
+                    ),
                     "navigation_info": {"start_location": f"{start_place}/{start_building}/{start_floor}", "destination": f"{target_place}/{target_building}/{target_floor}", "dest_id": dest_id, "unit": unit, "language": language},
                     "timing": timing_data,
                     "debug_info": {"map_scope": output.get("map_scope", "unknown"), "bootstrap_mode": output.get("bootstrap_mode", "none"), "bootstrap_passes": output.get("bootstrap_passes"), "queue_key": output.get("queue_key", "unknown"), "n_frames": output.get("n_frames"), "top_candidates_count": len(output.get("top_candidates", []))},
@@ -350,6 +368,41 @@ def run_planner(
     else:
         print("📋 [PLANNER] Using NON-TRACED execution path")
         pass
+
+
+def run_get_route_segments(
+    self,
+    place: str,
+    building: str,
+    floor: str,
+) -> Dict[str, Any]:
+    """Return the route-network segments (walkable graph edges) for a floor."""
+    from .utils import run_safe_serialize
+
+    if not all([place, building, floor]):
+        return {"status": "error", "error": "place, building, and floor are required"}
+
+    try:
+        pf = self.nav.pf_map.get((place, building, floor))
+        if pf is None:
+            return {"status": "error", "error": f"No map found for {place}/{building}/{floor}"}
+
+        segments = []
+        for u, v, data in pf.G.edges(data=True):
+            if u in pf.nodes and v in pf.nodes:
+                segments.append({
+                    "from": list(pf.nodes[u]),
+                    "to": list(pf.nodes[v]),
+                })
+
+        return {
+            "status": "success",
+            "route_segments": run_safe_serialize(segments),
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"status": "error", "error": str(e)}
 
 
 def run_localize_user(

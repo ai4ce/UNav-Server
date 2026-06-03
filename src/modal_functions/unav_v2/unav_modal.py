@@ -11,6 +11,7 @@ from .destinations_service import get_destinations_list_impl
 from .logic import (
     run_planner,
     run_localize_user,
+    run_get_route_segments,
     run_init_middleware,
     run_init_cpu_components,
     run_init_gpu_components,
@@ -180,6 +181,21 @@ class UnavServer:
             y=y,
             angle=angle,
             turn_mode=turn_mode,
+        )
+
+    @method()
+    def get_route_segments(
+        self,
+        place: str,
+        building: str,
+        floor: str,
+    ):
+        """Return walkable route-network segments for a floor."""
+        return run_get_route_segments(
+            self,
+            place=place,
+            building=building,
+            floor=floor,
         )
 
     @method()
