@@ -1,5 +1,6 @@
 import base64
 import os
+import json
 import cv2
 import numpy as np
 
@@ -23,24 +24,24 @@ def main():
             image_data = image_file.read()
             base64_encoded = base64.b64encode(image_data).decode("utf-8")
 
-        print("Testing get_destinations_list...")
-        result = unav_server.get_destinations_list.remote(
-            floor=FLOOR,
-            place=PLACE,
-            building=BUILDING,
+        # print("Testing get_destinations_list...")
+        # result = unav_server.get_destinations_list.remote(
+        #     floor=FLOOR,
+        #     place=PLACE,
+        #     building=BUILDING,
         
-        )
-        print("Result:", result)
+        # )
+        # print("Result:", result)
 
-        print("\n" + "="*50)
-        print("Testing get_route_segments...")
-        print("="*50)
-        route_segments_result = unav_server.get_route_segments.remote(
-            place=PLACE,
-            building=BUILDING,
-            floor=FLOOR,
-        )
-        print("Route Segments Result:", route_segments_result)
+        # print("\n" + "="*50)
+        # print("Testing get_route_segments...")
+        # print("="*50)
+        # route_segments_result = unav_server.get_route_segments.remote(
+        #     place=PLACE,
+        #     building=BUILDING,
+        #     floor=FLOOR,
+        # )
+        # print("Route Segments Result:", route_segments_result)
 
         # print("\n" + "="*50)
         # print("Testing localize_user...")
@@ -64,9 +65,14 @@ def main():
             building=BUILDING,
             floor=FLOOR,
             place=PLACE,
-            enable_multifloor=True,
+            enable_multifloor=False,
         )
         print("Planner Result:", planner_result)
+
+        output_path = os.path.join(os.path.dirname(__file__), "planner_output.json")
+        with open(output_path, "w") as f:
+            json.dump(planner_result, f, indent=2)
+        print(f"\nPlanner output saved to: {output_path}")
 
         # print("\n" + "="*50)
         # print("Testing planner with user-provided coordinates (skip localization)...")
