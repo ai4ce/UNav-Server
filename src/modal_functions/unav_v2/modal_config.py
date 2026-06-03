@@ -141,7 +141,7 @@ def download_torch_hub_weights():
 
 
 app = App(
-    name="pure-mast3r-clean-install",
+    name="Mast3r-UNav-Server",
     # mounts removed as deprecated
 )
 
