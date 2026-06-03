@@ -16,7 +16,7 @@ def main():
     IMAGE_PATH = "media/vinay_sample.jpeg"
 
     try:
-        UnavServer = modal.Cls.lookup("pure-mast3r-clean-install", "UnavServer")
+        UnavServer = modal.Cls.from_name("pure-mast3r-clean-install", "UnavServer")
         unav_server = UnavServer()
         current_directory = os.getcwd()
         full_image_path = os.path.join(current_directory, IMAGE_PATH)
@@ -29,6 +29,7 @@ def main():
             floor=FLOOR,
             place=PLACE,
             building=BUILDING,
+            enable_multifloor=False,
         )
         print("Result:", result)
 
