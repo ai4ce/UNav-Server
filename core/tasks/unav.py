@@ -355,10 +355,17 @@ def unav_navigation(inputs):
     session["current_floor"] = start_floor
     session["floorplan_pose"] = floorplan_pose
 
+    # -------- Snap-to-route & walkable forcing --------
+    force_walkable = inputs.get("force_walkable", True)
+    pf0 = nav.pf_map.get((start_place, start_building, start_floor))
+    snapped_xy = pf0.snap_to_route(start_xy) if pf0 else start_xy
+    snapped_pose = {**floorplan_pose, "xy": list(snapped_xy), "snapped": True}
+
     # -------- Path planning --------
     result = nav.find_path(
         start_place, start_building, start_floor, start_xy,
-        target_place, target_building, target_floor, dest_id
+        target_place, target_building, target_floor, dest_id,
+        force_walkable=force_walkable,
     )
 
     # -------- Command generation --------
@@ -385,6 +392,8 @@ def unav_navigation(inputs):
         "cmds": safe_serialize(cmds),
         "best_map_key": safe_serialize(source_key),
         "floorplan_pose": safe_serialize(floorplan_pose),
+        "snapped_pose": safe_serialize(snapped_pose),
+        "force_walkable": force_walkable,
         "turn_mode": turn_mode,
         # Localization quality signals (for uncertainty estimation research)
         "total_inliers": sum(
