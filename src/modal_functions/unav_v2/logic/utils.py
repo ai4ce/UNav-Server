@@ -37,7 +37,7 @@ def run_construct_mock_localization_output(
     return {
         "floorplan_pose": {
             "xy": [x, y],
-            "ang": angle
+            "ang": -angle
         },
         "best_map_key": (place, building, floor),
         "refinement_queue": {}
@@ -62,12 +62,12 @@ def run_convert_navigation_to_trajectory(
     path_coords = result.get("path_coords", [])
 
     start_xy = floorplan_pose.get("xy", [])
-    start_ang = floorplan_pose.get("ang", 0)
+    start_ang = floorplan_pose.get("ang")
 
     paths = []
     if start_xy and len(start_xy) >= 2:
-        if start_ang:
-            paths.append([start_xy[0], start_xy[1], start_ang])
+        if start_ang is not None:
+            paths.append([start_xy[0], start_xy[1], -start_ang])
         else:
             paths.append(start_xy)
 
