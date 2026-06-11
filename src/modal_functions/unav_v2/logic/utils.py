@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 def run_safe_serialize(obj: Any) -> Any:
@@ -44,11 +44,23 @@ def run_construct_mock_localization_output(
     }
 
 
+# Legacy constant (the LightHouse 3_floor scale) kept only as a last-resort
+# fallback so behavior is unchanged when no per-floor scale is available.
+_LEGACY_FALLBACK_SCALE = 0.02205862195
+
+
 def run_convert_navigation_to_trajectory(
-    navigation_result: Dict[str, Any]
+    navigation_result: Dict[str, Any],
+    scale: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Convert navigation result format to trajectory output format.
+
+    Args:
+        navigation_result: Planner output dict.
+        scale: Per-floor meters-per-pixel value (from the navigator's
+            scale.json). Falls back to the legacy constant when missing
+            or invalid.
     """
     result = navigation_result.get("result", {})
     cmds = navigation_result.get("cmds", [])
@@ -62,11 +74,12 @@ def run_convert_navigation_to_trajectory(
     path_coords = result.get("path_coords", [])
 
     start_xy = floorplan_pose.get("xy", [])
-    start_ang = floorplan_pose.get("ang", 0)
+    start_ang = floorplan_pose.get("ang")
 
     paths = []
     if start_xy and len(start_xy) >= 2:
-        if start_ang:
+        # `is not None` so a legitimate 0-degree heading is not dropped.
+        if start_ang is not None:
             paths.append([start_xy[0], start_xy[1], start_ang])
         else:
             paths.append(start_xy)
@@ -75,7 +88,11 @@ def run_convert_navigation_to_trajectory(
         if len(coord) >= 2:
             paths.append(coord)
 
-    scale = 0.02205862195
+    # The navigator defaults floors missing from scale.json to 1.0, and
+    # historic scale.json files contain literal 0 placeholders; downstream
+    # clients treat scale == 1.0 as "unscaled", so reject both and fall back.
+    if not scale or scale <= 0 or scale == 1.0:
+        scale = _LEGACY_FALLBACK_SCALE
 
     trajectory_data = {
         "trajectory": [
