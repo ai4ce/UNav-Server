@@ -95,6 +95,7 @@ def run_convert_navigation_to_trajectory(
             None,
         ],
         "scale": scale,
+        "route_segments": navigation_result.get("route_segments", []),
     }
 
     return trajectory_data

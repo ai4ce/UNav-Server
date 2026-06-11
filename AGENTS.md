@@ -1,130 +1,53 @@
 # UNav-Server Agent Guidelines
 
-This document provides guidelines for agents working on the UNav-Server codebase.
+Serverless indoor navigation via computer vision, deployed on Modal. Core logic is in `src/modal_functions/unav_v2/`.
 
-## Project Overview
+## Quick Reference
 
-UNav-Server provides a serverless implementation for indoor navigation using computer vision. It leverages Modal for deployment and offers features like visual localization, path planning, and navigation guidance.
+```bash
+# Deploy (from repo root)
+cd src/modal_functions/unav_v2 && modal deploy unav_modal.py
+
+# Deploy with custom params
+UNAV_SCALEDOWN_WINDOW=1800 UNAV_GPU_TYPE=A10 modal deploy unav_modal.py
+
+# Test (requires live Modal deployment)
+cd src/modal_functions/unav_v2 && python test_modal_functions.py
+```
+
+Modal app name: `Mast3r-UNav-Server`. Class name: `UnavServer`.
 
 ## Project Structure
 
 ```
 UNav-Server/
-├── src/
-│   └── modal_functions/
-│       ├── unav_v1/           # Legacy version
-│       ├── unav_v2/           # Current production version
-│       │   ├── unav_modal.py          # Main Modal app (~200 lines)
-│       │   ├── logic/                  # Extracted business logic
-│       │   │   ├── __init__.py         # Exports all run_* functions
-│       │   │   ├── navigation.py       # run_planner, run_localize_user
-│       │   │   ├── init.py             # Initialization & monkey-patching
-│       │   │   ├── places.py           # run_get_places, run_get_fallback_places
-│       │   │   ├── maps.py             # run_ensure_maps_loaded
-│       │   │   ├── utils.py            # run_safe_serialize, etc.
-│       │   │   └── vlm.py               # run_vlm_on_image
-│       │   ├── server_methods/
-│       │   │   └── helpers.py          # Queue utility functions
-│       │   ├── test_modal_functions.py
-│       │   ├── modal_config.py
-│       │   ├── deploy_config.py
-│       │   ├── destinations_service.py
-│       │   └── media/                  # Test images
-│       └── volume_utils/               # Volume management utilities
-├── .github/workflows/                   # CI/CD workflows
-├── requirements.txt                     # Python dependencies
-└── TODO.md                             # Technical documentation
+├── src/modal_functions/
+│   ├── unav_v2/                    # Core - all work goes here
+│   │   ├── unav_modal.py           # Thin @method/@enter wrappers (Modal entry point)
+│   │   ├── localizer.py            # UNavLocalizer: feature extraction, VPR, matching, RANSAC
+│   │   ├── modal_config.py         # Modal App, Image, Volume, Secrets
+│   │   ├── deploy_config.py        # Env var config: GPU, scaledown, RAM
+│   │   ├── destinations_service.py # Destination list for place/building/floor
+│   │   ├── logic/                  # Business logic (run_* functions)
+│   │   │   ├── init.py             # 3-phase startup + monkey-patching (~500 lines)
+│   │   │   ├── navigation.py       # run_planner, run_localize_user (~500 lines)
+│   │   │   ├── maps.py             # Lazy map loading per building
+│   │   │   ├── places.py           # Filesystem-based place discovery
+│   │   │   ├── utils.py            # Serialization, mock localization, trajectory
+│   │   │   └── vlm.py             # Gemini VLM text extraction
+│   │   ├── server_methods/helpers.py  # Queue bucketing by image shape
+│   │   └── test_modal_functions.py    # Integration test against deployed app
+│   ├── unav_v1/                    # Legacy (ignore)
+│   └── volume_utils/               # One-off volume management scripts
+├── unav/                           # Git submodule (unav-core library)
+└── docs/TODO.md                    # Technical decisions and history
 ```
 
-## Build/Lint/Test Commands
+## Architecture
 
-### Python Version
-- Minimum: Python 3.10+
-- Recommended: Python 3.11 (used in CI/CD)
+### Logic Extraction Pattern
 
-### Setup
-```bash
-# Create virtual environment
-python -m venv .venv
-
-# Activate (macOS/Linux)
-source .venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-### Running Tests
-```bash
-# Navigate to the module directory
-cd src/modal_functions/unav_v2
-
-# Run a single test file
-python test_modal_functions.py
-
-# Run with pytest (if installed)
-pytest test_modal_functions.py -v
-```
-
-### Deployment Commands
-```bash
-# Deploy to Modal (from unav_v2 directory)
-cd src/modal_functions/unav_v2
-modal deploy unav_modal.py
-
-# Deploy with custom parameters
-UNAV_SCALEDOWN_WINDOW=600 UNAV_GPU_TYPE=t4 UNAV_RAM_MB=73728 modal deploy unav_modal.py
-```
-
-### GitHub Actions Deployment
-1. Go to Actions -> "Deploy UNav v2 Modal" -> "Run workflow"
-2. Set inputs: scaledown_window, gpu_type, ram_mb
-3. Requires secrets: MODAL_TOKEN_ID, MODAL_TOKEN_SECRET
-
-## Code Style Guidelines
-
-### Import Organization
-Order: stdlib -> third-party -> local imports, with blank lines between groups.
-
-```python
-import os
-import json
-from typing import Dict, List, Any, Optional
-
-import modal
-import cv2
-import numpy as np
-
-from .deploy_config import get_scaledown_window
-from .logic import run_planner, run_localize_user
-```
-
-### Naming Conventions
-- **Functions/variables**: snake_case (e.g., `get_destinations_list`, `image_data`)
-- **Classes**: PascalCase (e.g., `UnavServer`, `FacilityNavigator`)
-- **Constants**: UPPER_SNAKE_CASE (e.g., `BUILDING`, `PLACE`)
-- **Logic functions**: prefix with `run_` (e.g., `run_planner`, `run_safe_serialize`)
-- **Private methods**: prefix with underscore (e.g., `_configure_middleware_tracing`)
-
-### Type Hints
-Use type hints for function parameters and return values.
-
-```python
-def get_destinations_list_impl(
-    server: Any,
-    floor: str = "6_floor",
-    place: str = "New_York_City",
-    enable_multifloor: bool = False,
-) -> Dict[str, Any]:
-```
-
-### Refactoring Pattern: Logic Extraction
-
-When extracting code from `unav_modal.py`:
-
-1. **Keep `@method()` decorators in `unav_modal.py`** - Modal requires them
-2. **Move logic to `logic/` directory** - Each function gets `run_` prefix
-3. **Thin wrapper pattern** - Method in unav_modal.py just calls the logic function
+`unav_modal.py` contains only `@method()` and `@enter()` decorators. All logic lives in `logic/` as `run_*` functions that receive `self` (the UnavServer instance) as first arg.
 
 ```python
 # unav_modal.py - thin wrapper
@@ -134,64 +57,77 @@ def planner(self, session_id: str, ...):
 
 # logic/navigation.py - actual logic
 def run_planner(self, session_id: str, ...) -> Dict[str, Any]:
-    # Full implementation here
-    pass
+    ...
 ```
 
-**DO NOT create wrapper methods** for internal functions (e.g., `get_session`, `update_session`) - call `run_*` functions directly from logic modules.
+Internal helpers (get_session, update_session) are called directly from logic modules, not wrapped.
 
-### Error Handling
-- Use try/except blocks for operations that may fail
-- Catch specific exceptions when possible
-- Return error dictionaries for recoverable errors
-- Use print statements with emojis for logging
+### Three-Phase Initialization
 
-```python
-try:
-    result = some_function()
-except ValueError as e:
-    print(f"❌ Invalid value: {e}")
-    return {"status": "error", "message": str(e)}
-except Exception as e:
-    print(f"❌ Unexpected error: {e}")
-    raise
-```
+Modal calls these `@enter(snap=False)` methods on container start, in order:
+1. `initialize_middleware` → `run_init_middleware` (deferred if no GPU)
+2. `initialize_cpu_components` → `run_init_cpu_components` (UNavConfig, FacilityNavigator, places)
+3. `initialize_gpu_components` → `run_init_gpu_components` (UNavLocalizer, model weights)
 
-### Code Formatting
-- Maximum line length: 100 characters (soft limit)
-- Use 4 spaces for indentation (no tabs)
-- Use blank lines to separate logical sections
-- Use trailing commas in multi-line collections
-- Use f-strings for string interpolation
+### Lazy Map Loading
 
-### Logging Patterns
-- `print("🔧 [Phase X] ...")` - Initialization steps
-- `print("✅ ...")` - Success messages
-- `print("⚠️ ...")` - Warnings
-- `print("❌ ...")` - Errors
-- `print(f"[DEBUG] ...")` - Debug info
+Maps are NOT loaded at startup. `run_ensure_maps_loaded()` creates per-building `UNavLocalizer` instances on first request. Tracked in `server.maps_loaded` (set) and `server.selective_localizers` (dict).
 
-### Testing Guidelines
-- Test files: `test_modal_functions.py`
-- Use descriptive test parameters (BUILDING, PLACE, FLOOR, etc.)
-- Include error handling for Modal class lookup
-- Test both success and failure paths when applicable
+### Volume-Based Data
+
+Modal volume `unav_multifloor` mounted at `/root/UNav-IO`. Data root: `/root/UNav-IO/data`. Directory structure: `{place}/{building}/{floor}/` with `boundaries.json` required in each floor dir.
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| UNAV_SCALEDOWN_WINDOW | 300 | Modal scaledown window (seconds) |
-| UNAV_GPU_TYPE | t4 | GPU type (a10, t4, a100, any, h200) |
-| UNAV_RAM_MB | 73728 | RAM reservation in MiB |
-| MODAL_TOKEN_ID | - | Modal token (GitHub secret) |
-| MODAL_TOKEN_SECRET | - | Modal secret (GitHub secret) |
+**Deploy-time** (Modal class config via `deploy_config.py`):
+| Variable | Default | Allowed |
+|----------|---------|---------|
+| `UNAV_SCALEDOWN_WINDOW` | 300 | any positive int |
+| `UNAV_GPU_TYPE` | t4 | t4, a10, a100, h200, any |
+| `UNAV_RAM_MB` | 73728 | max 98304 |
 
-## Notes for Agents
+**Runtime** (Modal secrets or container env):
+| Secret/Env | Used in | Purpose |
+|------------|---------|---------|
+| `gemini-api-key` | vlm.py | Gemini VLM access |
+| `middleware` | init.py | Middleware.io telemetry |
+| `MW_API_KEY` | init.py | Middleware.io API key |
+| `MW_TARGET` | init.py | Middleware.io endpoint |
+| `GEMINI_API_KEY` | vlm.py | Alternative env var for Gemini |
+| `PYTHONPATH` | modal_config.py | Must include `/root/mast3r:/root/mast3r/dust3r` |
 
-- This is a Modal-based serverless application
-- Tests require a deployed Modal app to run against
-- The codebase uses the unav-core library internally (runtime dependency - LSP errors are expected locally)
-- Code changes may require redeployment to take effect
-- Check TODO.md for technical context on implementation decisions
-- Runtime imports (torch, unav, middleware, google.genai) only exist in Modal container
+## Key Gotchas
+
+- **Tests require a live Modal deployment.** `test_modal_functions.py` uses `modal.Cls.from_name()` — cannot run locally without deploying first.
+- **LSP errors are expected locally.** Runtime deps (torch, unav, faiss, middleware, google.genai) only exist in the Modal container.
+- **Container clones branch `endeleze`** during image build (`modal_config.py`). Changes to other branches don't affect the deployed container unless redeployed.
+- **MASt3R symlink workaround** may be needed if the updated `unav` package fails to find DB perspective images. See `docs/ROLLBACK_MASt3R_SYMLINK.md`.
+- **`unav/` is a git submodule** for the unav-core library. It's excluded from `.gitignore` but not directly used by the Modal deployment (the container installs it from GitHub).
+- **No linter/formatter config** is checked in. `.ruff_cache/` exists but no `ruff.toml` or `pyproject.toml`.
+
+## Testing
+
+```bash
+cd src/modal_functions/unav_v2
+python test_modal_functions.py
+```
+
+Test constants: BUILDING=Langone, PLACE=New_York_University, FLOOR=17_floor. Uses `media/vinay_sample.jpeg` as test image. Tests `get_destinations_list` and `planner` via Modal RPC.
+
+## Deployment
+
+### CLI
+```bash
+cd src/modal_functions/unav_v2
+modal deploy unav_modal.py
+```
+
+### GitHub Actions
+Actions → "Deploy UNav v2 Modal" → "Run workflow". Requires repo secrets: `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET`.
+
+## Code Conventions
+
+- Logic functions use `run_` prefix. Private helpers use `_` prefix.
+- Import order: stdlib → third-party → local. Heavy imports inside functions to avoid import-time overhead.
+- Error returns: `{"status": "error", "error": ..., "timing": ...}` dicts.
+- Logging: emoji prefixes — 🔧 init, ✅ success, ⚠️ warning, ❌ error.

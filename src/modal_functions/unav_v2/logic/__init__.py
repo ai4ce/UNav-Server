@@ -1,4 +1,4 @@
-from .navigation import run_planner, run_localize_user
+from .navigation import run_planner, run_localize_user, run_get_route_segments
 from .init import (
     run_init_middleware,
     run_init_cpu_components,
@@ -21,6 +21,7 @@ from .vlm import run_vlm_on_image
 __all__ = [
     "run_planner",
     "run_localize_user",
+    "run_get_route_segments",
     "run_init_middleware",
     "run_init_cpu_components",
     "run_init_gpu_components",
