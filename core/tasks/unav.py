@@ -321,7 +321,11 @@ def unav_navigation(inputs):
     #     refinement_queue = session["refinement_queue"][key]
 
     # -------- Localization --------
-    output = localizer.localize(query_img, refinement_queue, top_k=top_k)
+    # Use real ARKit principal point if the client sent camera intrinsics.
+    _cx = inputs.get("cx", None)
+    _cy = inputs.get("cy", None)
+    _pp = np.array([_cx, _cy]) if (_cx is not None and _cy is not None) else None
+    output = localizer.localize(query_img, refinement_queue, top_k=top_k, pp=_pp)
 
     def format_localization_error(output):
         """Format a standardized error dictionary from localization output."""
