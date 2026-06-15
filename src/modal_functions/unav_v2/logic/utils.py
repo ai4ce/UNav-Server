@@ -96,6 +96,8 @@ def run_convert_navigation_to_trajectory(
         ],
         "scale": scale,
         "route_segments": navigation_result.get("route_segments", []),
+        "snapped_pose": navigation_result.get("snapped_pose"),
+        "force_walkable": navigation_result.get("force_walkable", True),
     }
 
     return trajectory_data
