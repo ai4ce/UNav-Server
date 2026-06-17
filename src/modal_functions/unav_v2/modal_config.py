@@ -18,10 +18,10 @@ local_dir = current_dir / ".."
 
 
 def download_torch_hub_weights():
-    import torch
     import os
     import zipfile
-    from pathlib import Path
+
+    import torch
 
     # Try to import requests, fallback to urllib if not available
     try:
@@ -116,7 +116,7 @@ def download_torch_hub_weights():
             # Verify hubconf.py exists
             hubconf_path = os.path.join(dinov2_extract_dir, "hubconf.py")
             if os.path.exists(hubconf_path):
-                print(f"✅ DinoV2 repository extracted successfully with hubconf.py")
+                print("✅ DinoV2 repository extracted successfully with hubconf.py")
             else:
                 print(f"⚠️ Warning: hubconf.py not found in {dinov2_extract_dir}")
                 print(f"Directory contents: {os.listdir(dinov2_extract_dir)}")
@@ -141,8 +141,8 @@ def download_torch_hub_weights():
 
 
 app = App(
-    name="Mast3r-UNav-Server",
-    # mounts removed as deprecated
+    name="Staging-Mast3r-unav-server",
+    # mouns removed as deprecated
 )
 
 
@@ -161,9 +161,7 @@ unav_image = (
     .run_commands(
         "git clone https://github.com/cvg/implicit_dist.git implicit_dist",
     )
-    .run_commands(
-        "pip install 'numpy<2.0.0'",
-    )
+    .run_commands("pip install 'numpy<2.0.0'")
     .workdir("/implicit_dist")
     .run_commands(
         "pip install 'numpy<2.0.0' pybind11",
@@ -171,7 +169,7 @@ unav_image = (
         "pip install . --no-deps",
     )
     .pip_install_private_repos(
-        "github.com/endeleze/UNav.git",
+        "github.com/ai4ce/UNav.git",
         git_user="surendharpalanisamy",
         secrets=[github_secret],
         extra_options="--no-deps",

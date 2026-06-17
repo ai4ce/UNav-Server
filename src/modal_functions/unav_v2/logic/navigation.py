@@ -48,6 +48,7 @@ def run_planner(
     y: float = None,
     angle: float = None,
     turn_mode: str = "default",
+    force_walkable: bool = True,
 ) -> Dict[str, Any]:
     """Full localization and navigation pipeline logic."""
     import time
@@ -271,9 +272,18 @@ def run_planner(
                 timing_data["processing"] = (time.time() - processing_start) * 1000
                 print(f"⏱️ Processing: {timing_data['processing']:.2f}ms")
 
+                # -------- Snap-to-route & walkable forcing --------
+                pf0 = self.nav.pf_map.get((start_place, start_building, start_floor))
+                snapped_xy = pf0.snap_to_route(start_xy) if pf0 else start_xy
+                snapped_pose = {**floorplan_pose, "xy": list(snapped_xy), "snapped": True}
+
                 path_planning_start = time.time()
                 with self.tracer.start_as_current_span("path_planning_span"):
-                    result = self.nav.find_path(start_place, start_building, start_floor, start_xy, target_place, target_building, target_floor, dest_id_for_path)
+                    result = self.nav.find_path(
+                        start_place, start_building, start_floor, start_xy,
+                        target_place, target_building, target_floor, dest_id_for_path,
+                        force_walkable=force_walkable,
+                    )
 
                 timing_data["path_planning"] = (time.time() - path_planning_start) * 1000
                 print(f"⏱️ Path Planning: {timing_data['path_planning']:.2f}ms")
@@ -299,6 +309,7 @@ def run_planner(
                 serialized_cmds = run_safe_serialize(cmds)
                 serialized_source_key = run_safe_serialize(source_key)
                 serialized_floorplan_pose = run_safe_serialize(floorplan_pose)
+                serialized_snapped_pose = run_safe_serialize(snapped_pose)
                 timing_data["serialization"] = (time.time() - serialization_start) * 1000
                 print(f"⏱️ Serialization: {timing_data['serialization']:.2f}ms")
 
@@ -320,6 +331,8 @@ def run_planner(
                     "cmds": serialized_cmds,
                     "best_map_key": serialized_source_key,
                     "floorplan_pose": serialized_floorplan_pose,
+                    "snapped_pose": serialized_snapped_pose,
+                    "force_walkable": force_walkable,
                     "turn_mode": turn_mode,
                     "total_inliers": sum(
                         r.get("inliers", 0)
