@@ -1,0 +1,8 @@
+{
+  "status": "error",
+  "error": "Localization failed",
+  "timing": {
+    "setup": 0.009059906005859375,
+    "localization": 42319.06604766846
+  }
+}
