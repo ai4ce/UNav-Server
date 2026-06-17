@@ -17,7 +17,7 @@ def main():
     IMAGE_PATH = os.path.join(os.path.dirname(__file__), "media", "vinay_sample.jpeg")
 
     try:
-        UnavServer = modal.Cls.from_name("pure-mast3r-clean-install", "UnavServer")
+        UnavServer = modal.Cls.from_name("Staging-Mast3r-unav-server", "UnavServer")
         unav_server = UnavServer()
         full_image_path = IMAGE_PATH
         with open(full_image_path, "rb") as image_file:
