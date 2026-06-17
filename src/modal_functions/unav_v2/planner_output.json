@@ -2,7 +2,7 @@
   "status": "error",
   "error": "Localization failed",
   "timing": {
-    "setup": 0.009059906005859375,
-    "localization": 42319.06604766846
+    "setup": 0.008821487426757812,
+    "localization": 27427.687644958496
   }
 }
