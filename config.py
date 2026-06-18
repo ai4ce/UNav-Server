@@ -5,6 +5,7 @@
 
 # --- Path Configuration ---
 DATA_ROOT = "/data"
+DATA_TEMP_ROOT = "/mnt/data/UNav-IO/temp"
 
 # --- Model Settings ---
 FEATURE_MODEL = "DinoV2Salad"

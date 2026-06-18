@@ -2,6 +2,7 @@ import time
 import asyncio
 from config import (
     DATA_ROOT,
+    DATA_TEMP_ROOT,
     FEATURE_MODEL,
     LOCAL_FEATURE_MODEL,
     PLACES
@@ -30,6 +31,8 @@ config = UNavConfig(
 
 # Extract specific sub-configs for localization and navigation modules
 localizor_config = config.localizer_config
+# Expose temp root so MASt3R can find perspective images (not in data_final_root).
+localizor_config.data_temp_root = DATA_TEMP_ROOT
 navigator_config = config.navigator_config
 
 # Initialize labels.json path for i18n
