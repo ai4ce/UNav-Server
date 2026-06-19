@@ -66,6 +66,11 @@ def run_ensure_maps_loaded(
     except Exception as e:
         print(f"⚠️ Failed to install upstream instrumentation: {e}")
 
+    try:
+        _install_matcher_instrumentation()
+    except Exception as e:
+        print(f"⚠️ Failed to install matcher instrumentation: {e}")
+
     selective_localizer = UNavLocalizer(selective_config.localizer_config)
     try:
         from .init import _apply_mast3r_extraction_fallback
@@ -211,6 +216,3 @@ def _install_matcher_instrumentation():
     traced._unav_traced = True
     _matcher_mod.mast3r_matching_and_pnp = traced
     print("🧪 [INSTRUMENT] Wrapped mast3r_matching_and_pnp", flush=True)
-
-
-_install_matcher_instrumentation()
