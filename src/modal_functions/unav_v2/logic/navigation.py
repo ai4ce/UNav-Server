@@ -205,6 +205,13 @@ def run_planner(
 
                         if is_cold_start:
                             print("⏭️ Cold-start bootstrap disabled; running single-pass localization.")
+                        if local_feature_model == "mast3r":
+                            import tempfile
+                            import cv2
+                            tmp_path = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False).name
+                            cv2.imwrite(tmp_path, image)
+                            localizer_to_use._current_query_img_path = tmp_path
+                            print(f"🧪 [MAST3R] Saved query image to temp path: {tmp_path}")
                         output = localizer_to_use.localize(image, refinement_queue, top_k=top_k)
                         output["bootstrap_mode"] = "none"
 
