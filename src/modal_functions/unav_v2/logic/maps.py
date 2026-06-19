@@ -150,7 +150,23 @@ def _install_upstream_instrumentation(UNavLocalizer):
             f"query_exists={os.path.exists(query_img_path) if query_img_path else False}",
             flush=True,
         )
-        result = orig_match(self, local_feat_dict, candidates_data, query_img_path=query_img_path)
+        # Call original with overridden data_roots for the MASt3R dispatcher path
+        if getattr(self, 'use_mast3r', False):
+            mast3r_data_roots = ("/root/UNav-IO/mnt/data/UNav-IO/temp", "/root/UNav-IO/data")
+            from unav.localizer.tools import matcher as _matcher
+            result = _matcher.mast3r_matching_and_pnp(
+                query_img_path=query_img_path,
+                candidates_data=candidates_data,
+                mast3r_matcher=self.local_matcher,
+                colmap_models=self.all_colmap_models,
+                max_nn_dist=self.config.feature_extraction_config["local_extractor_config"].get("mast3r", {}).get("max_nn_dist", 20.0),
+                min_inliers=self.config.localization_config.get("min_inliers", 6),
+                max_candidates=10,
+                early_stop_inliers=80,
+                data_roots=mast3r_data_roots,
+            )
+        else:
+            result = orig_match(self, local_feat_dict, candidates_data, query_img_path=query_img_path)
         if result is None:
             print("🧪 [UPSTREAM MATCH DONE] result=None", flush=True)
             return None
@@ -183,6 +199,9 @@ def _install_matcher_instrumentation():
                max_nn_dist=20.0, min_inliers=6, max_candidates=10,
                early_stop_inliers=50, pp=None, data_roots=None):
         from unav.localizer.tools.matcher import _resolve_db_image_path
+        if data_roots is None:
+            from unav.config import UNavConfig
+            data_roots = ("/root/UNav-IO/mnt/data/UNav-IO/temp", "/root/UNav-IO/data")
         drs = tuple(data_roots) if data_roots else _matcher_mod.DEFAULT_DB_IMAGE_ROOTS
         ref_img_names = list(candidates_data.keys())[:max_candidates]
         db_paths, db_names = [], []

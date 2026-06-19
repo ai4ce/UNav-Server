@@ -74,7 +74,6 @@ def run_init_cpu_components(self):
     print("🔧 Initializing UNavConfig...")
     self.config = UNavConfig(
         data_final_root=self.DATA_ROOT,
-        data_temp_root=self.MAST3R_DATA_ROOT,
         places=self.PLACES,
         global_descriptor_model=self.FEATURE_MODEL,
         local_feature_model=self.LOCAL_FEATURE_MODEL,
@@ -82,8 +81,6 @@ def run_init_cpu_components(self):
     print("✅ UNavConfig initialized successfully")
 
     self.localizor_config = self.config.localizer_config
-    self.localizor_config.data_temp_root = self.MAST3R_DATA_ROOT
-    self.localizor_config.data_final_root = self.MAST3R_DATA_ROOT
     self.navigator_config = self.config.navigator_config
     print("✅ Config objects extracted successfully")
 
