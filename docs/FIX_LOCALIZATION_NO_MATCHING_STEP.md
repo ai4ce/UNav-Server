@@ -55,13 +55,17 @@ Without these, matching produces nothing — `results_count=0`.
 ## Deployment Log
 - Deployed commit `5a5d7b9` (HEAD of `add_temp_config`) with the new MASt3R dispatch + debug logs.
 - Modal-installed `unav-backend-core` from `rizzojr01` is at commit `5e4e6889dbe7d4d1d314caeca96c9c358d81c27e` by default — same as the local submodule pin. So `mast3r_matching_and_pnp` *is* present in the deployed image.
-- Result: still `no pose found` with `max_inliers=0` / `results_count=0`, `localization_time=170.19ms` (suspiciously fast — real MASt3R matching against 10 DB images would take seconds).
-- Only logs seen: `🧪 [LOCALIZER DEBUG]`, `🧪 [MAST3R] Saved query image`. **Missing** all of: `🧪 [LOCAL MATCH]`, `🧪 [MAST3R DB LOOKUP]`, `🧪 [MAST3R DISPATCH]`, `🧪 [MAST3R INPUTS]`, `🧪 [MAST3R DB RESOLVE]`, `🧪 [MAST3R INSIDE]`, `🧪 [MAST3R RESULT]`, `🧪 [SUPERPOINT DISPATCH]`.
-- Final error: `reason: "No candidates passed local matching + RANSAC."` (the line 501 message in `localizer.py`, fired *after* `batch_local_matching_and_ransac` returns).
-- Conclusion: `localize()` *did* reach `batch_local_matching_and_ransac` (otherwise reason would be different), but **none of the prints inside that branch showed up in logs**. Two theories:
-  1. **Stdout buffering** — Modal captures stdout in fully-buffered mode when not a TTY. The 170ms is too short for `print()` to flush before process ends. `print(..., flush=True)` would help.
-  2. **The traced wrapper from `init.py` short-circuits** — but unlikely since the same wrapper would also swallow `LOCALIZER DEBUG` and `Saved query image` which DO show.
-- The 170ms wall time rules out actual MASt3R inference (would be 5-15s for 10 candidates). So the matching call returns within 170ms — either `db_paths` is empty (no DB images found) or the matcher is failing instantly. Need to force-flush prints to confirm.
+
+## ROOT CAUSE FOUND
+- `data_roots=('/root/UNav-IO/data',)` is being passed to `mast3r_matching_and_pnp` from `unav.localizer.localizer.UNavLocalizer.batch_local_matching_and_ransac` (line 200-213 of the upstream class).
+- `_resolve_db_image_path` tries `{root}/{place}/{building}/{floor}/perspectives/{name}` for each root — none of the 10 candidates exist under `/root/UNav-IO/data/.../perspectives/`.
+- The actual DB images for MASt3R live at `/root/UNav-IO/mnt/data/UNav-IO/temp/New_York_University/Langone/17_floor/...` (per container log: `✅ Created MASt3R symlink: /mnt/data/UNav-IO -> /root/UNav-IO/mnt/data/UNav-IO`).
+- So `data_temp_root` and `data_final_root` on `UNavConfig` are configured to the wrong paths. They need to include `/root/UNav-IO/mnt/data/UNav-IO/temp` (and possibly `/root/UNav-IO/mnt/data/UNav-IO/final`).
+- After fixing data_roots, MASt3R should find DB images and produce real matches (localization time jumped from 200ms → 29.7s once the matcher was actually invoked — just with 0 resolved paths).
+
+## What Worked Along The Way
+- Monkey-patching the **upstream** `unav.localizer.localizer.UNavLocalizer` (the one actually used at runtime) is what surfaced the issue. Patching our local `localizer.py` had no effect because `logic/maps.py` imports the upstream class directly via `from unav.localizer.localizer import UNavLocalizer`.
+- Install point: `run_init_gpu_components` in `logic/init.py`, after `from unav.localizer.localizer import UNavLocalizer` and before `self.localizer = UNavLocalizer(...)`.
 
 ## Submodule State
 - `unav/` submodule pinned to `5e4e6889dbe7d4d1d314caeca96c9c358d81c27e` — commit msg: `fix: remove hard-coded UNav paths from MASt3R pipeline`.
