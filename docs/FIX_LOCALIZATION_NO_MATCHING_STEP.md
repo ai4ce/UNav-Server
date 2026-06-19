@@ -67,6 +67,15 @@ Without these, matching produces nothing — `results_count=0`.
 - Monkey-patching the **upstream** `unav.localizer.localizer.UNavLocalizer` (the one actually used at runtime) is what surfaced the issue. Patching our local `localizer.py` had no effect because `logic/maps.py` imports the upstream class directly via `from unav.localizer.localizer import UNavLocalizer`.
 - Install point: `run_init_gpu_components` in `logic/init.py`, after `from unav.localizer.localizer import UNavLocalizer` and before `self.localizer = UNavLocalizer(...)`.
 
+## Deployment Log (continuing)
+- 10/10 DB images now resolve via `data_roots=('/root/UNav-IO/mnt/data/UNav-IO/temp', '/root/UNav-IO/data')` ✓
+- Localization now takes 37s (real MASt3R inference runs) ✓
+- **New error**: `mast3r_matching_and_pnp() got an unexpected keyword argument 'pp'`
+  - Local submodule at `5e4e688` defines signature as: `(... , max_nn_dist, min_inliers, max_candidates, early_stop_inliers, data_roots)` — **no `pp`**.
+  - Modal install (`rizzojr01/unav-backend-core` at `5e4e688`) also has the same signature (rejects `pp`).
+  - So `pp=None` kwarg must be removed; the function doesn't accept it.
+  - Local submodule and Modal install are in sync at `5e4e688` but the local file is missing newer patches visible elsewhere in the unav package.
+
 ## Submodule State
 - `unav/` submodule pinned to `5e4e6889dbe7d4d1d314caeca96c9c358d81c27e` — commit msg: `fix: remove hard-coded UNav paths from MASt3R pipeline`.
 - Submodule has `unav.localizer.tools.matcher.mast3r_matching_and_pnp` and `_resolve_db_image_path` at `unav/localizer/tools/matcher.py:14,176`.
