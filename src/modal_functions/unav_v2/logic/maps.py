@@ -196,10 +196,14 @@ def _install_matcher_instrumentation():
                 continue
             db_paths.append(p)
             db_names.append(name)
+        sample_cand = next(iter(candidates_data.values()), None) if candidates_data else None
+        sample_map_key = sample_cand.get("map_key") if sample_cand else None
         print(
             f"🧪 [MAST3R INSIDE] query={query_img_path}, "
             f"ref_names={len(ref_img_names)}, db_paths_resolved={len(db_paths)}, "
-            f"skipped={len(skipped)} sample_skipped={skipped[:2]}",
+            f"skipped={len(skipped)} sample_skipped={skipped[:2]}, "
+            f"data_roots={drs}, sample_map_key={sample_map_key}, "
+            f"sample_expected_path={os.path.join(drs[0], *sample_map_key, 'perspectives', ref_img_names[0]) if sample_map_key and drs and ref_img_names else 'N/A'}",
             flush=True,
         )
         if not db_paths:
