@@ -53,11 +53,12 @@ Without these, matching produces nothing — `results_count=0`.
 - Place/Building/Floor: `New_York_University` / `Langone` / `17_floor`
 
 ## Deployment Log
-- **Commit `5e4e6889dbe7d4d1d314caeca96c9c358d81c27e` deployed** (not the latest `5a5d7b9` on `add_temp_config`).
-- Result: still `no pose found` with `max_inliers=0` / `results_count=0`, `localization_time=152.80ms` (suspiciously fast).
+- Deployed commit `5a5d7b9` (HEAD of `add_temp_config`) with the new MASt3R dispatch + debug logs.
+- Modal-installed `unav-backend-core` from `rizzojr01` is at commit `5e4e6889dbe7d4d1d314caeca96c9c358d81c27e` by default — same as the local submodule pin. So `mast3r_matching_and_pnp` *is* present in the deployed image.
+- Result: still `no pose found` with `max_inliers=0` / `results_count=0`, `localization_time=152.80ms` (suspiciously fast — real MASt3R matching against 10 DB images would take seconds).
 - Only logs seen: `🧪 [MAST3R] Saved query image to temp path`. **Missing** `🧪 [LOCAL MATCH]`, `🧪 [MAST3R DB LOOKUP]`, `🧪 [MAST3R DISPATCH]`, `🧪 [SUPERPOINT DISPATCH]`.
-- Implication: the matching function is being short-circuited before any print in the new dispatch path. Either `localize()` exits earlier, or `local_feature_model` doesn't actually equal `"mast3r"` at runtime in the deployed container.
-- **Action**: re-deploy HEAD of `add_temp_config` (commit `5a5d7b9`) so the new debug prints + MASt3R dispatch are actually in the image.
+- Final error: `reason: "No candidates passed local matching + RANSAC."` (this is the line 392 message, fired *after* `batch_local_matching_and_ransac` returns — so step 4 *was* reached).
+- Conclusion: `localize()` did reach `batch_local_matching_and_ransac`, but the dispatch `print()`s were drowned in the otel log noise. Real cause is the matcher returning empty results. Need to surface the mast3r matcher internals (e.g. log number of `db_paths` resolved, and the result of the first `match_pair`) to find out where the 0 comes from.
 
 ## Submodule State
 - `unav/` submodule pinned to `5e4e6889dbe7d4d1d314caeca96c9c358d81c27e` — commit msg: `fix: remove hard-coded UNav paths from MASt3R pipeline`.
