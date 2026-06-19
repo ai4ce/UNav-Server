@@ -83,6 +83,7 @@ def run_init_cpu_components(self):
     self.localizor_config = self.config.localizer_config
     # Configure MASt3R DB image lookup path (perspectives live in temp folder)
     self.localizor_config.data_temp_root = "/root/UNav-IO/mnt/data/UNav-IO/temp"
+    self.localizor_config.data_final_root = "/root/UNav-IO/mnt/data/UNav-IO/temp"
     self.navigator_config = self.config.navigator_config
     print("✅ Config objects extracted successfully")
 
