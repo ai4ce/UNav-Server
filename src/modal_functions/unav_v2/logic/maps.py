@@ -118,11 +118,17 @@ def _install_upstream_instrumentation(UNavLocalizer):
         return
     orig_localize = UNavLocalizer.localize
     orig_match = UNavLocalizer.batch_local_matching_and_ransac
+    print(
+        f"🧪 [INSTRUMENT] Class={UNavLocalizer.__module__}.{UNavLocalizer.__name__}, "
+        f"orig_localize={orig_localize}, orig_match={orig_match}",
+        flush=True,
+    )
 
     @functools.wraps(orig_localize)
     def traced_localize(self, query_img, refinement_queue, top_k=None, **kwargs):
         print(
             f"🧪 [UPSTREAM LOCALIZE] shape={getattr(query_img, 'shape', None)}, top_k={top_k}, "
+            f"self_class={type(self).__module__}.{type(self).__name__}, "
             f"use_mast3r={getattr(self, 'use_mast3r', 'N/A')}, "
             f"local_matcher={type(self.local_matcher).__name__}",
             flush=True,
