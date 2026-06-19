@@ -62,8 +62,8 @@ def run_init_cpu_components(self):
     from unav.navigator.multifloor import FacilityNavigator
     from unav.navigator.commander import commands_from_result
 
-    self.DATA_ROOT = "/root/UNav-IO/mnt/data/UNav-IO/temp"
-    self.DATA_FINAL_ROOT = "/root/UNav-IO/mnt/data/UNav-IO/temp"
+    self.DATA_ROOT = "/root/UNav-IO/data"
+    self.MAST3R_DATA_ROOT = "/root/UNav-IO/mnt/data/UNav-IO/temp"
     self.FEATURE_MODEL = "DinoV2Salad"
     self.LOCAL_FEATURE_MODEL = "mast3r"
 
@@ -73,8 +73,8 @@ def run_init_cpu_components(self):
 
     print("🔧 Initializing UNavConfig...")
     self.config = UNavConfig(
-        data_final_root=self.DATA_FINAL_ROOT,
-        data_temp_root=self.DATA_ROOT,
+        data_final_root=self.DATA_ROOT,
+        data_temp_root=self.MAST3R_DATA_ROOT,
         places=self.PLACES,
         global_descriptor_model=self.FEATURE_MODEL,
         local_feature_model=self.LOCAL_FEATURE_MODEL,
@@ -82,8 +82,8 @@ def run_init_cpu_components(self):
     print("✅ UNavConfig initialized successfully")
 
     self.localizor_config = self.config.localizer_config
-    self.localizor_config.data_temp_root = self.DATA_ROOT
-    self.localizor_config.data_final_root = self.DATA_FINAL_ROOT
+    self.localizor_config.data_temp_root = self.MAST3R_DATA_ROOT
+    self.localizor_config.data_final_root = self.MAST3R_DATA_ROOT
     self.navigator_config = self.config.navigator_config
     print("✅ Config objects extracted successfully")
 
