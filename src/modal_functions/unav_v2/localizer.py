@@ -391,6 +391,7 @@ class UNavLocalizer:
         start_time = time.time()
         timings = {}
         t0 = start_time
+        print(f"🧪 [LOCALIZE ENTRY] query_img.shape={query_img.shape}, top_k={top_k}", flush=True)
 
         # 1. Extract features from query image
         try:
@@ -405,6 +406,7 @@ class UNavLocalizer:
         t1 = time.time()
         timings['extract_query_features'] = t1 - t0
         t0 = t1
+        print(f"🧪 [STEP 1 DONE] extract_query_features={t1 - start_time:.3f}s", flush=True)
 
         # 2. VPR: retrieve top candidates
         try:
@@ -419,10 +421,11 @@ class UNavLocalizer:
         t1 = time.time()
         timings['vpr_retrieve'] = t1 - t0
         t0 = t1
+        print(f"🧪 [STEP 2 DONE] vpr_retrieve={t1 - start_time:.3f}s, n_candidates={len(top_candidates) if top_candidates else 0}", flush=True)
 
         if not top_candidates:
             return {
-                "success": False, 
+                "success": False,
                 "reason": "VPR failed (no candidates found).",
                 "stage": "vpr_retrieve",
                 "timings": timings

@@ -176,7 +176,6 @@ unav_image = (
         git_user="surendharpalanisamy",
         secrets=[github_secret],
         extra_options="--no-deps",
-        force_build=True,
     )
     .workdir("/root")
     .run_commands(
