@@ -1,10 +1,10 @@
 import base64
-import os
 import json
-import cv2
-import numpy as np
+import os
 
+import cv2
 import modal
+import numpy as np
 
 
 def main():
@@ -24,40 +24,39 @@ def main():
             image_data = image_file.read()
             base64_encoded = base64.b64encode(image_data).decode("utf-8")
 
-        # print("Testing get_destinations_list...")
-        # result = unav_server.get_destinations_list.remote(
-        #     floor=FLOOR,
-        #     place=PLACE,
-        #     building=BUILDING,
-        
-        # )
-        # print("Result:", result)
+        print("Testing get_destinations_list...")
+        result = unav_server.get_destinations_list.remote(
+            floor=FLOOR,
+            place=PLACE,
+            building=BUILDING,
+        )
+        print("Result:", result)
 
-        # print("\n" + "="*50)
-        # print("Testing get_route_segments...")
-        # print("="*50)
-        # route_segments_result = unav_server.get_route_segments.remote(
-        #     place=PLACE,
-        #     building=BUILDING,
-        #     floor=FLOOR,
-        # )
-        # print("Route Segments Result:", route_segments_result)
+        print("\n" + "=" * 50)
+        print("Testing get_route_segments...")
+        print("=" * 50)
+        route_segments_result = unav_server.get_route_segments.remote(
+            place=PLACE,
+            building=BUILDING,
+            floor=FLOOR,
+        )
+        print("Route Segments Result:", route_segments_result)
 
-        # print("\n" + "="*50)
-        # print("Testing localize_user...")
-        # print("="*50)
-        # localize_result = unav_server.localize_user.remote(
-        #     session_id=SESSION_ID,
-        #     base_64_image=base64_encoded,
-        #     place=PLACE,
-        #     building=BUILDING,
-        #     floor=FLOOR,
-        # )
-        # print("Localization Result:", localize_result)
+        print("\n" + "=" * 50)
+        print("Testing localize_user...")
+        print("=" * 50)
+        localize_result = unav_server.localize_user.remote(
+            session_id=SESSION_ID,
+            base_64_image=base64_encoded,
+            place=PLACE,
+            building=BUILDING,
+            floor=FLOOR,
+        )
+        print("Localization Result:", localize_result)
 
-        print("\n" + "="*50)
+        print("\n" + "=" * 50)
         print("Testing planner (full navigation)...")
-        print("="*50)
+        print("=" * 50)
         planner_result = unav_server.planner.remote(
             destination_id=DESTINATION_ID,
             base_64_image=base64_encoded,
@@ -95,7 +94,6 @@ def main():
         # )
         # print("Planner with Coordinates Result:", planner_with_coords_result)
 
- 
     except Exception as e:
         print(f"Error during Modal class lookup or execution: {e}")
 
