@@ -182,6 +182,33 @@ class UNavLocalizer:
             pnp_pairs (dict): All correspondences for pose estimation.
             results (list): Per-candidate match info.
         """
+        local_model = getattr(self.config, "local_feature_model", None)
+        if local_model == "mast3r":
+            from unav.localizer.tools.matcher import mast3r_matching_and_pnp
+            print(
+                f"🧪 [MAST3R DISPATCH] Dispatching to mast3r_matching_and_pnp, "
+                f"candidates={len(candidates_data)}, matcher={type(self.local_matcher).__name__}"
+            )
+            data_roots = [
+                getattr(self.config, "data_temp_root", None),
+                getattr(self.config, "data_final_root", None),
+            ]
+            return mast3r_matching_and_pnp(
+                query_img_path=getattr(self, "_current_query_img_path", None),
+                candidates_data=candidates_data,
+                mast3r_matcher=self.local_matcher,
+                colmap_models=self.all_colmap_models,
+                max_nn_dist=self.config.feature_extraction_config.get("local_extractor_config", {}).get("mast3r", {}).get("max_nn_dist", 20.0),
+                min_inliers=self.config.localization_config.get("min_inliers", 6),
+                max_candidates=10,
+                early_stop_inliers=80,
+                data_roots=[r for r in data_roots if r],
+            )
+
+        print(
+            f"🧪 [SUPERPOINT DISPATCH] Dispatching to batch_local_matching_and_ransac, "
+            f"candidates={len(candidates_data)}, matcher={type(self.local_matcher).__name__}"
+        )
         return batch_local_matching_and_ransac(
             local_feat_dict,
             candidates_data,
@@ -310,6 +337,41 @@ class UNavLocalizer:
             }
 
         # 4. Local matching + RANSAC, grouped by region/map_key
+        try:
+            local_model = getattr(self.config, "local_feature_model", None)
+            candidate_names = list(candidates_data.keys()) if candidates_data else []
+            print(
+                f"🧪 [LOCAL MATCH] local_feature_model={local_model}, "
+                f"matcher_type={type(self.local_matcher).__name__}, "
+                f"candidates={len(candidate_names)}"
+            )
+            if local_model == "mast3r":
+                from unav.localizer.tools.matcher import _resolve_db_image_path
+                data_roots = [
+                    getattr(self.config, "data_temp_root", None),
+                    getattr(self.config, "data_final_root", None),
+                ]
+                data_roots = [r for r in data_roots if r]
+                sample_name = candidate_names[0] if candidate_names else None
+                sample_path = (
+                    _resolve_db_image_path(
+                        data_roots,
+                        top_candidates[0][0][0],
+                        top_candidates[0][0][1],
+                        top_candidates[0][0][2],
+                        sample_name,
+                    )
+                    if sample_name and top_candidates
+                    else None
+                )
+                print(
+                    f"🧪 [MAST3R DB LOOKUP] data_roots={data_roots}, "
+                    f"sample_candidate={sample_name}, resolved_path={sample_path}, "
+                    f"exists={os.path.exists(sample_path) if sample_path else False}"
+                )
+        except Exception as e:
+            print(f"⚠️ [LOCAL MATCH DEBUG] logging failed: {e}")
+
         try:
             best_map_key, pnp_pairs, results = self.batch_local_matching_and_ransac(local_feat_dict, candidates_data)
         except Exception as e:

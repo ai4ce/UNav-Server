@@ -18,10 +18,11 @@ local_dir = current_dir / ".."
 
 
 def download_torch_hub_weights():
-    import torch
     import os
     import zipfile
     from pathlib import Path
+
+    import torch
 
     # Try to import requests, fallback to urllib if not available
     try:
@@ -171,10 +172,11 @@ unav_image = (
         "pip install . --no-deps",
     )
     .pip_install_private_repos(
-        "github.com/endeleze/UNav.git",
+        "github.com/rizzojr01/unav-backend-core.git",
         git_user="surendharpalanisamy",
         secrets=[github_secret],
         extra_options="--no-deps",
+        force_build=True,
     )
     .workdir("/root")
     .run_commands(
