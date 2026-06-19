@@ -53,8 +53,13 @@ Without these, matching produces nothing — `results_count=0`.
 - Place/Building/Floor: `New_York_University` / `Langone` / `17_floor`
 
 ## Deployment Log
-- **2025-XX-XX — Commit `5e4e6889dbe7d4d1d314caeca96c9c358d81c27e` deployed** (not the latest `5a5d7b9` on `add_temp_config`).
+- **Commit `5e4e6889dbe7d4d1d314caeca96c9c358d81c27e` deployed** (not the latest `5a5d7b9` on `add_temp_config`).
 - Result: still `no pose found` with `max_inliers=0` / `results_count=0`, `localization_time=152.80ms` (suspiciously fast).
 - Only logs seen: `🧪 [MAST3R] Saved query image to temp path`. **Missing** `🧪 [LOCAL MATCH]`, `🧪 [MAST3R DB LOOKUP]`, `🧪 [MAST3R DISPATCH]`, `🧪 [SUPERPOINT DISPATCH]`.
 - Implication: the matching function is being short-circuited before any print in the new dispatch path. Either `localize()` exits earlier, or `local_feature_model` doesn't actually equal `"mast3r"` at runtime in the deployed container.
 - **Action**: re-deploy HEAD of `add_temp_config` (commit `5a5d7b9`) so the new debug prints + MASt3R dispatch are actually in the image.
+
+## Submodule State
+- `unav/` submodule pinned to `5e4e6889dbe7d4d1d314caeca96c9c358d81c27e` — commit msg: `fix: remove hard-coded UNav paths from MASt3R pipeline`.
+- Submodule has `unav.localizer.tools.matcher.mast3r_matching_and_pnp` and `_resolve_db_image_path` at `unav/localizer/tools/matcher.py:14,176`.
+- Modal container installs the same code via `pip_install_private_repos("github.com/rizzojr01/unav-backend-core.git", ...)` in `modal_config.py:175`. The submodule pin and the Modal install should be the same commit going forward — keep them in sync.
