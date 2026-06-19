@@ -163,6 +163,7 @@ def _install_upstream_instrumentation(UNavLocalizer):
                 min_inliers=self.config.localization_config.get("min_inliers", 6),
                 max_candidates=10,
                 early_stop_inliers=80,
+                pp=None,
                 data_roots=mast3r_data_roots,
             )
         else:
