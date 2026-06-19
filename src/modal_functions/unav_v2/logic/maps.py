@@ -197,7 +197,7 @@ def _install_matcher_instrumentation():
     @functools.wraps(original)
     def traced(query_img_path, candidates_data, mast3r_matcher, colmap_models,
                max_nn_dist=20.0, min_inliers=6, max_candidates=10,
-               early_stop_inliers=50, pp=None, data_roots=None):
+               early_stop_inliers=50, data_roots=None):
         from unav.localizer.tools.matcher import _resolve_db_image_path
         if data_roots is None:
             from unav.config import UNavConfig
@@ -237,7 +237,6 @@ def _install_matcher_instrumentation():
             min_inliers=min_inliers,
             max_candidates=max_candidates,
             early_stop_inliers=early_stop_inliers,
-            pp=pp,
             data_roots=data_roots,
         )
         return result
