@@ -55,10 +55,13 @@ Without these, matching produces nothing — `results_count=0`.
 ## Deployment Log
 - Deployed commit `5a5d7b9` (HEAD of `add_temp_config`) with the new MASt3R dispatch + debug logs.
 - Modal-installed `unav-backend-core` from `rizzojr01` is at commit `5e4e6889dbe7d4d1d314caeca96c9c358d81c27e` by default — same as the local submodule pin. So `mast3r_matching_and_pnp` *is* present in the deployed image.
-- Result: still `no pose found` with `max_inliers=0` / `results_count=0`, `localization_time=152.80ms` (suspiciously fast — real MASt3R matching against 10 DB images would take seconds).
-- Only logs seen: `🧪 [MAST3R] Saved query image to temp path`. **Missing** `🧪 [LOCAL MATCH]`, `🧪 [MAST3R DB LOOKUP]`, `🧪 [MAST3R DISPATCH]`, `🧪 [SUPERPOINT DISPATCH]`.
-- Final error: `reason: "No candidates passed local matching + RANSAC."` (this is the line 392 message, fired *after* `batch_local_matching_and_ransac` returns — so step 4 *was* reached).
-- Conclusion: `localize()` did reach `batch_local_matching_and_ransac`, but the dispatch `print()`s were drowned in the otel log noise. Real cause is the matcher returning empty results. Need to surface the mast3r matcher internals (e.g. log number of `db_paths` resolved, and the result of the first `match_pair`) to find out where the 0 comes from.
+- Result: still `no pose found` with `max_inliers=0` / `results_count=0`, `localization_time=170.19ms` (suspiciously fast — real MASt3R matching against 10 DB images would take seconds).
+- Only logs seen: `🧪 [LOCALIZER DEBUG]`, `🧪 [MAST3R] Saved query image`. **Missing** all of: `🧪 [LOCAL MATCH]`, `🧪 [MAST3R DB LOOKUP]`, `🧪 [MAST3R DISPATCH]`, `🧪 [MAST3R INPUTS]`, `🧪 [MAST3R DB RESOLVE]`, `🧪 [MAST3R INSIDE]`, `🧪 [MAST3R RESULT]`, `🧪 [SUPERPOINT DISPATCH]`.
+- Final error: `reason: "No candidates passed local matching + RANSAC."` (the line 501 message in `localizer.py`, fired *after* `batch_local_matching_and_ransac` returns).
+- Conclusion: `localize()` *did* reach `batch_local_matching_and_ransac` (otherwise reason would be different), but **none of the prints inside that branch showed up in logs**. Two theories:
+  1. **Stdout buffering** — Modal captures stdout in fully-buffered mode when not a TTY. The 170ms is too short for `print()` to flush before process ends. `print(..., flush=True)` would help.
+  2. **The traced wrapper from `init.py` short-circuits** — but unlikely since the same wrapper would also swallow `LOCALIZER DEBUG` and `Saved query image` which DO show.
+- The 170ms wall time rules out actual MASt3R inference (would be 5-15s for 10 candidates). So the matching call returns within 170ms — either `db_paths` is empty (no DB images found) or the matcher is failing instantly. Need to force-flush prints to confirm.
 
 ## Submodule State
 - `unav/` submodule pinned to `5e4e6889dbe7d4d1d314caeca96c9c358d81c27e` — commit msg: `fix: remove hard-coded UNav paths from MASt3R pipeline`.
