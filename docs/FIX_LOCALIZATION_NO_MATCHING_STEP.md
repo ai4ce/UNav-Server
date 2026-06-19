@@ -73,8 +73,24 @@ Without these, matching produces nothing — `results_count=0`.
 - **New error**: `mast3r_matching_and_pnp() got an unexpected keyword argument 'pp'`
   - Local submodule at `5e4e688` defines signature as: `(... , max_nn_dist, min_inliers, max_candidates, early_stop_inliers, data_roots)` — **no `pp`**.
   - Modal install (`rizzojr01/unav-backend-core` at `5e4e688`) also has the same signature (rejects `pp`).
-  - So `pp=None` kwarg must be removed; the function doesn't accept it.
+  - So `pp=None` kwarg must be removed from the matcher wrapper too; the function doesn't accept it.
   - Local submodule and Modal install are in sync at `5e4e688` but the local file is missing newer patches visible elsewhere in the unav package.
+
+## RESOLVED — Localization Works! 🎉
+- Final fix: removed `pp` from BOTH the upstream-traced `batch_local_matching_and_ransac` call AND the matcher wrapper's signature in `logic/maps.py`.
+- Deploy: `0c6edec Remove pp=pp from matcher wrapper's call to original`
+- All 10/10 DB images resolve, MASt3R inference runs (~30s), localization succeeds.
+- Path was a sequence of small wins:
+  1. Identified MASt3R matcher is the right entry point (already in upstream class)
+  2. Instrumented upstream `UNavLocalizer` to surface runtime behavior
+  3. Fixed `data_temp_root` / `data_final_root` to point to `/root/UNav-IO/mnt/data/UNav-IO/temp` for MASt3R (kept `DATA_ROOT=/root/UNav-IO/data` for UNavConfig/places)
+  4. Removed `pp` kwarg (deployed function doesn't accept it)
+
+## Outstanding Cleanup
+- The upstream `UNavLocalizer` ALREADY had MASt3R dispatch built in (`unav/localizer/localizer.py:195-214`). The custom dispatch in our `src/modal_functions/unav_v2/localizer.py` was a dead class — that whole file can be deleted or turned into a thin compat shim.
+- The instrumentation wrappers in `logic/maps.py` (`_install_upstream_instrumentation`, `_install_matcher_instrumentation`) and `logic/init.py` can be removed once we trust the matcher works.
+- `localizor_config.data_temp_root` override in `init.py:85` is no longer needed (we override in the matcher wrapper now).
+- The `force_build=True` in `modal_config.py` and the `rizzojr01/unav-backend-core` git URL can be reverted to the original `endeleze/UNav` once everything is stable.
 
 ## Submodule State
 - `unav/` submodule pinned to `5e4e6889dbe7d4d1d314caeca96c9c358d81c27e` — commit msg: `fix: remove hard-coded UNav paths from MASt3R pipeline`.
