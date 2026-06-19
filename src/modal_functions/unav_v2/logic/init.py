@@ -127,6 +127,13 @@ def run_init_gpu_components(self):
 
     from unav.localizer.localizer import UNavLocalizer
 
+    try:
+        from .maps import _install_upstream_instrumentation, _install_matcher_instrumentation
+        _install_upstream_instrumentation(UNavLocalizer)
+        _install_matcher_instrumentation()
+    except Exception as e:
+        print(f"⚠️ Failed to install MASt3R instrumentation: {e}")
+
     print("🤖 Initializing UNavLocalizer (GPU-dependent)...")
     self.localizer = UNavLocalizer(self.localizor_config)
     _apply_mast3r_extraction_fallback(self, self.localizer)
