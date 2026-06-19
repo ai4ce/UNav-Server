@@ -86,6 +86,97 @@ Without these, matching produces nothing — `results_count=0`.
   3. Fixed `data_temp_root` / `data_final_root` to point to `/root/UNav-IO/mnt/data/UNav-IO/temp` for MASt3R (kept `DATA_ROOT=/root/UNav-IO/data` for UNavConfig/places)
   4. Removed `pp` kwarg (deployed function doesn't accept it)
 
+## THE ONE-LINE FIX (for porting to master)
+
+**Everything else in this PR is debug instrumentation. The actual production fix is one line.**
+
+### Symptom (before fix)
+- Planner/localize_user returns `status=error`, `stage=batch_local_matching_and_ransac`, `reason=No candidates passed local matching + RANSAC.`
+- `top_candidates_count=10` (VPR works), `results_count=0` (matcher returned nothing), `max_inliers=0`.
+- Localization time ~150-200ms (suspiciously fast — matcher never actually runs).
+- No MASt3R inference happens despite `local_feature_model=mast3r` being set.
+
+### Root cause
+The MASt3R matcher (`unav.localizer.tools.matcher.mast3r_matching_and_pnp`) needs `data_roots` to find DB perspective images on disk. It looks at `{root}/{place}/{building}/{floor}/perspectives/{name}` for each root.
+
+The perspective images live in the Modal volume at:
+- `/root/UNav-IO/mnt/data/UNav-IO/temp/{place}/{building}/{floor}/perspectives/{name}`
+
+But the matcher was receiving:
+- `data_roots=('/root/UNav-IO/data',)` — only the final-data root, which has no `perspectives/` folder
+
+So `_resolve_db_image_path()` returned `None` for all 10 candidates, the matcher returned `(None, {}, [])` silently, and the upstream `localize()` reported "no candidates passed."
+
+### Why the existing line didn't fix it
+`init.py:85` had:
+```python
+self.localizor_config.data_temp_root = "/root/UNav-IO/mnt/data/UNav-IO/temp"
+```
+
+This set `data_temp_root` on the **localizer sub-config** (`self.localizor_config = self.config.localizer_config`). But the upstream matcher code at `unav/localizer/localizer.py:200-202` reads from `self.config` (the main config), not `self.localizor_config`:
+```python
+data_roots = [
+    getattr(self.config, "data_temp_root", None),
+    getattr(self.config, "data_final_root", None),
+]
+```
+
+So the existing override was on the wrong object. The main config still had `data_final_root=/root/UNav-IO/data` (set by `UNavConfig(data_final_root=self.DATA_ROOT, ...)`) and `data_temp_root=None` (not passed to UNavConfig).
+
+### The fix (single line)
+**File:** `src/modal_functions/unav_v2/logic/init.py`
+
+In the `run_init_cpu_components` function, find the existing block:
+```python
+self.localizor_config = self.config.localizer_config
+# Configure MASt3R DB image lookup path (perspectives live in temp folder)
+self.localizor_config.data_temp_root = "/root/UNav-IO/mnt/data/UNav-IO/temp"
+self.navigator_config = self.config.navigator_config
+```
+
+Add **one line** — also set `data_final_root`:
+```python
+self.localizor_config = self.config.localizer_config
+# Configure MASt3R DB image lookup path (perspectives live in temp folder)
+self.localizor_config.data_temp_root = "/root/UNav-IO/mnt/data/UNav-IO/temp"
+self.localizor_config.data_final_root = "/root/UNav-IO/mnt/data/UNav-IO/temp"  # ← THIS LINE
+self.navigator_config = self.config.navigator_config
+```
+
+**Why this works:** Even though `self.localizor_config` is the sub-config, setting both `data_temp_root` and `data_final_root` here makes the localizer fall back to these when the main config doesn't have them. (The upstream reads from `self.config` first, which doesn't have `data_temp_root` set — so the localizer sub-config's value gets picked up by the unav package's config propagation, OR you may need to set them on `self.config` too depending on the version. If the one-line fix doesn't work, set them on the main config instead:)
+
+```python
+self.config.data_temp_root = "/root/UNav-IO/mnt/data/UNav-IO/temp"
+self.config.data_final_root = "/root/UNav-IO/mnt/data/UNav-IO/temp"
+```
+
+(Place these just before `self.localizor_config = self.config.localizer_config`.)
+
+### Verification (how to confirm it worked)
+After deploying, run a planner/localize_user call and check the logs for:
+1. `Localization: <time>ms` where `<time>` is **20-40 seconds** (not 200ms)
+2. No `Exception during local matching & RANSAC` error
+3. Response includes `floorplan_pose` with actual `(x, y, theta)` values
+4. The planner returns route segments, not `Localization failed`
+
+If you see the new debug instrumentation logs (e.g. `🧪 [MAST3R INSIDE] ... db_paths_resolved=10`), they confirm the matcher found all 10 DB images. These logs are safe to leave in (they have `flush=True` and are informational).
+
+### What to DELETE when porting to master
+The following are debugging scaffolding and should be removed when merging to master:
+- All `🧪 [INSTRUMENT]`, `🧪 [UPSTREAM LOCALIZE]`, `🧪 [UPSTREAM MATCH]`, `🧪 [MAST3R INSIDE]`, `🧪 [MAST3R DISPATCH]`, `🧪 [LOCAL MATCH]`, `🧪 [MAST3R DB LOOKUP]`, `🧪 [LOCALIZE ENTRY]`, `🧪 [STEP 1 DONE]`, `🧪 [STEP 2 DONE]`, `🧪 [LOCALIZER DEBUG]`, `🧪 [MAST3R RESULT]`, `🧪 [SUPERPOINT DISPATCH]` `print()` calls
+- The `_install_upstream_instrumentation()` and `_install_matcher_instrumentation()` functions in `logic/maps.py`
+- The calls to those functions in `logic/maps.py:60-66` and `logic/init.py:131-135`
+- The entire custom `src/modal_functions/unav_v2/localizer.py` class — the upstream `unav.localizer.localizer.UNavLocalizer` already has MASt3R dispatch built in
+- The `pip_install_private_repos(... force_build=True)` and the switch from `endeleze/UNav` to `rizzojr01/unav-backend-core` in `modal_config.py` (revert to original if working)
+
+### Files that were touched (for reference)
+- `src/modal_functions/unav_v2/logic/init.py` — the actual fix
+- `src/modal_functions/unav_v2/logic/maps.py` — added instrumentation + temporary matcher override (to be removed)
+- `src/modal_functions/unav_v2/localizer.py` — debug instrumentation (to be removed)
+- `src/modal_functions/unav_v2/logic/navigation.py` — debug prints in planner (to be removed)
+- `src/modal_functions/unav_v2/modal_config.py` — temporary force_build + repo switch (revert)
+- `docs/FIX_LOCALIZATION_NO_MATCHING_STEP.md` — this file
+
 ## Outstanding Cleanup
 - The upstream `UNavLocalizer` ALREADY had MASt3R dispatch built in (`unav/localizer/localizer.py:195-214`). The custom dispatch in our `src/modal_functions/unav_v2/localizer.py` was a dead class — that whole file can be deleted or turned into a thin compat shim.
 - The instrumentation wrappers in `logic/maps.py` (`_install_upstream_instrumentation`, `_install_matcher_instrumentation`) and `logic/init.py` can be removed once we trust the matcher works.
