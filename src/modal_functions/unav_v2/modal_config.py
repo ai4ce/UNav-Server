@@ -18,10 +18,11 @@ local_dir = current_dir / ".."
 
 
 def download_torch_hub_weights():
-    import torch
     import os
     import zipfile
     from pathlib import Path
+
+    import torch
 
     # Try to import requests, fallback to urllib if not available
     try:
@@ -141,7 +142,7 @@ def download_torch_hub_weights():
 
 
 app = App(
-    name="Mast3r-UNav-Server",
+    name="Staging-Mast3r-unav-server",
     # mounts removed as deprecated
 )
 
@@ -175,6 +176,7 @@ unav_image = (
         git_user="surendharpalanisamy",
         secrets=[github_secret],
         extra_options="--no-deps",
+        force_build=True,
     )
     .workdir("/root")
     .run_commands(
