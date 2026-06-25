@@ -42,31 +42,31 @@ def main():
         # )
         # print("Route Segments Result:", route_segments_result)
 
-        print("\n" + "=" * 50)
-        print("Testing localize_user...")
-        print("=" * 50)
-        localize_result = unav_server.localize_user.remote(
-            session_id=SESSION_ID,
-            base_64_image=base64_encoded,
-            place=PLACE,
-            building=BUILDING,
-            floor=FLOOR,
-        )
-        print("Localization Result:", localize_result)
+        # print("\n" + "=" * 50)
+        # print("Testing localize_user...")
+        # print("=" * 50)
+        # localize_result = unav_server.localize_user.remote(
+        #     session_id=SESSION_ID,
+        #     base_64_image=base64_encoded,
+        #     place=PLACE,
+        #     building=BUILDING,
+        #     floor=FLOOR,
+        # )
+        # print("Localization Result:", localize_result)
 
         # print("\n" + "=" * 50)
         # print("Testing planner (full navigation)...")
         # print("=" * 50)
-        # planner_result = unav_server.planner.remote(
-        #     destination_id=DESTINATION_ID,
-        #     base_64_image=base64_encoded,
-        #     session_id=SESSION_ID,
-        #     building=BUILDING,
-        #     floor=FLOOR,
-        #     place=PLACE,
-        #     enable_multifloor=False,
-        # )
-        # print("Planner Result:", planner_result)
+        planner_result = unav_server.planner.remote(
+            destination_id=DESTINATION_ID,
+            base_64_image=base64_encoded,
+            session_id=SESSION_ID,
+            building=BUILDING,
+            floor=FLOOR,
+            place=PLACE,
+            enable_multifloor=False,
+        )
+        print("Planner Result:", planner_result)
 
         # output_path = os.path.join(os.path.dirname(__file__), "planner_output.json")
         # with open(output_path, "w") as f:
