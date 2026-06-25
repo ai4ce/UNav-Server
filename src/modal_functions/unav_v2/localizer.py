@@ -185,16 +185,51 @@ class UNavLocalizer:
         local_model = getattr(self.config, "local_feature_model", None)
         if local_model == "mast3r":
             from unav.localizer.tools.matcher import mast3r_matching_and_pnp
-            print(
-                f"🧪 [MAST3R DISPATCH] Dispatching to mast3r_matching_and_pnp, "
-                f"candidates={len(candidates_data)}, matcher={type(self.local_matcher).__name__}"
-            )
+            from unav.localizer.tools.matcher import _resolve_db_image_path
+
             data_roots = [
                 getattr(self.config, "data_temp_root", None),
                 getattr(self.config, "data_final_root", None),
             ]
-            return mast3r_matching_and_pnp(
-                query_img_path=getattr(self, "_current_query_img_path", None),
+            data_roots = [r for r in data_roots if r]
+            query_img_path = getattr(self, "_current_query_img_path", None)
+
+            print(
+                f"🧪 [MAST3R DISPATCH] candidates={len(candidates_data)} "
+                f"matcher={type(self.local_matcher).__name__} "
+                f"data_roots={data_roots} query={query_img_path} "
+                f"query_exists={os.path.exists(query_img_path) if query_img_path else False}",
+                flush=True,
+            )
+
+            try:
+                ref_names = list(candidates_data.keys())[:10]
+                resolved = 0
+                sample = None
+                skipped = []
+                for name in ref_names:
+                    cand = candidates_data[name]
+                    place, building, floor = cand["map_key"]
+                    p = _resolve_db_image_path(data_roots, place, building, floor, name)
+                    if p is not None:
+                        resolved += 1
+                        if sample is None:
+                            sample = (name, p, os.path.exists(p))
+                    else:
+                        skipped.append((name, (place, building, floor)))
+                print(
+                    f"🧪 [MAST3R DB LOOKUP] resolved={resolved}/{len(ref_names)} "
+                    f"sample={sample} skipped={skipped[:3]}",
+                    flush=True,
+                )
+            except Exception as e:
+                print(
+                    f"⚠️ [MAST3R DB LOOKUP] pre-flight logging failed: {e}",
+                    flush=True,
+                )
+
+            result = mast3r_matching_and_pnp(
+                query_img_path=query_img_path,
                 candidates_data=candidates_data,
                 mast3r_matcher=self.local_matcher,
                 colmap_models=self.all_colmap_models,
@@ -202,8 +237,25 @@ class UNavLocalizer:
                 min_inliers=self.config.localization_config.get("min_inliers", 6),
                 max_candidates=10,
                 early_stop_inliers=80,
-                data_roots=[r for r in data_roots if r],
+                data_roots=data_roots,
             )
+
+            best_map_key, pnp_pairs, results = result
+            try:
+                n_results = len(results) if results else 0
+                max_inliers = max(
+                    (r.get("inliers", 0) for r in results),
+                    default=0,
+                ) if results else 0
+            except Exception:
+                n_results, max_inliers = "?", "?"
+            print(
+                f"🧪 [MAST3R DISPATCH DONE] best_map_key={best_map_key} "
+                f"results={n_results} max_inliers={max_inliers} "
+                f"pnp_pairs_type={type(pnp_pairs).__name__}",
+                flush=True,
+            )
+            return result
 
         print(
             f"🧪 [SUPERPOINT DISPATCH] Dispatching to batch_local_matching_and_ransac, "

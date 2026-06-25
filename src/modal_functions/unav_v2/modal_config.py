@@ -172,10 +172,11 @@ unav_image = (
         "pip install . --no-deps",
     )
     .pip_install_private_repos(
-        "github.com/endeleze/UNav.git",
+        "github.com/endeleze/UNav.git@aa60dc966c025120dcb8ea685aeffcadf25c22d8",
         git_user="surendharpalanisamy",
         secrets=[github_secret],
         extra_options="--no-deps",
+        force_build=True,
     )
     .workdir("/root")
     .run_commands(
