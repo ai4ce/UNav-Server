@@ -37,14 +37,21 @@ def _setup_mast3r_symlink(data_root: str):
 
 def run_init_middleware(self):
     """Initialize Middleware.io tracking for profiling and telemetry."""
-    # Middleware.io disabled — the staging account has metrics/logs/traces
-    # export disabled, which causes every OTLP export to log a full
-    # traceback and drown out the actual application logs. Skip the
-    # middleware initialization entirely and just mark the tracer as
-    # unavailable so downstream code falls back to the non-traced path.
-    print("⏭️ [Phase 0] Middleware.io disabled — skipping initialization")
+    print("🔧 [Phase 0] Initializing Middleware.io...")
+    print(f"🔧 [Phase 0] Current tracer state: {getattr(self, 'tracer', 'NOT_SET')}")
+    print(
+        f"🔧 [Phase 0] Middleware init pending: {getattr(self, '_middleware_init_pending', 'NOT_SET')}"
+    )
+
+    if not _gpu_available():
+        print("⏸️ GPU not yet available; deferring Middleware.io initialization...")
+        self._middleware_init_pending = True
+        self.tracer = None
+        return
+
     self._middleware_init_pending = False
-    self.tracer = None
+    print("✅ GPU available; proceeding with Middleware.io initialization")
+    _configure_middleware_tracing(self)
 
 
 def run_init_cpu_components(self):
@@ -173,16 +180,43 @@ def _gpu_available() -> bool:
 
 
 def _configure_middleware_tracing(self):
-    """Configure Middleware.io tracing.
+    """Configure Middleware.io tracing."""
+    print("🔧 [CONFIGURE] Starting Middleware.io configuration...")
+    from middleware import mw_tracker, MWOptions
+    from opentelemetry import trace
+    import os
 
-    DISABLED: the staging account has metrics/logs/traces export disabled,
-    which causes every OTLP export to log a full traceback and drown out
-    the actual application logs. Kept as a no-op so existing call sites
-    (the deferred-init path in run_init_gpu_components) remain valid but
-    do nothing.
-    """
-    print("⏭️ [CONFIGURE] Middleware.io disabled — no-op")
-    self.tracer = None
+    api_key = os.environ.get("MW_API_KEY")
+    target = os.environ.get("MW_TARGET")
+
+    if not api_key or not target:
+        print(
+            "⚠️ Warning: MW_API_KEY and MW_TARGET not set. Skipping middleware initialization."
+        )
+        self.tracer = None
+        return
+
+    try:
+        mw_tracker(
+            MWOptions(
+                access_token=api_key,
+                target=target,
+                service_name="UNav-Server",
+                console_exporter=False,
+                log_level="INFO",
+                collect_profiling=True,
+                collect_traces=True,
+                collect_metrics=True,
+            )
+        )
+
+        self.tracer = trace.get_tracer(__name__)
+        print("✅ Middleware.io initialized successfully")
+        print(f"✅ [CONFIGURE] Tracer created: {type(self.tracer).__name__}")
+    except Exception as e:
+        print(f"⚠️ Warning: Failed to initialize Middleware.io: {e}")
+        self.tracer = None
+        print(f"⚠️ [CONFIGURE] Tracer set to None due to error")
 
 
 def _apply_mast3r_extraction_fallback(server, localizer):
