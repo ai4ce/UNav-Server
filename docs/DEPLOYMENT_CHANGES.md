@@ -472,3 +472,20 @@ staging deploy.
 ```bash
 modal deploy -m src.modal_functions.unav_v2.unav_modal
 ```
+
+### Middleware.io disabled (2026-06-26)
+
+The staging `ufbuj` account on Middleware.io has metrics/logs/traces
+export disabled, which causes every OTLP export to log a full
+traceback and drown out the actual application logs. Neutralized the
+middleware initialization:
+
+- `run_init_middleware` (`logic/init.py`): now a no-op that just sets
+  `self._middleware_init_pending = False` and `self.tracer = None`.
+- `_configure_middleware_tracing` (`logic/init.py`): now a no-op for
+  the same reason. Kept as a function so the deferred-init call site
+  in `run_init_gpu_components` remains valid.
+
+Downstream code that checks `hasattr(self, "tracer") and self.tracer
+is not None` continues to work and falls through to the non-traced
+(localize_user / planner) path.
