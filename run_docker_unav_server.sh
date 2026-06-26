@@ -41,7 +41,10 @@ docker run --gpus device=1 --rm -it \
   -v "/mnt/data/UNav-IO/temp:/mnt/data/UNav-IO/temp:ro" \
   -v "/home/unav/Desktop/unav/unav:/opt/conda/envs/unav/lib/python3.10/site-packages/unav" \
   -v "/home/unav/Desktop/mast3r:/workspace/mast3r" \
+  -v "/home/unav/.cache/huggingface:/root/.cache/huggingface" \
+  -v "/home/unav/.cache/torch:/root/.cache/torch" \
   "${ENV_FILE_ARGS[@]}" \
   -e PYTHONPATH=/workspace/mast3r \
+  -e PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
   "${IMAGE_NAME}" \
   bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate unav && pip install 'bcrypt<4.0.0' -q && cd /workspace && PYTHONPATH=/workspace/mast3r uvicorn main:app --host 0.0.0.0 --port ${CONTAINER_PORT}"
