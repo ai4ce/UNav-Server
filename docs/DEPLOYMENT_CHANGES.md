@@ -419,3 +419,56 @@ Debian Bookworm's `libsuitesparse-dev` static libraries lack `-fPIC`, preventing
 ```bash
 MODAL_IMAGE_BUILDER_VERSION=2024.10 modal deploy -m src.modal_functions.unav_v2.unav_modal
 ```
+
+---
+
+## Branch: `integrate_backend_snap_to_route` (2026-06-26)
+
+Branched from `add_temp_config` to pick up the proven MASt3R matching
+dispatch + `_setup_mast3r_symlink` + `data_temp_root` / `data_final_root`
+overrides intact, then applied only the surgical changes needed for the
+staging deploy.
+
+### Changes
+
+1. **App namespace** — `Mast3r-UNav-Server` → `Staging-Mast3r-unav-server`
+   (see `modal_config.py:144`). Avoids colliding with the production
+   deploy.
+
+2. **`unav` package source** — `pip_install_private_repos` switched
+   from `rizzojr01/unav-backend-core.git` to `ai4ce/UNav.git` with
+   `force_build=True`. The `ai4ce/UNav` repo is the canonical source —
+   its `main` HEAD (`aa60dc9`) matches the local `unav/` submodule and
+   ships `mast3r_matching_and_pnp` with the multi-`data_roots` /
+   `_resolve_db_image_path` / `pp` kwarg fixes. `force_build=True` is
+   required so Modal does not reuse a cached `unav` install layer that
+   pre-dates the matching dispatch.
+
+   ```python
+   # modal_config.py
+   .pip_install_private_repos(
+       "github.com/ai4ce/UNav.git",
+       git_user="surendharpalanisamy",
+       secrets=[github_secret],
+       extra_options="--no-deps",
+       force_build=True,
+   )
+   ```
+
+### Why these two and nothing else
+
+- All MASt3R matching logic, symlink setup, and data-root overrides
+  already exist on `add_temp_config` and remain unchanged. Touching
+  them risks regressing a working configuration.
+- No debug logging was added — the upstream `unav.matcher` already
+  provides sufficient surface to diagnose (or to add logs to, if a
+  future regression requires it).
+- `init.py` `data_final_root` override is intentionally preserved —
+  see `bff19b9` commit message on `add_temp_config` for the reasoning
+  (the MASt3R matcher reads `data_roots = [data_temp_root,
+  data_final_root]` and requires both to be the temp path).
+
+### Deploy
+```bash
+modal deploy -m src.modal_functions.unav_v2.unav_modal
+```
