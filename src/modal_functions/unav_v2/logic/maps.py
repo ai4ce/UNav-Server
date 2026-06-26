@@ -143,7 +143,7 @@ def _install_upstream_instrumentation(UNavLocalizer):
         return result
 
     @functools.wraps(orig_match)
-    def traced_match(self, local_feat_dict, candidates_data, query_img_path=None):
+    def traced_match(self, local_feat_dict, candidates_data, query_img_path=None, pp=None):
         print(
             f"🧪 [UPSTREAM MATCH] use_mast3r={getattr(self, 'use_mast3r', 'N/A')}, "
             f"candidates={len(candidates_data)}, query_img_path={query_img_path}, "
@@ -163,10 +163,11 @@ def _install_upstream_instrumentation(UNavLocalizer):
                 min_inliers=self.config.localization_config.get("min_inliers", 6),
                 max_candidates=10,
                 early_stop_inliers=80,
+                pp=pp,
                 data_roots=mast3r_data_roots,
             )
         else:
-            result = orig_match(self, local_feat_dict, candidates_data, query_img_path=query_img_path)
+            result = orig_match(self, local_feat_dict, candidates_data, query_img_path=query_img_path, pp=pp)
         if result is None:
             print("🧪 [UPSTREAM MATCH DONE] result=None", flush=True)
             return None
