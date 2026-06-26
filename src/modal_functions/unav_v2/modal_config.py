@@ -194,14 +194,6 @@ unav_image = (
         ),
     )
     .workdir("/root")
-    .run_commands("git clone https://github.com/ai4ce/UNav-Server.git unav_server_v2")
-    .workdir("/root/unav_server_v2")
-    .run_commands(
-        "pwd",  # Debug: show current directory
-        "ls -la",  # Debug: show directory contents
-        "git branch -a",  # Debug: show available branches
-        "git checkout endeleze",
-    )
     .run_commands("pip freeze")
     .pip_install(
         "torch>=2.4.0",
