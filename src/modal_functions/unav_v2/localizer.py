@@ -134,14 +134,14 @@ def _wrap_upstream_localizer():
         return result
 
     @functools.wraps(orig_match)
-    def traced_match(self, local_feat_dict, candidates_data, query_img_path=None):
+    def traced_match(self, local_feat_dict, candidates_data, query_img_path=None, pp=None):
         print(
             f"🧪 [UPSTREAM MATCH] use_mast3r={getattr(self, 'use_mast3r', 'N/A')}, "
             f"candidates={len(candidates_data)}, query_img_path={query_img_path}, "
             f"query_exists={os.path.exists(query_img_path) if query_img_path else False}",
             flush=True,
         )
-        result = orig_match(self, local_feat_dict, candidates_data, query_img_path=query_img_path)
+        result = orig_match(self, local_feat_dict, candidates_data, query_img_path=query_img_path, pp=pp)
         if result is None:
             print("🧪 [UPSTREAM MATCH DONE] result=None", flush=True)
             return None
