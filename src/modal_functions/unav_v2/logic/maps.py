@@ -2,6 +2,7 @@ from typing import Any, Dict, Optional, Set
 
 import os
 import functools
+import threading
 import time
 
 from .places import run_get_places
@@ -85,6 +86,12 @@ def run_ensure_maps_loaded(
         except Exception as e:
             print(f"⚠️ Failed to patch selective localizer: {e}")
 
+    # Synchronous part stays minimal: global features + transforms, which any
+    # localization needs for correctness. The caller (e.g. a destinations-list
+    # request) should NOT pay for COLMAP floor models / VPR index / model
+    # kernel warmup — that heavy work runs in the background thread below, so
+    # the first user localization finds the localizer already warm without any
+    # user-facing call having blocked on it.
     if hasattr(server, "tracer") and server.tracer:
         with server.tracer.start_as_current_span(
             "load_maps_and_features_span"
@@ -105,6 +112,23 @@ def run_ensure_maps_loaded(
         selective_localizer.load_maps_and_features()
         load_duration = time.time() - start_load_time
         print(f"⏱️ Completed load_maps_and_features in {load_duration:.2f} seconds")
+
+    if hasattr(selective_localizer, "warmup"):
+        def _background_warmup():
+            try:
+                t0 = time.time()
+                stages = selective_localizer.warmup()
+                detail = ", ".join(f"{k}={v:.2f}s" for k, v in stages.items())
+                print(f"🔥 Background localizer warmup done for {map_key} "
+                      f"in {time.time() - t0:.2f}s ({detail})", flush=True)
+            except Exception as e:
+                # Warmup is an optimization: on failure the localizer still
+                # works, it just lazy-loads on first query as before.
+                print(f"⚠️ Background localizer warmup failed for {map_key}: {e}",
+                      flush=True)
+
+        threading.Thread(target=_background_warmup, daemon=True,
+                         name=f"unav-warmup-{map_key}").start()
 
     server.selective_localizers[map_key] = selective_localizer
     server.maps_loaded.add(map_key)
