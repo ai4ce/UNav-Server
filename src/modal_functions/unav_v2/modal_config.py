@@ -172,7 +172,7 @@ unav_image = (
         "pip install . --no-deps",
     )
     .pip_install_private_repos(
-        "github.com/ai4ce/UNav.git",
+        "github.com/rizzojr01/unav.git",
         git_user="surendharpalanisamy",
         secrets=[github_secret],
         extra_options="--no-deps",
@@ -256,6 +256,6 @@ unav_image = (
         "echo 'exec middleware-run \"$@\"' >> /root/run.sh",
         "chmod +x /root/run.sh",
     )
-    .pip_install("grpclib")
+    .pip_install("grpclib", "setuptools<70")
     .dockerfile_commands('ENTRYPOINT ["/root/run.sh"]')
 )
