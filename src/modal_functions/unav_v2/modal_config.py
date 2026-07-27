@@ -246,10 +246,12 @@ unav_image = (
             "MW_APM_COLLECT_PROFILING": "true",
             "MW_TRACKER": "true",
             "MW_CONSOLE_EXPORTER": "false",
-            # Middleware rejects log exports for this account ("logs are disabled
-            # for account ufbuj when resource type runtime.metrics.python"),
-            # causing endless OTLP export errors. Modal captures stdout anyway.
+            # Middleware rejects log AND metric exports for this account
+            # ("logs/metrics are disabled for account ufbuj when resource type
+            # runtime.metrics.python"), causing endless OTLP export errors.
+            # Traces and profiling still work. Modal captures stdout anyway.
             "MW_APM_COLLECT_LOGS": "false",
+            "MW_APM_COLLECT_METRICS": "false",
             "OTEL_SERVICE_NAME": "modal-unav-server",
             "PYTHONPATH": "/root/mast3r:/root/mast3r/dust3r",
         }
