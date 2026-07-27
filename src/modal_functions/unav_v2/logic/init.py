@@ -63,6 +63,7 @@ def run_init_cpu_components(self):
     from unav.navigator.commander import commands_from_result
 
     self.DATA_ROOT = "/root/UNav-IO/data"
+    self.MAST3R_DATA_ROOT = "/root/UNav-IO/mnt/data/UNav-IO/temp"
     self.FEATURE_MODEL = "DinoV2Salad"
     self.LOCAL_FEATURE_MODEL = "mast3r"
 
@@ -73,7 +74,6 @@ def run_init_cpu_components(self):
     print("🔧 Initializing UNavConfig...")
     self.config = UNavConfig(
         data_final_root=self.DATA_ROOT,
-        # data_temp_root="/root/UNav-IO/mnt/data/UNav-IO/temp",
         places=self.PLACES,
         global_descriptor_model=self.FEATURE_MODEL,
         local_feature_model=self.LOCAL_FEATURE_MODEL,
@@ -81,8 +81,6 @@ def run_init_cpu_components(self):
     print("✅ UNavConfig initialized successfully")
 
     self.localizor_config = self.config.localizer_config
-    # Configure MASt3R DB image lookup path (perspectives live in temp folder)
-    self.localizor_config.data_temp_root = "/root/UNav-IO/mnt/data/UNav-IO/temp"
     self.navigator_config = self.config.navigator_config
     print("✅ Config objects extracted successfully")
 
@@ -126,6 +124,13 @@ def run_init_gpu_components(self):
         run_init_cpu_components(self)
 
     from unav.localizer.localizer import UNavLocalizer
+
+    try:
+        from .maps import _install_upstream_instrumentation, _install_matcher_instrumentation
+        _install_upstream_instrumentation(UNavLocalizer)
+        _install_matcher_instrumentation()
+    except Exception as e:
+        print(f"⚠️ Failed to install MASt3R instrumentation: {e}")
 
     print("🤖 Initializing UNavLocalizer (GPU-dependent)...")
     self.localizer = UNavLocalizer(self.localizor_config)

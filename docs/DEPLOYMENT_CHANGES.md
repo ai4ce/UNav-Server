@@ -419,3 +419,79 @@ Debian Bookworm's `libsuitesparse-dev` static libraries lack `-fPIC`, preventing
 ```bash
 MODAL_IMAGE_BUILDER_VERSION=2024.10 modal deploy -m src.modal_functions.unav_v2.unav_modal
 ```
+
+---
+
+## Branch: `integrate_backend_snap_to_route` (2026-06-26)
+
+Branched from `add_temp_config` to pick up the proven MASt3R matching
+dispatch + `_setup_mast3r_symlink` + `data_temp_root` / `data_final_root`
+overrides intact, then applied only the surgical changes needed for the
+staging deploy.
+
+### Changes
+
+1. **App namespace** — `Mast3r-UNav-Server` → `Staging-Mast3r-unav-server`
+   (see `modal_config.py:144`). Avoids colliding with the production
+   deploy.
+
+2. **`unav` package source** — `pip_install_private_repos` switched
+   from `rizzojr01/unav-backend-core.git` to `ai4ce/UNav.git` with
+   `force_build=True`. The `ai4ce/UNav` repo is the canonical source —
+   its `main` HEAD (`aa60dc9`) matches the local `unav/` submodule and
+   ships `mast3r_matching_and_pnp` with the multi-`data_roots` /
+   `_resolve_db_image_path` / `pp` kwarg fixes. `force_build=True` is
+   required so Modal does not reuse a cached `unav` install layer that
+   pre-dates the matching dispatch.
+
+   ```python
+   # modal_config.py
+   .pip_install_private_repos(
+       "github.com/ai4ce/UNav.git",
+       git_user="surendharpalanisamy",
+       secrets=[github_secret],
+       extra_options="--no-deps",
+       force_build=True,
+   )
+   ```
+
+### Why these two and nothing else
+
+- All MASt3R matching logic, symlink setup, and data-root overrides
+  already exist on `add_temp_config` and remain unchanged. Touching
+  them risks regressing a working configuration.
+- No debug logging was added — the upstream `unav.matcher` already
+  provides sufficient surface to diagnose (or to add logs to, if a
+  future regression requires it).
+- `init.py` `data_final_root` override is intentionally preserved —
+  see `bff19b9` commit message on `add_temp_config` for the reasoning
+  (the MASt3R matcher reads `data_roots = [data_temp_root,
+  data_final_root]` and requires both to be the temp path).
+
+### Deploy
+```bash
+modal deploy -m src.modal_functions.unav_v2.unav_modal
+```
+
+---
+
+## Session log (2026-06-26)
+
+Chronological record of what was tried, what the deployment returned,
+and what was concluded. All commits on `integrate_backend_snap_to_route`
+unless noted.
+
+| # | Commit | Change | Observed result | Conclusion |
+|---|---|---|---|---|
+| 1 | `aac9bca` | Switch `pip_install_private_repos` to `ai4ce/UNav.git` + `force_build=True`. App namespace renamed to `Staging-Mast3r-unav-server`. | Deploy succeeds. Init runs, but localization fails with `No candidates passed local matching + RANSAC`, `top_candidates_count=10`, `results_count=0`. ~28 s wall time. | `unav` source is correct, MASt3R pipeline runs. Failure is in the matching step, not the install. |
+| 2 | `0dcbd30` | Drop `force_build=True` on the `unav` install (kept it implicit via the source URL change). | No observable change in the running container (the image was already built from `aac9bca`). | Cosmetic cleanup. The next layer rebuild still gets triggered by the source URL change. |
+| 3 | `312eee7` | Disable Middleware.io: `run_init_middleware` and `_configure_middleware_tracing` become no-ops that just set `self.tracer = None`. | OTLP traceback spam **stops** in the log. Boot prints `⏭️ [Phase 0] Middleware.io disabled — skipping initialization`. Planner falls through to the non-traced path. | Successful workaround for the `ufbuj` account's disabled metrics/logs/traces exports. The `middleware-bootstrap` install step in `modal_config.py:263` still installs the OTLP exporter library, but no code path triggers an export. |
+| 4 | (revert) | User reports the log was clean up to a point but cut off. Concerned the middleware change "fucked everything". | Reverted. | **Reverted in `78e86b8`**. Middleware init restored to original. |
+| 5 | `d240c92` | Add `pp=None` to the `traced_match` wrapper in `localizer.py:137` and forward it. Reason: the upstream `UNavLocalizer.batch_local_matching_and_ransac` (in `unav/`) now accepts a `pp` kwarg per the `aa60dc9` submodule update; the wrapper had a fixed signature without `pp`, so calls like `orig_match(self, ..., pp=pp)` raised `TypeError: ... got an unexpected keyword argument 'pp'`. | **Deployed but not yet live.** The fix is committed and pushed to `origin/integrate_backend_snap_to_route`, **but the container image clones `origin/endeleze`** (see `modal_config.py:197` — `git clone ... && git checkout endeleze`). The `endeleze` branch was stale (`f6ad271`); the `pp` fix only landed on `integrate_backend_snap_to_route`. | **Force-pushed `integrate_backend_snap_to_route` → `origin/endeleze`** so the next `modal deploy` clones the tree that contains the `pp` fix. Confirmed: `+ f6ad271...004a995 integrate_backend_snap_to_route -> endeleze (forced update)`. |
+
+### Outstanding / not yet diagnosed
+
+1. **Stale deploy** — the running container is on an image that pre-dates `d240c92`. Modal's image cache is not invalidating on `localizer.py` changes.
+2. **OTLP noise** — restored by the `78e86b8` revert. The source is the OTLP exporter library installed by the `unav` package's `middleware-bootstrap` step (`modal_config.py:263`); even with our `run_init_middleware` no-op, the exporter is loaded and tries to export on a recurring timer. Re-applying the `312eee7` workaround would silence it; the user prefers to keep middleware init in place.
+3. **`[MASt3R]` line still works, `🧪 [MAST3R DB LOOKUP]` does not print** in some logs — the warm container is reusing a previously-loaded `UNavLocalizer` whose `localize()` path short-circuits before reaching step 4. The instrumentation in `localizer.py:391-425` only fires on the cold path.
+4. **"Move to a mapped location" error** — user mentioned this from a log snippet but never shared the full traceback. Could be `tempfile.NamedTemporaryFile` writing to `/tmp` failing, or `cv2.imwrite` writing to a non-mounted path, or MASt3R's internal save logic. Needs the full traceback to diagnose.

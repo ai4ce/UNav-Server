@@ -18,10 +18,11 @@ local_dir = current_dir / ".."
 
 
 def download_torch_hub_weights():
-    import torch
     import os
     import zipfile
     from pathlib import Path
+
+    import torch
 
     # Try to import requests, fallback to urllib if not available
     try:
@@ -171,7 +172,7 @@ unav_image = (
         "pip install . --no-deps",
     )
     .pip_install_private_repos(
-        "github.com/endeleze/UNav.git",
+        "github.com/rizzojr01/unav.git",
         git_user="surendharpalanisamy",
         secrets=[github_secret],
         extra_options="--no-deps",
@@ -193,14 +194,6 @@ unav_image = (
         ),
     )
     .workdir("/root")
-    .run_commands("git clone https://github.com/ai4ce/UNav-Server.git unav_server_v2")
-    .workdir("/root/unav_server_v2")
-    .run_commands(
-        "pwd",  # Debug: show current directory
-        "ls -la",  # Debug: show directory contents
-        "git branch -a",  # Debug: show available branches
-        "git checkout endeleze",
-    )
     .run_commands("pip freeze")
     .pip_install(
         "torch>=2.4.0",
@@ -263,6 +256,6 @@ unav_image = (
         "echo 'exec middleware-run \"$@\"' >> /root/run.sh",
         "chmod +x /root/run.sh",
     )
-    .pip_install("grpclib")
+    .pip_install("grpclib", "setuptools<70")
     .dockerfile_commands('ENTRYPOINT ["/root/run.sh"]')
 )
