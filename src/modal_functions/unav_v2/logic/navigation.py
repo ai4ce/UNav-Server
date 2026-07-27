@@ -262,6 +262,12 @@ def run_planner(
                 source_key = output["best_map_key"]
                 start_place, start_building, start_floor = source_key
 
+                # -------- Snap-to-route & walkable forcing --------
+                force_walkable = True
+                pf0 = self.nav.pf_map.get((start_place, start_building, start_floor))
+                snapped_xy = list(pf0.snap_to_route(start_xy)) if pf0 else start_xy
+                snapped_pose = {**floorplan_pose, "xy": snapped_xy, "snapped": True}
+
                 if image is not None and hasattr(image, 'shape'):
                     queue_key = image.shape[:2]
                     current_session_queue = session.get("refinement_queue") or {}
@@ -280,7 +286,7 @@ def run_planner(
 
                 path_planning_start = time.time()
                 with self.tracer.start_as_current_span("path_planning_span"):
-                    result = self.nav.find_path(start_place, start_building, start_floor, start_xy, target_place, target_building, target_floor, dest_id_for_path)
+                    result = self.nav.find_path(start_place, start_building, start_floor, snapped_xy, target_place, target_building, target_floor, dest_id_for_path)
 
                 timing_data["path_planning"] = (time.time() - path_planning_start) * 1000
                 print(f"⏱️ Path Planning: {timing_data['path_planning']:.2f}ms")
@@ -327,6 +333,8 @@ def run_planner(
                     "cmds": serialized_cmds,
                     "best_map_key": serialized_source_key,
                     "floorplan_pose": serialized_floorplan_pose,
+                    "snapped_pose": run_safe_serialize(snapped_pose),
+                    "force_walkable": force_walkable,
                     "turn_mode": turn_mode,
                     "total_inliers": sum(
                         r.get("inliers", 0)
