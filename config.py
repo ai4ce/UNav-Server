@@ -19,6 +19,7 @@ PLACES = {
         "Tandon": ["4_floor"]
     },
     "New_York_City": {
-        "LightHouse": ["3_floor", "4_floor", "6_floor"]
+        "LightHouse": ["3_floor", "4_floor", "6_floor"],
+        "SH": ["1_floor"]
     }
 }

@@ -134,6 +134,7 @@ def build_destination_catalog(user_id: str, scope: str = "session") -> List[dict
             name = humanize_destination_name(raw_name, fallback=fallback, category=category, floor=floor, lang=lang)
             catalog.append(
                 {
+                    "catalog_ref": f"{place}/{building}/{floor}/{did_str}",
                     "destination_id": did_str,
                     "name": name,
                     "category": category,
@@ -143,6 +144,47 @@ def build_destination_catalog(user_id: str, scope: str = "session") -> List[dict
                 }
             )
     return catalog
+
+def build_destination_tree(user_id: str, scope: str = "session") -> list[dict]:
+    """Build a place -> building -> floor -> destinations tree for LLM context."""
+    catalog = build_destination_catalog(user_id, scope=scope)
+    places: dict[str, dict] = {}
+    for item in catalog:
+        place_name = item.get("place") or "unknown_place"
+        building_name = item.get("building") or "unknown_building"
+        floor_name = item.get("floor") or "unknown_floor"
+
+        place = places.setdefault(place_name, {"place": place_name, "buildings": {}})
+        building = place["buildings"].setdefault(
+            building_name,
+            {"building": building_name, "floors": {}},
+        )
+        floor = building["floors"].setdefault(
+            floor_name,
+            {"floor": floor_name, "destinations": []},
+        )
+        floor["destinations"].append(
+            {
+                "catalog_ref": item.get("catalog_ref"),
+                "destination_id": item.get("destination_id"),
+                "name": item.get("name"),
+                "category": item.get("category"),
+            }
+        )
+
+    result = []
+    for place in places.values():
+        buildings = []
+        for building in place["buildings"].values():
+            floors = list(building["floors"].values())
+            floors.sort(key=lambda floor: floor["floor"])
+            building["floors"] = floors
+            buildings.append(building)
+        buildings.sort(key=lambda building: building["building"])
+        place["buildings"] = buildings
+        result.append(place)
+    result.sort(key=lambda place: place["place"])
+    return result
 
 
 def _context_bonus(item: dict, session: dict) -> float:
@@ -264,6 +306,46 @@ def resolve_query_against_destinations(destination_query: DestinationQuery, user
     effective_scope = requested_scope or "session"
     if effective_scope == "session" and destination_query.category in _CATEGORY_DEFAULT_SCOPE and not destination_query.floor_hint:
         effective_scope = _CATEGORY_DEFAULT_SCOPE[destination_query.category]
+
+    candidate_refs = [str(item) for item in (destination_query.candidate_refs or []) if str(item).strip()]
+    candidate_ids = [str(item) for item in (destination_query.candidate_ids or []) if str(item).strip()]
+    if candidate_refs or candidate_ids:
+        ref_rank = {candidate_ref: index for index, candidate_ref in enumerate(candidate_refs)}
+        id_rank = {candidate_id: index + len(ref_rank) for index, candidate_id in enumerate(candidate_ids)}
+        selected = []
+        seen_keys = set()
+        for scope in [effective_scope, "global"]:
+            for item in build_destination_catalog(user_id, scope=scope):
+                catalog_ref = str(item.get("catalog_ref", ""))
+                destination_id = str(item["destination_id"])
+                matched_by_ref = catalog_ref in ref_rank
+                matched_by_id = destination_id in id_rank
+                if not matched_by_ref and not matched_by_id:
+                    continue
+                if matched_by_id and destination_query.category and item.get("category") != destination_query.category:
+                    continue
+                key = (destination_id, item.get("place"), item.get("building"), item.get("floor"))
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                rank = ref_rank.get(catalog_ref, id_rank.get(destination_id, 999))
+                selected.append(
+                    DestinationCandidate(
+                        destination_id=destination_id,
+                        name=item["name"],
+                        category=item.get("category"),
+                        place=item.get("place"),
+                        building=item.get("building"),
+                        floor=item.get("floor"),
+                        confidence=max(0.5, 0.98 - rank * 0.03),
+                    )
+                )
+            if selected:
+                selected.sort(key=lambda item: min(
+                    ref_rank.get(f"{item.place}/{item.building}/{item.floor}/{item.destination_id}", 999),
+                    id_rank.get(item.destination_id, 999),
+                ))
+                return selected[:5]
 
     session = get_session(user_id)
     name_hint = (destination_query.name_hint or "").strip().lower()

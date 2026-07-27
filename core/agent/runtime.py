@@ -10,7 +10,7 @@ from models.agent_schemas import (
 )
 from core.agent.providers.factory import get_agent_provider
 from core.agent.session_context import build_session_context
-from core.agent.tools.destination_tools import resolve_query_against_destinations
+from core.agent.tools.destination_tools import build_destination_catalog, build_destination_tree, resolve_query_against_destinations
 from core.agent.tools.explanation_tools import build_explanation_context
 from core.agent.tools.preference_tools import get_profile, update_profile
 
@@ -90,6 +90,14 @@ class AgentRuntime:
 
     def interpret_destination(self, *, user_id: str, utterance: str, language=None) -> dict:
         context = build_session_context(user_id)
+        catalog = build_destination_catalog(user_id, scope="session")
+        if catalog:
+            context = dict(context)
+            context["destination_hierarchy"] = build_destination_tree(user_id, scope="session")
+            context["destination_catalog"] = catalog[:200]
+            if len(catalog) > 200:
+                context["destination_catalog_truncated"] = True
+                context["destination_catalog_total"] = len(catalog)
         resolved_language = language or context.get("language") or "en"
         raw = self.provider.interpret_destination(
             utterance=utterance,

@@ -4,7 +4,7 @@ import urllib.request
 import urllib.error
 
 import requests
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from fastapi.security import OAuth2PasswordBearer
 
 from api.user_api import decode_access_token
@@ -17,6 +17,9 @@ OPENAI_REALTIME_MODEL = os.getenv("OPENAI_REALTIME_MODEL", "gpt-realtime")
 OPENAI_REALTIME_VOICE = os.getenv("OPENAI_REALTIME_VOICE", "marin")
 OPENAI_TRANSCRIBE_URL = os.getenv("OPENAI_TRANSCRIBE_URL", "https://api.openai.com/v1/audio/transcriptions")
 OPENAI_TRANSCRIBE_MODEL = os.getenv("OPENAI_TRANSCRIBE_MODEL", "gpt-4o-transcribe")
+OPENAI_SPEECH_URL = os.getenv("OPENAI_SPEECH_URL", "https://api.openai.com/v1/audio/speech")
+OPENAI_SPEECH_MODEL = os.getenv("OPENAI_SPEECH_MODEL", "gpt-4o-mini-tts")
+OPENAI_SPEECH_VOICE = os.getenv("OPENAI_SPEECH_VOICE", "coral")
 
 
 def get_user_id_from_token(token: str = Depends(oauth2_scheme)) -> str:
@@ -129,3 +132,59 @@ async def transcribe_audio(
         "text": parsed.get("text", ""),
         "model": OPENAI_TRANSCRIBE_MODEL,
     }
+
+@router.post("/realtime/speech")
+def synthesize_speech(payload: dict, user_id: str = Depends(get_user_id_from_token)):
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY is not configured on the server")
+
+    text = str(payload.get("text", "")).strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Missing text.")
+    if len(text) > 4096:
+        raise HTTPException(status_code=400, detail="Text is too long for speech synthesis.")
+
+    language = str(payload.get("language", "")).strip() or "auto"
+    speech_payload = {
+        "model": OPENAI_SPEECH_MODEL,
+        "voice": OPENAI_SPEECH_VOICE,
+        "input": text,
+        "response_format": "mp3",
+        "instructions": (
+            "You are the spoken voice of UNav, an indoor navigation assistant for blind and low-vision users. "
+            "Speak clearly, warmly, and naturally. Keep a calm pace suitable for navigation instructions. "
+            "Pronounce place names and floor numbers carefully. "
+            f"The user's language or locale is {language}."
+        ),
+    }
+
+    try:
+        response = requests.post(
+            OPENAI_SPEECH_URL,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            data=json.dumps(speech_payload),
+            timeout=90,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to synthesize speech: {exc}")
+
+    if response.status_code >= 400:
+        raise HTTPException(
+            status_code=502,
+            detail=f"OpenAI speech request failed: {response.text}",
+        )
+
+    return Response(
+        content=response.content,
+        media_type="audio/mpeg",
+        headers={
+            "Cache-Control": "no-store",
+            "X-UNav-TTS-Model": OPENAI_SPEECH_MODEL,
+            "X-UNav-TTS-Voice": OPENAI_SPEECH_VOICE,
+        },
+    )
+

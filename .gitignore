@@ -7,3 +7,8 @@ __pycache__/
 db/*.db
 *.jpeg
 *.jpg
+
+# build / install artifacts (not source)
+*.so
+*.dist-info/
+*.bak

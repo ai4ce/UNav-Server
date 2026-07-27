@@ -62,6 +62,8 @@ def build_destination_interpretation_prompt(*, utterance: str, language: str, co
             "building_hint": "string or null",
             "floor_hint": "string or null",
             "preference": "nearest | specific | any",
+            "candidate_ids": ["destination id strings from destination_catalog"],
+            "candidate_refs": ["catalog_ref strings from destination_catalog"],
         },
         "needs_clarification": "boolean",
         "message": "short clarification or null",
@@ -73,6 +75,14 @@ def build_destination_interpretation_prompt(*, utterance: str, language: str, co
         f"{json.dumps(schema, ensure_ascii=False)}. "
         f"Preferred UI language: {language}. "
         f"Session context: {json.dumps(context, ensure_ascii=False)}. "
+        "If Session context includes destination_hierarchy, read it as place -> building -> floor -> destinations. "
+        "Use destination_hierarchy and destination_catalog as the only source of real destination refs and ids. "
+        "Match the user's natural-language need semantically against destination names, categories, floors, buildings, and places. "
+        "Put the best matching catalog_ref values in destination_query.candidate_refs, ordered best first, and never invent refs. "
+        "When the user mentions a place/building/floor, first narrow to that hierarchy branch before choosing destinations. "
+        "Also include destination ids in candidate_ids only as a secondary convenience. "
+        "For indirect needs like needing to pee, needing to wash hands, being desperate, or similar phrasing in any language, infer restroom even without an explicit restroom keyword. "
+        "If the user asks for a gendered or accessible restroom, prefer matching restroom subtype when destination names reveal it. "
         "Infer the user's actual navigation goal, even when they speak indirectly, emotionally, colloquially, or in another language. "
         "For example, needing to pee, needing a toilet, or saying 尿急 should map to the restroom category. "
         "Map likely intents to one of these categories when appropriate: "

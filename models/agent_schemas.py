@@ -9,6 +9,8 @@ class DestinationQuery(BaseModel):
     floor_hint: Optional[str] = None
     preference: Literal["nearest", "specific", "any"] = "any"
     search_scope: Optional[Literal["session", "building", "place", "global"]] = None
+    candidate_ids: List[str] = Field(default_factory=list)
+    candidate_refs: List[str] = Field(default_factory=list)
 
 
 class DestinationCandidate(BaseModel):
