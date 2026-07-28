@@ -12,7 +12,7 @@ def main():
     BUILDING = "Langone"
     PLACE = "New_York_University"
     FLOOR = "17_floor"
-    DESTINATION_ID = "50"
+    DESTINATION_ID = "87"
     SESSION_ID = "test_session_id_2"
     IMAGE_PATH = os.path.join(os.path.dirname(__file__), "media", "vinay_sample_2.jpeg")
 

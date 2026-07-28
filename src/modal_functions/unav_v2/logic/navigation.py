@@ -284,15 +284,79 @@ def run_planner(
                 timing_data["processing"] = (time.time() - processing_start) * 1000
                 print(f"⏱️ Processing: {timing_data['processing']:.2f}ms")
 
+                start_key = (start_place, start_building, start_floor)
+                target_key = (target_place, target_building, target_floor, dest_id_for_path)
+                loaded_maps = list(getattr(self.nav, "pf_map", {}).keys())
+                pf_source = self.nav.pf_map.get(start_key)
+                pf_target = self.nav.pf_map.get((target_place, target_building, target_floor))
+                target_dest_ids = sorted(getattr(pf_target, "dest_ids", []) or []) if pf_target else []
+                print(
+                    "🧭 [PATH PLANNING INPUT] "
+                    f"start_key={start_key}, target_key={target_key}, "
+                    f"snapped_xy={snapped_xy}, force_walkable={force_walkable}, "
+                    f"source_map_loaded={pf_source is not None}, "
+                    f"target_map_loaded={pf_target is not None}, "
+                    f"dest_id_in_target={dest_id_for_path in target_dest_ids}, "
+                    f"n_loaded_maps={len(loaded_maps)}"
+                )
+                if pf_source is None:
+                    print(f"❌ [PATH PLANNING] Source map not loaded. start_key={start_key} not in pf_map. Loaded maps sample={loaded_maps[:5]}")
+                if pf_target is None:
+                    print(f"❌ [PATH PLANNING] Target map not loaded. target_floor={ (target_place, target_building, target_floor) } not in pf_map.")
+                if pf_target is not None and dest_id_for_path not in target_dest_ids:
+                    print(f"❌ [PATH PLANNING] dest_id={dest_id_for_path} not found in target floor. Available dest_ids (first 20)={target_dest_ids[:20]} (total={len(target_dest_ids)})")
+
                 path_planning_start = time.time()
-                with self.tracer.start_as_current_span("path_planning_span"):
-                    result = self.nav.find_path(start_place, start_building, start_floor, snapped_xy, target_place, target_building, target_floor, dest_id_for_path)
+                try:
+                    with self.tracer.start_as_current_span("path_planning_span"):
+                        result = self.nav.find_path(start_place, start_building, start_floor, snapped_xy, target_place, target_building, target_floor, dest_id_for_path)
+                except Exception as pp_err:
+                    import traceback as _tb
+                    print(f"❌ [PATH PLANNING] Exception during find_path: {type(pp_err).__name__}: {pp_err}")
+                    _tb.print_exc()
+                    return {
+                        "status": "error",
+                        "error": f"Path planning exception: {type(pp_err).__name__}: {pp_err}",
+                        "stage": "path_planning",
+                        "debug": {
+                            "start_key": list(start_key),
+                            "target_key": list(target_key),
+                            "source_map_loaded": pf_source is not None,
+                            "target_map_loaded": pf_target is not None,
+                            "dest_id_in_target": dest_id_for_path in target_dest_ids,
+                        },
+                        "timing": timing_data,
+                    }
 
                 timing_data["path_planning"] = (time.time() - path_planning_start) * 1000
                 print(f"⏱️ Path Planning: {timing_data['path_planning']:.2f}ms")
 
                 if result is None or (isinstance(result, dict) and "error" in result):
-                    return {"status": "error", "error": "Path planning failed", "timing": timing_data}
+                    result_error = (result or {}).get("error") if isinstance(result, dict) else "result is None"
+                    print(
+                        "❌ [PATH PLANNING FAILED] "
+                        f"error={result_error}, "
+                        f"start_key={start_key}, target_key={target_key}, "
+                        f"snapped_xy={snapped_xy}, "
+                        f"source_map_loaded={pf_source is not None}, "
+                        f"target_map_loaded={pf_target is not None}, "
+                        f"dest_id_in_target={dest_id_for_path in target_dest_ids}, "
+                        f"n_loaded_maps={len(loaded_maps)}, loaded_maps_sample={loaded_maps[:5]}"
+                    )
+                    return {
+                        "status": "error",
+                        "error": f"Path planning failed: {result_error}",
+                        "stage": "path_planning",
+                        "debug": {
+                            "start_key": list(start_key),
+                            "target_key": list(target_key),
+                            "source_map_loaded": pf_source is not None,
+                            "target_map_loaded": pf_target is not None,
+                            "dest_id_in_target": dest_id_for_path in target_dest_ids,
+                            "n_loaded_maps": len(loaded_maps),
+                        },
+                        "timing": timing_data,
+                    }
 
                 command_generation_start = time.time()
                 with self.tracer.start_as_current_span("command_generation_span"):
