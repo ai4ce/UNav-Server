@@ -2,7 +2,7 @@ from pathlib import Path
 
 from modal import App, Image, Secret, Volume
 
-volume = Volume.from_name("unav_multifloor")
+volume = Volume.from_name("prod_volume")
 
 MODEL_URL = "https://download.pytorch.org/models/vgg16-397923af.pth"
 LIGHTGLUE_URL = "https://github.com/cvg/LightGlue/releases/download/v0.1_arxiv/superpoint_lightglue.pth"
@@ -142,7 +142,7 @@ def download_torch_hub_weights():
 
 
 app = App(
-    name="Mast3r-UNav-Server",
+    name="Staging-Mast3r-unav-server",
     # mounts removed as deprecated
 )
 
