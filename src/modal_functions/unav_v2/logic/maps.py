@@ -79,6 +79,11 @@ def run_ensure_maps_loaded(
     except Exception as e:
         print(f"⚠️ Failed to apply MASt3R fallback on selective localizer: {e}")
 
+    try:
+        _apply_mast3r_tuning(selective_localizer)
+    except Exception as e:
+        print(f"⚠️ Failed to apply MASt3R tuning on selective localizer: {e}")
+
     if hasattr(server, "tracer") and server.tracer:
         try:
             server._monkey_patch_localizer_methods(selective_localizer)
@@ -111,6 +116,31 @@ def run_ensure_maps_loaded(
     print(f"✅ Selective localizer created and maps loaded for: {map_key}")
 
 
+def _apply_mast3r_tuning(localizer):
+    """
+    Apply MASt3R inference knobs (input resolution) to a localizer's MASt3RExtractor.
+
+    The upstream extractor reads mast3r_size from its config dict on every
+    match (unav/core/feature/local_extractor.py); this repo cannot touch the
+    deployed unav package, so we override the instance config here instead.
+    """
+    if getattr(localizer, "__mast3r_tuned__", False):
+        return
+    local_matcher = getattr(localizer, "local_matcher", None)
+    if local_matcher is None:
+        return
+    config = getattr(local_matcher, "config", None)
+    if not isinstance(config, dict):
+        return
+    try:
+        size = int(os.getenv("UNAV_MAST3R_SIZE", "384"))
+    except (TypeError, ValueError):
+        size = 384
+    config["mast3r_size"] = min(max(size, 224), 512)
+    localizer.__mast3r_tuned__ = True
+    print(f"🔧 Applied MASt3R tuning: mast3r_size={config['mast3r_size']}")
+
+
 def _install_upstream_instrumentation(UNavLocalizer):
     """Wrap upstream UNavLocalizer.localize and batch_local_matching_and_ransac to log runtime behavior."""
     import functools
@@ -133,6 +163,11 @@ def _install_upstream_instrumentation(UNavLocalizer):
             f"local_matcher={type(self.local_matcher).__name__}",
             flush=True,
         )
+        if top_k is None:
+            try:
+                top_k = int(os.getenv("UNAV_VPR_TOP_K", "10")) or None
+            except (TypeError, ValueError):
+                top_k = None
         result = orig_localize(self, query_img, refinement_queue, top_k=top_k, **kwargs)
         print(
             f"🧪 [UPSTREAM LOCALIZE DONE] success={result.get('success')}, "
@@ -161,8 +196,8 @@ def _install_upstream_instrumentation(UNavLocalizer):
                 colmap_models=self.all_colmap_models,
                 max_nn_dist=self.config.feature_extraction_config["local_extractor_config"].get("mast3r", {}).get("max_nn_dist", 20.0),
                 min_inliers=self.config.localization_config.get("min_inliers", 6),
-                max_candidates=10,
-                early_stop_inliers=80,
+                max_candidates=int(os.getenv("UNAV_MAST3R_CANDIDATES", "5")),
+                early_stop_inliers=int(os.getenv("UNAV_MAST3R_EARLY_STOP_INLIERS", "80")),
                 data_roots=mast3r_data_roots,
             )
         else:

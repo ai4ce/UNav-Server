@@ -137,6 +137,13 @@ def run_init_gpu_components(self):
     _apply_mast3r_extraction_fallback(self, self.localizer)
 
     try:
+        from .maps import _apply_mast3r_tuning
+
+        _apply_mast3r_tuning(self.localizer)
+    except Exception as e:
+        print(f"⚠️ Failed to apply MASt3R tuning: {e}")
+
+    try:
         self._monkey_patch_localizer_methods(self.localizer)
         self._monkey_patch_pose_refinement()
         self._monkey_patch_feature_extractors()

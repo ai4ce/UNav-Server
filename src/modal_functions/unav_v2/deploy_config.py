@@ -63,3 +63,47 @@ def get_memory_mb() -> int:
         )
         return max_allowed_mb
     return requested_mb
+
+
+def get_mast3r_candidates() -> int:
+    """Max MASt3R candidate images matched per localization. Lower = faster."""
+    raw_value = os.getenv("UNAV_MAST3R_CANDIDATES", "5")
+    try:
+        return max(1, int(raw_value))
+    except (TypeError, ValueError):
+        print(
+            f"⚠️ Invalid UNAV_MAST3R_CANDIDATES={raw_value!r}; falling back to 5."
+        )
+        return 5
+
+
+def get_mast3r_size() -> int:
+    """MASt3R/dust3r input resolution. Lower = faster; clamped to 224..512."""
+    raw_value = os.getenv("UNAV_MAST3R_SIZE", "384")
+    try:
+        return min(max(int(raw_value), 224), 512)
+    except (TypeError, ValueError):
+        print(f"⚠️ Invalid UNAV_MAST3R_SIZE={raw_value!r}; falling back to 384.")
+        return 384
+
+
+def get_mast3r_early_stop_inliers() -> int:
+    """Stop matching more candidates once a map_key reaches this inlier count."""
+    raw_value = os.getenv("UNAV_MAST3R_EARLY_STOP_INLIERS", "80")
+    try:
+        return max(1, int(raw_value))
+    except (TypeError, ValueError):
+        print(
+            f"⚠️ Invalid UNAV_MAST3R_EARLY_STOP_INLIERS={raw_value!r}; falling back to 80."
+        )
+        return 80
+
+
+def get_vpr_top_k() -> int:
+    """VPR candidates retrieved per localization (mast3r caps at 10 upstream)."""
+    raw_value = os.getenv("UNAV_VPR_TOP_K", "10")
+    try:
+        return max(1, int(raw_value))
+    except (TypeError, ValueError):
+        print(f"⚠️ Invalid UNAV_VPR_TOP_K={raw_value!r}; falling back to 10.")
+        return 10
