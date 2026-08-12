@@ -2,7 +2,7 @@ from pathlib import Path
 
 from modal import App, Image, Secret, Volume
 
-volume = Volume.from_name("prod_volume")
+volume = Volume.from_name("unav_multifloor")
 
 # Lightweight image for CPU-only services (destinations). numpy is required by
 # module-level imports in the app chain (unav_modal.py, logic/navigation.py,
