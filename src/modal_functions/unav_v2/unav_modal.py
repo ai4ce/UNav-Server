@@ -6,8 +6,18 @@ import os
 from typing import Dict, List, Any, Optional
 
 from .deploy_config import get_scaledown_window, get_gpu_config, get_memory_mb
-from .modal_config import app, unav_image, volume, gemini_secret, middleware_secret
-from .destinations_service import get_destinations_list_impl
+from .modal_config import (
+    app,
+    unav_image,
+    destinations_image,
+    volume,
+    gemini_secret,
+    middleware_secret,
+)
+from .destinations_service import (
+    get_destinations_list_impl,
+    get_destinations_list_fs_impl,
+)
 from .logic import (
     run_planner,
     run_localize_user,
@@ -220,6 +230,43 @@ class UnavServer:
             floor=floor,
             top_k=top_k,
             refinement_queue=refinement_queue,
+            enable_multifloor=enable_multifloor,
+        )
+
+
+@app.cls(
+    image=destinations_image,
+    volumes={"/root/UNav-IO": volume},
+    gpu=None,
+    memory=1024,
+    timeout=120,
+    scaledown_window=get_scaledown_window(),
+)
+class DestinationsServer:
+    """
+    CPU-only destinations service.
+
+    Reads destinations straight from boundaries.json on the volume — no GPU
+    attach, no torch, no FacilityNavigator — so a cold start never waits on
+    GPU capacity scheduling.
+    """
+
+    DATA_ROOT = "/root/UNav-IO/data"
+
+    @method()
+    def get_destinations_list(
+        self,
+        floor="6_floor",
+        place="New_York_City",
+        building="LightHouse",
+        enable_multifloor: bool = False,
+    ):
+        """Get destinations for a specific place, building, and floor (filesystem-backed)."""
+        return get_destinations_list_fs_impl(
+            data_root=self.DATA_ROOT,
+            floor=floor,
+            place=place,
+            building=building,
             enable_multifloor=enable_multifloor,
         )
 

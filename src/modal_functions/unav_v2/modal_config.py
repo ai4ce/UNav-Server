@@ -4,6 +4,12 @@ from modal import App, Image, Secret, Volume
 
 volume = Volume.from_name("prod_volume")
 
+# Lightweight image for CPU-only services (destinations). numpy is required by
+# module-level imports in the app chain (unav_modal.py, logic/navigation.py,
+# logic/vlm.py); everything heavy (torch/cv2/unav) stays inside functions, so
+# cold starts never pull the ML image or attach a GPU.
+destinations_image = Image.debian_slim().pip_install("numpy")
+
 MODEL_URL = "https://download.pytorch.org/models/vgg16-397923af.pth"
 LIGHTGLUE_URL = "https://github.com/cvg/LightGlue/releases/download/v0.1_arxiv/superpoint_lightglue.pth"
 DINOSALAD_URL = (
