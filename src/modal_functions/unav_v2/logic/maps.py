@@ -71,12 +71,6 @@ def run_ensure_maps_loaded(
     except Exception as e:
         print(f"⚠️ Failed to install matcher instrumentation: {e}")
 
-    try:
-        if getattr(server, "LOCAL_FEATURE_MODEL", "") == "mast3r":
-            _install_fast_colmap_loader()
-    except Exception as e:
-        print(f"⚠️ Failed to install fast COLMAP loader: {e}")
-
     selective_localizer = UNavLocalizer(selective_config.localizer_config)
     try:
         from .init import _apply_mast3r_extraction_fallback
@@ -147,51 +141,6 @@ def _apply_mast3r_tuning(localizer):
     print(f"🔧 Applied MASt3R tuning: mast3r_size={config['mast3r_size']}")
 
 
-def _install_fast_colmap_loader():
-    """
-    Patch upstream load_colmap_model to skip the heavy points3D.bin parse.
-
-    MASt3R relpose localization only needs per-image camera poses (qvec/tvec)
-    from images.bin. The full read_model() also parses points3D.bin (millions
-    of 3D points, ~18s per floor in logs) which the relpose path never uses.
-    Only valid while the matcher is mast3r_relpose_localization.
-    """
-    import functools
-    from unav.localizer.tools import io as _io_mod
-    if getattr(_io_mod.load_colmap_model, "_unav_fast_colmap", False):
-        return
-
-    @functools.wraps(_io_mod.load_colmap_model)
-    def fast_load_colmap_model(model_dir, ext=".bin"):
-        from unav.core.colmap.read_write_model import read_images_binary
-        images_path = os.path.join(model_dir, "images" + ext)
-        if not os.path.exists(images_path):
-            return {}
-        images = read_images_binary(images_path)
-        frames_by_name = {}
-        for img in images.values():
-            frames_by_name[img.name] = {
-                "qvec": img.qvec,
-                "tvec": img.tvec,
-                "points2D_xy": None,
-                "points3D_xyz": [],
-                "points3D_id": None,
-            }
-        return frames_by_name
-
-    fast_load_colmap_model._unav_fast_colmap = True
-    _io_mod.load_colmap_model = fast_load_colmap_model
-    # UNavLocalizer._ensure_colmap_model calls load_colmap_model via a direct
-    # `from unav.localizer.tools.io import load_colmap_model` name binding, so
-    # the localizer module's own reference must be patched as well.
-    try:
-        from unav.localizer import localizer as _localizer_mod
-        _localizer_mod.load_colmap_model = fast_load_colmap_model
-    except Exception as e:
-        print(f"⚠️ Could not patch localizer.load_colmap_model reference: {e}")
-    print("🔧 Installed fast COLMAP loader (images.bin only, no points3D)")
-
-
 def _install_upstream_instrumentation(UNavLocalizer):
     """Wrap upstream UNavLocalizer.localize and batch_local_matching_and_ransac to log runtime behavior."""
     import functools
@@ -240,21 +189,15 @@ def _install_upstream_instrumentation(UNavLocalizer):
         if getattr(self, 'use_mast3r', False):
             mast3r_data_roots = ("/root/UNav-IO/mnt/data/UNav-IO/temp", "/root/UNav-IO/data")
             from unav.localizer.tools import matcher as _matcher
-            # mast3r_relpose_localization computes the pose directly from
-            # MASt3R relative geometry (Procrustes) — no COLMAP 3D point cloud
-            # and no PnP refinement needed. It references a module-level `pp`
-            # that upstream never defines (NameError); defaulting it to None
-            # falls back to the image-center principal point, as intended.
-            if not hasattr(_matcher, "pp"):
-                _matcher.pp = None
-            result = _matcher.mast3r_relpose_localization(
+            result = _matcher.mast3r_matching_and_pnp(
                 query_img_path=query_img_path,
                 candidates_data=candidates_data,
                 mast3r_matcher=self.local_matcher,
                 colmap_models=self.all_colmap_models,
-                transform_matrices=self.transform_matrices,
-                min_inliers=10,
+                max_nn_dist=self.config.feature_extraction_config["local_extractor_config"].get("mast3r", {}).get("max_nn_dist", 20.0),
+                min_inliers=self.config.localization_config.get("min_inliers", 6),
                 max_candidates=int(os.getenv("UNAV_MAST3R_CANDIDATES", "5")),
+                early_stop_inliers=int(os.getenv("UNAV_MAST3R_EARLY_STOP_INLIERS", "80")),
                 data_roots=mast3r_data_roots,
             )
         else:
