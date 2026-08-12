@@ -140,20 +140,28 @@ def get_destinations_list_fs_impl(
     """
     import json
     import os
+    import time
     from types import SimpleNamespace
 
-    print(f"🎯 [FS] Getting destinations for {place}/{building}/{floor}")
+    _t0 = time.time()
+    print(
+        f"🎯 [FS] get_destinations_list place={place!r} building={building!r} "
+        f"floor={floor!r} enable_multifloor={enable_multifloor}"
+    )
+    print(f"📁 [FS] data_root={data_root}")
 
     def _read_floor(floor_name: str) -> list:
         path = os.path.join(data_root, place, building, floor_name, "boundaries.json")
         if not os.path.exists(path):
             print(
-                f"⚠️ Skipping {place}/{building}/{floor_name}: missing boundaries.json"
+                f"⚠️ [FS] Skipping {place}/{building}/{floor_name}: missing boundaries.json"
             )
             return []
         with open(path) as f:
             boundaries = json.load(f)
-        return _extract_destinations_from_boundaries(boundaries, floor_name)
+        dests = _extract_destinations_from_boundaries(boundaries, floor_name)
+        print(f"🏷️ [FS] {place}/{building}/{floor_name}: {len(dests)} destinations")
+        return dests
 
     if enable_multifloor:
         floors = (
@@ -171,6 +179,7 @@ def get_destinations_list_fs_impl(
                 f"No floors found for place='{place}', building='{building}'"
             )
 
+        print(f"🏢 [FS] Aggregating {len(floors)} floor(s): {floors}")
         destinations = []
         for floor_name in floors:
             destinations.extend(_read_floor(floor_name))
@@ -182,5 +191,6 @@ def get_destinations_list_fs_impl(
             )
         destinations = _read_floor(floor)
 
-    print(f"✅ Found {len(destinations)} destinations")
+    _elapsed_ms = (time.time() - _t0) * 1000
+    print(f"✅ [FS] Found {len(destinations)} destinations in {_elapsed_ms:.0f}ms")
     return {"destinations": destinations}

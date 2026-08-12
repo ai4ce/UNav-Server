@@ -22,8 +22,7 @@ def main():
             floor=FLOOR,
             place=PLACE,
             building=BUILDING,
-            enable_multifloor=True,
-            include_coordinates=False,
+            enable_multifloor=False,
         )
         print(f"⏱️ get_destinations_list took {time.time() - start:.2f}s")
         print("Result:", result)
