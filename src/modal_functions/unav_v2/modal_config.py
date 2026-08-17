@@ -2,7 +2,20 @@ from pathlib import Path
 
 from modal import App, Image, Secret, Volume
 
+from .deploy_config import (
+    get_mast3r_candidates,
+    get_mast3r_early_stop_inliers,
+    get_mast3r_size,
+    get_vpr_top_k,
+)
+
 volume = Volume.from_name("unav_multifloor")
+
+# Lightweight image for CPU-only services (destinations). numpy is required by
+# module-level imports in the app chain (unav_modal.py, logic/navigation.py,
+# logic/vlm.py); everything heavy (torch/cv2/unav) stays inside functions, so
+# cold starts never pull the ML image or attach a GPU.
+destinations_image = Image.debian_slim().pip_install("numpy")
 
 MODEL_URL = "https://download.pytorch.org/models/vgg16-397923af.pth"
 LIGHTGLUE_URL = "https://github.com/cvg/LightGlue/releases/download/v0.1_arxiv/superpoint_lightglue.pth"
@@ -255,6 +268,13 @@ unav_image = (
             "MW_APM_COLLECT_TRACES": "false",
             "OTEL_SERVICE_NAME": "modal-unav-server",
             "PYTHONPATH": "/root/mast3r:/root/mast3r/dust3r",
+            # MASt3R inference tuning knobs, resolved at deploy-time import on
+            # the dev machine and baked into the container env (Modal does not
+            # propagate the deploy shell env). Tune without code edits.
+            "UNAV_MAST3R_CANDIDATES": str(get_mast3r_candidates()),
+            "UNAV_MAST3R_SIZE": str(get_mast3r_size()),
+            "UNAV_MAST3R_EARLY_STOP_INLIERS": str(get_mast3r_early_stop_inliers()),
+            "UNAV_VPR_TOP_K": str(get_vpr_top_k()),
         }
     )
     .run_commands(

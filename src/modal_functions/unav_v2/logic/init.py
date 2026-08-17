@@ -80,7 +80,6 @@ def run_init_cpu_components(self):
     )
     print("✅ UNavConfig initialized successfully")
 
-    self.localizor_config = self.config.localizer_config
     self.navigator_config = self.config.navigator_config
     print("✅ Config objects extracted successfully")
 
@@ -133,8 +132,28 @@ def run_init_gpu_components(self):
         print(f"⚠️ Failed to install MASt3R instrumentation: {e}")
 
     print("🤖 Initializing UNavLocalizer (GPU-dependent)...")
-    self.localizer = UNavLocalizer(self.localizor_config)
+    # The global localizer is only a fallback — per-request selective localizers
+    # (logic/maps.py) do the real localization. Give it an EMPTY places map so
+    # its background thread does NOT eagerly load global features for every
+    # place/building/floor at startup (~50k images of volume IO, ~52s of the
+    # first-request cost in logs). Models still initialize for the fallback path.
+    from unav.config import UNavConfig as _LocalizerConfig
+
+    _fallback_localizer_config = _LocalizerConfig(
+        data_final_root=self.DATA_ROOT,
+        places={},
+        global_descriptor_model=self.FEATURE_MODEL,
+        local_feature_model=self.LOCAL_FEATURE_MODEL,
+    ).localizer_config
+    self.localizer = UNavLocalizer(_fallback_localizer_config)
     _apply_mast3r_extraction_fallback(self, self.localizer)
+
+    try:
+        from .maps import _apply_mast3r_tuning
+
+        _apply_mast3r_tuning(self.localizer)
+    except Exception as e:
+        print(f"⚠️ Failed to apply MASt3R tuning: {e}")
 
     try:
         self._monkey_patch_localizer_methods(self.localizer)

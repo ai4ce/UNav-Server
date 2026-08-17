@@ -95,3 +95,102 @@ def get_destinations_list_impl(
     except Exception as e:
         print(f"❌ Error getting destinations: {e}")
         return {"status": "error", "message": str(e), "type": type(e).__name__}
+
+
+def _extract_destinations_from_boundaries(boundaries: dict, floor: str) -> list:
+    """Extract destinations from a floor's boundaries.json.
+
+    Mirrors upstream PathFinder._load_data (unav/navigator/pathfinder.py:107-143):
+    destination ids are the ordinal of each point shape in the shapes array
+    (gaps included), and a point is a destination when group_id == 5.
+    """
+    destinations = []
+    point_idx = 0
+    for shape in boundaries.get("shapes", []):
+        if shape.get("shape_type") != "point":
+            continue
+        pts = shape.get("points") or []
+        if not pts:
+            continue
+        if shape.get("group_id") == 5:
+            destinations.append(
+                {
+                    "id": str(point_idx),
+                    "name": (shape.get("label") or "").strip(),
+                    "xy": (float(pts[0][0]), float(pts[0][1])),
+                    "floor": floor,
+                }
+            )
+        point_idx += 1
+    return destinations
+
+
+def get_destinations_list_fs_impl(
+    data_root: str,
+    floor: str = "6_floor",
+    place: str = "New_York_City",
+    building: str = "LightHouse",
+    enable_multifloor: bool = False,
+):
+    """Fetch destinations straight from boundaries.json on the volume.
+
+    CPU-only: no torch, no GPU localizer, no FacilityNavigator. Backs the
+    lightweight DestinationsServer Modal class so a cold start never waits on
+    GPU capacity scheduling. Response shape matches get_destinations_list_impl.
+    """
+    import json
+    import os
+    import time
+    from types import SimpleNamespace
+
+    _t0 = time.time()
+    print(
+        f"🎯 [FS] get_destinations_list place={place!r} building={building!r} "
+        f"floor={floor!r} enable_multifloor={enable_multifloor}"
+    )
+    print(f"📁 [FS] data_root={data_root}")
+
+    def _read_floor(floor_name: str) -> list:
+        path = os.path.join(data_root, place, building, floor_name, "boundaries.json")
+        if not os.path.exists(path):
+            print(
+                f"⚠️ [FS] Skipping {place}/{building}/{floor_name}: missing boundaries.json"
+            )
+            return []
+        with open(path) as f:
+            boundaries = json.load(f)
+        dests = _extract_destinations_from_boundaries(boundaries, floor_name)
+        print(f"🏷️ [FS] {place}/{building}/{floor_name}: {len(dests)} destinations")
+        return dests
+
+    if enable_multifloor:
+        floors = (
+            run_get_places(
+                SimpleNamespace(DATA_ROOT=data_root),
+                target_place=place,
+                target_building=building,
+                enable_multifloor=True,
+            )
+            .get(place, {})
+            .get(building, [])
+        )
+        if not floors:
+            raise ValueError(
+                f"No floors found for place='{place}', building='{building}'"
+            )
+
+        print(f"🏢 [FS] Aggregating {len(floors)} floor(s): {floors}")
+        destinations = []
+        for floor_name in floors:
+            destinations.extend(_read_floor(floor_name))
+    else:
+        path = os.path.join(data_root, place, building, floor, "boundaries.json")
+        if not os.path.exists(path):
+            raise ValueError(
+                f"No boundaries.json found for {place}/{building}/{floor}"
+            )
+        destinations = _read_floor(floor)
+
+    _elapsed_ms = (time.time() - _t0) * 1000
+    print(f"✅ [FS] Found {len(destinations)} destinations in {_elapsed_ms:.0f}ms")
+    return {"destinations": destinations}
