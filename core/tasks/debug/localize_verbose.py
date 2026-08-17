@@ -146,7 +146,7 @@ def localize_verbose(inputs):
         bmk, pnp_pairs, results, debug = _instrumented_mast3r(
             _tmp.name, cands_data, localizer.local_matcher, localizer.all_colmap_models,
             max_nn_dist=mast3r_cfg.get("max_nn_dist", 20.0),
-            min_inliers=localizer.config.localization_config.get("min_inliers", 6),
+            min_inliers=mast3r_cfg.get("min_matches", 6),
         )
     finally:
         try: os.unlink(_tmp.name)
