@@ -9,7 +9,7 @@ from .deploy_config import (
     get_vpr_top_k,
 )
 
-volume = Volume.from_name("unav_multifloor")
+volume = Volume.from_name("prod_volume")
 
 # Lightweight image for CPU-only services (destinations). numpy is required by
 # module-level imports in the app chain (unav_modal.py, logic/navigation.py,
