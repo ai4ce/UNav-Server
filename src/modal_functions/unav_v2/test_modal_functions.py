@@ -23,7 +23,7 @@ def main():
     base64_encoded = _load_base64_image()
 
     # --- Destinations (CPU-only class, no GPU scheduling) ---
-    DestServer = modal.Cls.from_name("Mast3r-UNav-Server", "DestinationsServer")
+    DestServer = modal.Cls.from_name("Staging-Mast3r-unav-server", "DestinationsServer")
     dest_server = DestServer()
 
     print("Testing get_destinations_list...")
@@ -37,7 +37,7 @@ def main():
     print("Result:", result)
 
     # --- Localization + planner (GPU class) ---
-    UnavServer = modal.Cls.from_name("Mast3r-UNav-Server", "UnavServer")
+    UnavServer = modal.Cls.from_name("Staging-Mast3r-unav-server", "UnavServer")
     unav_server = UnavServer()
 
     print("\n" + "=" * 50)
