@@ -355,6 +355,26 @@ def run_planner(
                     )
 
                 timing_data["command_generation"] = (time.time() - command_generation_start) * 1000
+                print(f"🧭 [COMMANDS] type={type(cmds).__name__}, len={len(cmds) if hasattr(cmds, '__len__') else 'N/A'}")
+
+                # Log command generation to prove instructions come from snapped path
+                if isinstance(cmds, list) and cmds:
+                    print(f"🧭 [COMMANDS] Generated {len(cmds)} instructions from snapped path")
+                    for i, cmd in enumerate(cmds[:3]):
+                        tag = cmd.get('tag', '?')
+                        text = cmd.get('text', '?')
+                        meta = cmd.get('meta', {})
+                        print(f"   [{i}] {tag}: {text}")
+                        if meta:
+                            print(f"       meta: {meta}")
+                elif isinstance(cmds, dict):
+                    instructions = cmds.get("instructions", cmds.get("cmds", []))
+                    if instructions:
+                        print(f"🧭 [COMMANDS] Generated {len(instructions)} instructions from snapped path")
+                        for i, instr in enumerate(instructions[:3]):
+                            print(f"   [{i}] {instr.get('tag', '?')}: {instr.get('text', '?')}")
+                    else:
+                        print(f"🧭 [COMMANDS] dict format, keys={list(cmds.keys())}")
 
                 serialization_start = time.time()
                 serialized_result = run_safe_serialize(result)
