@@ -265,7 +265,24 @@ def run_planner(
                 # -------- Snap-to-route & walkable forcing --------
                 force_walkable = True
                 pf0 = self.nav.pf_map.get((start_place, start_building, start_floor))
-                snapped_xy = list(pf0.snap_to_route(start_xy)) if pf0 else start_xy
+
+                # Debug logging for snap-to-route
+                start_key = (start_place, start_building, start_floor)
+                if pf0 is None:
+                    print(f"❌ [SNAP-TO-ROUTE] pf0 is None for start_key={start_key}. Available keys: {list(self.nav.pf_map.keys())[:5]}")
+                    snapped_xy = start_xy
+                else:
+                    route_net = getattr(pf0, 'route_network', None)
+                    route_empty = route_net is None or (hasattr(route_net, 'is_empty') and route_net.is_empty)
+                    print(f"🔍 [SNAP-TO-ROUTE] start_key={start_key}, start_xy={start_xy}, route_network={'None' if route_net is None else ('empty' if route_empty else f'MultiLineString({len(route_net.geoms)} segments)')}")
+                    if route_empty:
+                        print(f"⚠️ [SNAP-TO-ROUTE] route_network is None or empty — snap_to_route will return point unchanged!")
+                        snapped_xy = start_xy
+                    else:
+                        snapped_xy = list(pf0.snap_to_route(start_xy))
+                        snap_diff = snapped_xy[0] != start_xy[0] or snapped_xy[1] != start_xy[1]
+                        print(f"✅ [SNAP-TO-ROUTE] snapped_xy={snapped_xy}, changed={snap_diff} (distance={((snapped_xy[0]-start_xy[0])**2 + (snapped_xy[1]-start_xy[1])**2)**0.5:.2f}px)")
+
                 snapped_pose = {**floorplan_pose, "xy": snapped_xy, "snapped": True}
 
                 if image is not None and hasattr(image, 'shape'):
