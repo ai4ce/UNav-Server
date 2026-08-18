@@ -9,7 +9,7 @@ from .deploy_config import (
     get_vpr_top_k,
 )
 
-volume = Volume.from_name("prod_volume")
+volume = Volume.from_name("unav_multifloor")
 
 # Lightweight image for CPU-only services (destinations). numpy is required by
 # module-level imports in the app chain (unav_modal.py, logic/navigation.py,
@@ -155,7 +155,7 @@ def download_torch_hub_weights():
 
 
 app = App(
-    name="Staging-Mast3r-unav-server",
+    name="Mast3r-UNav-Server",
     # mounts removed as deprecated
 )
 
