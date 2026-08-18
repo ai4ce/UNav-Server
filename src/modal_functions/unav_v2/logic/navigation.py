@@ -265,8 +265,45 @@ def run_planner(
                 # -------- Snap-to-route & walkable forcing --------
                 force_walkable = True
                 pf0 = self.nav.pf_map.get((start_place, start_building, start_floor))
-                snapped_xy = list(pf0.snap_to_route(start_xy)) if pf0 else start_xy
+                start_key = (start_place, start_building, start_floor)
+
+                # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                # SNAP-TO-ROUTE USER FLOW LOG
+                # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                print(f"\n{'='*60}")
+                print(f"📍 [USER FLOW] Localization → Snap → Path Plan")
+                print(f"{'='*60}")
+                print(f"  ① Localized position:  xy={start_xy}, heading={start_heading:.1f}°")
+                print(f"  ② Floor: {start_key}")
+
+                if pf0 is None:
+                    print(f"  ③ ❌ Pathfinder NOT loaded for this floor!")
+                    print(f"     Available floors: {list(self.nav.pf_map.keys())[:5]}")
+                    print(f"     → Snap-to-route DISABLED (no pathfinder)")
+                    snapped_xy = start_xy
+                else:
+                    route_net = getattr(pf0, 'route_network', None)
+                    route_empty = route_net is None or (hasattr(route_net, 'is_empty') and route_net.is_empty)
+                    n_segments = 0 if route_empty else len(route_net.geoms)
+                    n_nodes = len(getattr(pf0, 'nodes', {}))
+                    n_edges = len(getattr(pf0, 'G', {}).edges) if hasattr(getattr(pf0, 'G', {}), 'edges') else 0
+
+                    print(f"  ③ PathFinder loaded: {n_nodes} nodes, {n_edges} graph edges")
+                    print(f"  ④ Route network: {'None/empty' if route_empty else f'{n_segments} corridor segments'}")
+
+                    if route_empty:
+                        print(f"  ⑤ ⚠️ route_network is empty — snap_to_route will return point unchanged!")
+                        snapped_xy = start_xy
+                    else:
+                        snapped_xy = list(pf0.snap_to_route(start_xy))
+                        snap_dist = ((snapped_xy[0]-start_xy[0])**2 + (snapped_xy[1]-start_xy[1])**2)**0.5
+                        snap_changed = snap_dist > 0.01
+                        print(f"  ⑤ Snap result: {start_xy} → {snapped_xy}")
+                        print(f"     Distance moved: {snap_dist:.2f}px {'✅ SNAPPED' if snap_changed else '⚠️ NO MOVEMENT (already on route?)'}")
+
                 snapped_pose = {**floorplan_pose, "xy": snapped_xy, "snapped": True}
+                print(f"  ⑥ Snapped pose returned to client: xy={snapped_xy}")
+                print(f"{'='*60}\n")
 
                 if image is not None and hasattr(image, 'shape'):
                     queue_key = image.shape[:2]
@@ -291,6 +328,18 @@ def run_planner(
                 timing_data["path_planning"] = (time.time() - path_planning_start) * 1000
                 print(f"⏱️ Path Planning: {timing_data['path_planning']:.2f}ms")
 
+                # Log path result to verify snap is used
+                if isinstance(result, dict) and "path_coords" in result:
+                    path_coords = result["path_coords"]
+                    if path_coords:
+                        print(f"🗺️ [PATH RESULT] {len(path_coords)} waypoints, starts at {path_coords[0]}")
+                        if len(path_coords) > 1:
+                            path_start = path_coords[0]
+                            snap_diff = ((path_start[0]-snapped_xy[0])**2 + (path_start[1]-snapped_xy[1])**2)**0.5
+                            print(f"   Path start matches snapped position: {snap_diff < 0.01} (diff={snap_diff:.4f}px)")
+                elif isinstance(result, dict) and "error" in result:
+                    print(f"❌ [PATH RESULT] Error: {result['error']}")
+
                 if result is None or (isinstance(result, dict) and "error" in result):
                     return {"status": "error", "error": "Path planning failed", "timing": timing_data}
 
@@ -306,6 +355,26 @@ def run_planner(
                     )
 
                 timing_data["command_generation"] = (time.time() - command_generation_start) * 1000
+                print(f"🧭 [COMMANDS] type={type(cmds).__name__}, len={len(cmds) if hasattr(cmds, '__len__') else 'N/A'}")
+
+                # Log command generation to prove instructions come from snapped path
+                if isinstance(cmds, list) and cmds:
+                    print(f"🧭 [COMMANDS] Generated {len(cmds)} instructions from snapped path")
+                    for i, cmd in enumerate(cmds[:3]):
+                        tag = cmd.get('tag', '?')
+                        text = cmd.get('text', '?')
+                        meta = cmd.get('meta', {})
+                        print(f"   [{i}] {tag}: {text}")
+                        if meta:
+                            print(f"       meta: {meta}")
+                elif isinstance(cmds, dict):
+                    instructions = cmds.get("instructions", cmds.get("cmds", []))
+                    if instructions:
+                        print(f"🧭 [COMMANDS] Generated {len(instructions)} instructions from snapped path")
+                        for i, instr in enumerate(instructions[:3]):
+                            print(f"   [{i}] {instr.get('tag', '?')}: {instr.get('text', '?')}")
+                    else:
+                        print(f"🧭 [COMMANDS] dict format, keys={list(cmds.keys())}")
 
                 serialization_start = time.time()
                 serialized_result = run_safe_serialize(result)
@@ -370,6 +439,13 @@ def run_planner(
                     f"local_feature_model={result.get('local_feature_model')}, "
                     f"total_inliers={result.get('total_inliers')}, "
                     f"top_candidates_count={len(result.get('top_candidates') or [])}"
+                )
+                print(
+                    f"📍 [FLOW COMPLETE] "
+                    f"raw={list(start_xy)}, "
+                    f"snapped={snapped_xy}, "
+                    f"snap_active={snapped_xy != list(start_xy)}, "
+                    f"total_time={timing_data.get('total', 0):.0f}ms"
                 )
 
                 return run_convert_navigation_to_trajectory(result)

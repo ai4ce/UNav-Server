@@ -75,6 +75,22 @@ def main():
             f"📍 total_inliers={planner_result.get('total_inliers')}, "
             f"floorplan_pose={planner_result.get('floorplan_pose')}"
         )
+        # Snap-to-route debugging
+        snapped_pose = planner_result.get('snapped_pose')
+        floorplan_pose = planner_result.get('floorplan_pose')
+        force_walkable = planner_result.get('force_walkable')
+        print(f"\n🔍 [SNAP-TO-ROUTE DEBUG]")
+        print(f"  force_walkable={force_walkable}")
+        print(f"  floorplan_pose={floorplan_pose}")
+        print(f"  snapped_pose={snapped_pose}")
+        if snapped_pose and floorplan_pose:
+            raw_xy = floorplan_pose.get('xy')
+            snapped_xy = snapped_pose.get('xy')
+            if raw_xy and snapped_xy:
+                diff = ((raw_xy[0]-snapped_xy[0])**2 + (raw_xy[1]-snapped_xy[1])**2)**0.5
+                print(f"  snap_diff={diff:.2f}px (0.0 means snap did nothing)")
+                if diff == 0:
+                    print(f"  ⚠️ Snap-to-route had no effect — route_network may be None/empty!")
     print("Planner Result:", planner_result)
 
     output_path = os.path.join(os.path.dirname(__file__), "planner_output.json")
