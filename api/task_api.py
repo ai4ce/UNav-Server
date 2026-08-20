@@ -9,6 +9,7 @@ from db.db import save_query_image, log_navigation_record, init_log_db
 from core.task_registry import get_task
 from core.unav_state import get_session
 from api.user_api import decode_access_token
+import io
 import numpy as np
 import cv2
 import json
@@ -49,6 +50,35 @@ def async_log_navigation_record(*args, **kwargs):
     thread.daemon = True  # 不阻止主程序退出
     thread.start()
     
+def _apply_exif_orientation(img, img_bytes):
+    """Rotate a cv2-decoded image to match its EXIF orientation tag.
+
+    cv2.imdecode ignores EXIF, so a photo uploaded straight from a phone
+    camera roll (orientation 6 is the common one) arrives rotated 90 degrees.
+    Frames the app encodes from a pixel buffer carry no EXIF and are
+    unaffected -- which is why this never showed up in app traffic -- but any
+    direct-upload path hits it.
+
+    Images with no orientation tag, or orientation 1, are returned untouched
+    on the original cv2 path. Only tagged images are re-decoded through
+    PIL.ImageOps.exif_transpose, which is the reference implementation for
+    the eight rotate/mirror combinations; hand-rolling that table is how you
+    get an image that is the right shape and mirrored.
+    """
+    if img is None:
+        return img
+    try:
+        from PIL import Image, ImageOps
+        pil = Image.open(io.BytesIO(img_bytes))
+        tag = pil.getexif().get(274)  # 274 = Orientation
+        if not tag or tag == 1:
+            return img
+        fixed = ImageOps.exif_transpose(pil).convert("RGB")
+        return np.ascontiguousarray(np.array(fixed)[:, :, ::-1])  # RGB -> BGR
+    except Exception:
+        return img
+
+
 @router.post("/run_task")
 async def run_task(
     request: Request,
@@ -108,6 +138,7 @@ async def run_task(
         img_bytes = await file.read()
         nparr = np.frombuffer(img_bytes, np.uint8)
         query_img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        query_img = _apply_exif_orientation(query_img, img_bytes)
         inputs["image"] = query_img
 
     # Retrieve the registered task function by name
