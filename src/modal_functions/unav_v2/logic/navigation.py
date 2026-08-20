@@ -48,6 +48,7 @@ def run_planner(
     y: float = None,
     angle: float = None,
     turn_mode: str = "default",
+    snap_to_route: bool = False,
 ) -> Dict[str, Any]:
     """Full localization and navigation pipeline logic."""
     import time
@@ -276,7 +277,10 @@ def run_planner(
                 print(f"  ① Localized position:  xy={start_xy}, heading={start_heading:.1f}°")
                 print(f"  ② Floor: {start_key}")
 
-                if pf0 is None:
+                if not snap_to_route:
+                    print(f"  ③ ⏭️ Snap-to-route DISABLED (snap_to_route=False)")
+                    snapped_xy = start_xy
+                elif pf0 is None:
                     print(f"  ③ ❌ Pathfinder NOT loaded for this floor!")
                     print(f"     Available floors: {list(self.nav.pf_map.keys())[:5]}")
                     print(f"     → Snap-to-route DISABLED (no pathfinder)")

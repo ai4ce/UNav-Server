@@ -112,9 +112,9 @@ class UnavServer:
 
         """
         Initializes and starts the serverless instance.
-    
-        This function helps in reducing the server response time for actual requests by pre-warming the server. 
-        By starting the server in advance, it ensures that the server is ready to handle incoming requests immediately, 
+
+        This function helps in reducing the server response time for actual requests by pre-warming the server.
+        By starting the server in advance, it ensures that the server is ready to handle incoming requests immediately,
         thus avoiding the latency associated with a cold start.
         """
         print("UNAV Container started...")
@@ -170,6 +170,7 @@ class UnavServer:
         y: float = None,
         angle: float = None,
         turn_mode: str = "default",
+        snap_to_route: bool = False,
     ):
         """Full localization and navigation pipeline."""
         return run_planner(
@@ -191,6 +192,7 @@ class UnavServer:
             y=y,
             angle=angle,
             turn_mode=turn_mode,
+            snap_to_route=snap_to_route,
         )
 
     @method()
