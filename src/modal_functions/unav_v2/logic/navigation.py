@@ -452,7 +452,12 @@ def run_planner(
                     f"total_time={timing_data.get('total', 0):.0f}ms"
                 )
 
-                return run_convert_navigation_to_trajectory(result)
+                # Per-floor meters-per-pixel from scale.json (keyed by the raw
+                # tuple — serialized_source_key is a list and would not match).
+                floor_scale = getattr(self.nav, "scales", {}).get(
+                    (start_place, start_building, start_floor)
+                )
+                return run_convert_navigation_to_trajectory(result, scale=floor_scale)
 
             except Exception as e:
                 timing_data["total"] = (time.time() - start_time) * 1000
